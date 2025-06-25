@@ -17,8 +17,8 @@ To use **PyOAE**, we recommend installing the dependencies in a virtual environm
 ### Install via pip
 
 ```bash
-python -m venv .my_venv
-source .my_venv/bin/activate  # On Windows: .my_venv\Scripts\activate
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 

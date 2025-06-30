@@ -10,10 +10,10 @@ Note:
 """
 
 
-INPUT_DEVICE: int | str = 25
+INPUT_DEVICE: int | str = 'Input'
 """Index or name of the input device."""
 
-OUTPUT_DEVICE: int | str = 20
+OUTPUT_DEVICE: int | str = 'Output'
 """Index or name of the output device."""
 
 FS: float = 192000.

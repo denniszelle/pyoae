@@ -10,6 +10,7 @@ import sounddevice as sd
 import numpy as np
 import numpy.typing as npt
 import scipy.signal
+from scipy.signal import windows
 
 
 SYNC_WIDTH: Final[float] = 5.
@@ -21,6 +22,9 @@ SYNC_DURATION: Final[float] = 1.0
 SYNC_START: Final[float] = 100.
 """Start time in milliseconds of the sync pulse in the sync signal."""
 
+SYNC_CROSS: Final[int] = 50
+"""Number of zero crossings in sync signal."""
+
 SYNC_AMPLITUDE: Final[float] = 0.1
 """Amplitude of the sync signal in digital full scale."""
 
@@ -30,8 +34,15 @@ SYNC_FREQUENCY: Final[float] = 4000
 SYNC_OUTPUT_CHANNEL: Final[int] = 1
 """Output channel of the sync signal."""
 
-SYNC_INPUT_CHANNEL: Final[int] = 2
+SYNC_INPUT_CHANNEL: Final[int] = 1
 """Input channel to record the sync signal."""
+
+NUM_INIT_RUNS: Final[int] = 3
+"""Number of initial runs to clear device buffers.
+
+A measurement callback by the sound device is considered
+a run.
+"""
 
 
 def generate_sync(fs: float) -> npt.NDArray[np.float32]:
@@ -41,18 +52,21 @@ def generate_sync(fs: float) -> npt.NDArray[np.float32]:
         fs: Sampling frequency in Hz
 
     Returns:
-        pulse: 1D array of sync pulse signal
+        sync_pulse: 1D array of sync pulse signal
     """
-    n_sync_width = int(np.floor(1E-3*SYNC_WIDTH*fs))
-    n_sync_start = int(np.floor(1E-3*SYNC_START*fs))
-    t_carrier = np.arange(n_sync_width, dtype=np.float32)/fs
-    carrier_sine = np.sin(2*np.pi*SYNC_FREQUENCY*t_carrier)
-    pulse = np.zeros(int(fs * SYNC_DURATION), dtype=np.float32)
-    pulse[n_sync_start:n_sync_start + n_sync_width] = (
-        SYNC_AMPLITUDE*np.hanning(n_sync_width)
-    )
-    pulse[n_sync_start : n_sync_start+n_sync_width] *= carrier_sine
-    return pulse
+    k = np.ceil(fs / (4.0 * SYNC_FREQUENCY))
+    samples_per_sync_period = 4.0 * k
+    f_sync = fs / samples_per_sync_period
+    p = np.ceil((SYNC_CROSS + 1) / 2)
+    t_off = (p / f_sync) - 1/fs
+
+    num_samples = int(t_off * fs)
+    t = np.arange(num_samples) / fs
+    y = np.sin(2 * np.pi * f_sync * t)
+    w = windows.tukey(num_samples)
+    sync_pulse = SYNC_AMPLITUDE * w * y
+
+    return sync_pulse
 
 
 class Signal(ABC):
@@ -62,7 +76,8 @@ class Signal(ABC):
     def get_data(
         self,
         start_idx: int,
-        end_idx: int
+        end_idx: int,
+        is_stop: bool = False
     ) -> npt.NDArray[np.float32]:
         """Returns data of the signal."""
 
@@ -77,7 +92,8 @@ class SimpleSignal(Signal):
     def get_data(
         self,
         start_idx: int,
-        end_idx: int
+        end_idx: int,
+        is_stop: bool = False
     ) -> npt.NDArray[np.float32]:
         """Returns data of the signal"""
         if end_idx>len(self.signal_data):
@@ -99,23 +115,27 @@ class PeriodicSignal(Signal):
     def get_data(
         self,
         start_idx: int,
-        end_idx: int
+        end_idx: int,
+        is_stop: bool = False
     ) -> npt.NDArray[np.float32]:
-        """Returns data of the periodic continuation of the signal."""
-        length = end_idx-start_idx
-        period = len(self.signal_data)
-        data = np.zeros(length, dtype=np.float32)
-        periods = int(np.floor(length/period))
-        data[0:periods*period] = np.tile(
-            np.roll(self.signal_data, -start_idx%period),
-            periods
-        )
-        missing_samples = length-periods*period
-        if missing_samples:
-            data[periods*period:] = np.roll(
-                self.signal_data, -start_idx%period
-            )[:missing_samples]
-        return data
+        """Returns frames of a periodic signal.
+
+        Returns the data with continuation.
+        """
+        num_block_samples = len(self.signal_data)
+        length = end_idx - start_idx
+        start_mod = start_idx % num_block_samples
+        end_mod = (start_mod + length) % num_block_samples
+
+        if start_mod + length <= num_block_samples:
+            # Single slice, no wraparound
+            return self.signal_data[start_mod:start_mod + length]
+        # Wraps around: concatenate tail and head
+        tail = self.signal_data[start_mod:]
+        if is_stop:
+            return tail
+        head = self.signal_data[:end_mod]
+        return np.concatenate((tail, head))
 
 
 @dataclass
@@ -131,7 +151,8 @@ class PeriodicRampSignal(PeriodicSignal):
     def get_data(
         self,
         start_idx: int,
-        end_idx: int
+        end_idx: int,
+        is_stop: bool = False
     ) -> npt.NDArray[np.float32]:
         """Returns data of the periodic continuation of the signal.
 
@@ -180,11 +201,22 @@ class MsrmtState(Enum):
     SETUP = auto()
     """Initial state when in measurement setup."""
 
+    COMPUTING = auto()
+    """Operations required to start the measurement.
+
+    E.g., latency computation.
+    """
+
     SYNCING = auto()
     """Sync pulse is currently played."""
 
+    STARTING = auto()
+    """Start output and compensate latency."""
+
     MEASURING = auto()
     """In main measurement."""
+
+    END_MEASURING = auto()
 
     FINISHING = auto()
     """Completing main measurement."""
@@ -208,6 +240,8 @@ class RecordingData:
 
     msrmt_samples: int
     """Total number of samples of the main measurement."""
+
+    num_block_samples: int
 
     block_size: int
     """Block size of the measurement device."""
@@ -236,6 +270,8 @@ class LiveMsrmtData:
 
     play_idx: int
     """Raw measurement index."""
+
+    record_idx: int
 
     latency_samples: int
     """DAQ latency of the measurement device in samples.
@@ -290,6 +326,18 @@ class SyncMsrmt:
     live_msrmt_data: LiveMsrmtData
     """Object containing variables and data for the live measurement."""
 
+    i_init_runs: int
+    """Counter of initial measurement callbacks with mute signal.
+
+    In order to clear the input and output buffers of the audio
+    interface, during setup a number of measurement callbacks are
+    "ignored" by playing a mute signal and neglecting the recorded
+    data.
+
+    When this counter reaches the predefined number of initial runs,
+    set by `NUM_INIT_RUNS` the measurement state switches to SYNCING.
+    """
+
     def __init__(
         self,
         recording_data: RecordingData,
@@ -306,30 +354,41 @@ class SyncMsrmt:
               signal arrays
             latency_type: Latency type used('low' or 'high')
         """
-
-        self.state = MsrmtState.SETUP
+        self.set_state(MsrmtState.SETUP)
         self.recording_data = recording_data
         self.hardware_data = hardware_data
-        self.live_msrmt_data = LiveMsrmtData(
-            0,
-            -1,
-            [],
-            generate_sync(self.recording_data.fs),
-            np.zeros(
-                int(self.recording_data.fs * SYNC_DURATION),
-                dtype=np.float32
-            ),
-            latency_type,
-            np.zeros(
-                (
-                    self.recording_data.msrmt_samples
-                    + int(self.recording_data.fs*5)
-                ),
-                dtype=np.float32
-            )
-        )
 
+        sync_output = np.zeros(
+            int(self.recording_data.fs * SYNC_DURATION),
+            dtype=np.float32
+        )
+        sync_recorded = np.zeros(
+            int(self.recording_data.fs * SYNC_DURATION),
+            dtype=np.float32
+        )
+        sync_pulse = generate_sync(self.recording_data.fs)
+        sync_output[:len(sync_pulse)] = sync_pulse
+        recorded_signal = np.zeros(
+            self.recording_data.msrmt_samples,
+            dtype=np.float32
+        )
+        self.live_msrmt_data = LiveMsrmtData(
+            play_idx=0,
+            record_idx=0,
+            latency_samples=-1,
+            output_signals=[],
+            sync_output=sync_output,
+            sync_recorded=sync_recorded,
+            latency_type=latency_type,
+            recorded_signal=recorded_signal
+        )
+        self.i_init_runs = 0
         self.set_output_signals(output_signals)
+
+    def set_state(self, state: MsrmtState) -> None:
+        """Sets the currently active state of this measurement."""
+        self.state = state
+        print(f"Measurement state set to {self.state}.")
 
     def set_output_signals(
         self,
@@ -357,7 +416,6 @@ class SyncMsrmt:
             info: Info contained in an object that store information for the
               update routine.
         """
-        self.state = MsrmtState.SYNCING
         self.run_stream(start_plot, info)
 
     def compute_latency(self) -> None:
@@ -366,14 +424,11 @@ class SyncMsrmt:
             self.live_msrmt_data.sync_recorded,
             self.live_msrmt_data.sync_output
         )
-        lag = (
-            np.argmax(correlation)
-            - int(SYNC_DURATION * self.recording_data.fs)
-            + 1
-        )
-        latency_time = lag/self.recording_data.fs
+        num_acq_samples = len(self.live_msrmt_data.sync_output)
+        lag = np.argmax(correlation) - num_acq_samples + 1
+        latency_time = (lag/self.recording_data.fs) * 1E3
 
-        print(f'Measured latency: {latency_time:.4f} seconds ({lag} samples)')
+        print(f'Measured latency: {latency_time:.4f} ms ({lag} samples)')
         if not isinstance(lag, np.integer):
             print(
                 'Warning: Cannot obtain latency.  '
@@ -386,7 +441,6 @@ class SyncMsrmt:
         if lag < 0:
             print('Warning: Cannot obtain latency. Negative value detected.')
             print('Please check cable connections.')
-            print('Warning: Cannot obtain latency. Negative value detected.')
         self.live_msrmt_data.latency_samples = max(int(lag), 0)
 
     def get_recorded_signal(self) -> npt.NDArray[np.float32]:
@@ -396,16 +450,10 @@ class SyncMsrmt:
             Recorded signal with the length of already recorded data
 
         """
-        if (self.state == MsrmtState.MEASURING
-            and self.live_msrmt_data.latency_samples >= 0):
-            if (
-                self.live_msrmt_data.play_idx
-                > self.live_msrmt_data.latency_samples
-            ):
-                return self.live_msrmt_data.recorded_signal[
-                    :(self.live_msrmt_data.play_idx
-                    -self.live_msrmt_data.latency_samples)
-                ]
+        if self.state in [MsrmtState.MEASURING, MsrmtState.END_MEASURING] :
+            return self.live_msrmt_data.recorded_signal[
+                :self.live_msrmt_data.record_idx
+            ]
         if self.state in [MsrmtState.FINISHING, MsrmtState.FINISHED]:
             return self.live_msrmt_data.recorded_signal
         return np.zeros(0,np.float32)
@@ -440,33 +488,15 @@ class SyncMsrmt:
         start_idx = self.live_msrmt_data.play_idx
         end_idx = start_idx + frames
 
-        # Choose actions depending on the state of the measurement
+        # Set output data to device buffer depending on measurement state
         match self.state:
             case MsrmtState.SYNCING:
-                data = self.live_msrmt_data.sync_output[
-                    start_idx:end_idx
-                ]
-                # If sync signal has been finished, pad with zeros and
-                # transition to next state
+                data = self.live_msrmt_data.sync_output[start_idx:end_idx]
+
+                # If sync signal has been finished, pad with zeros
                 if len(data) < frames:
                     data = np.pad(data, (0, frames-len(data)))
-                    self.state = MsrmtState.MEASURING
-                    # Save sync recording with data from sync input channel
-                    self.live_msrmt_data.sync_recorded[
-                        start_idx:end_idx
-                    ] = input_data[
-                        :len(self.live_msrmt_data.sync_recorded[
-                            start_idx:
-                        ]),
-                        SYNC_INPUT_CHANNEL-1
-                    ]
-                else:
-                    self.live_msrmt_data.sync_recorded[
-                        start_idx:end_idx
-                    ] = input_data[
-                        :len(data),
-                        SYNC_INPUT_CHANNEL-1
-                    ]
+
                 data_stereo = np.zeros(
                     (frames, self.hardware_data.n_out_channels)
                 )
@@ -474,67 +504,113 @@ class SyncMsrmt:
                 data_stereo[:,SYNC_OUTPUT_CHANNEL-1] = data
                 output_data[:] = data_stereo
 
-            case MsrmtState.MEASURING:
-                # If latency has not yet been computed, compute latency.
-                if self.live_msrmt_data.latency_samples < 0:
-                    self.compute_latency()
-                    self.live_msrmt_data.play_idx = 0
-                    start_idx = 0
-                    end_idx = start_idx + frames
-
+            case MsrmtState.MEASURING | MsrmtState.STARTING:
                 # Convert each signal to output data
                 chunks = []
+                i_current_block = (start_idx // self.recording_data.num_block_samples) + 1
+                num_max_avg = int(self.recording_data.msrmt_samples / self.recording_data.num_block_samples)
+                is_stop = i_current_block == num_max_avg
+
                 for signal_i in self.live_msrmt_data.output_signals:
                     chunk_i = signal_i.get_data(
-                        start_idx, end_idx
+                        start_idx,
+                        end_idx,
+                        is_stop=is_stop
                     )
+
                     if len(chunk_i) < frames:
                         chunk_i = np.pad(chunk_i, (0, frames-len(chunk_i)))
+                        self.set_state(MsrmtState.END_MEASURING)
                     chunks.append(chunk_i)
                 stereo_chunk = np.column_stack(chunks)
                 output_data[:] = stereo_chunk.astype(np.float32)
 
-                # In the recording, write the recorded data into the array
-                if ((end_idx + self.live_msrmt_data.latency_samples)
-                    <= len(self.live_msrmt_data.recorded_signal)):
+            case _:
+                # play mute signal during setup and when finished
+                output_data[:] = 0
 
-                    # If play_idx is after signal start, save everything
-                    if start_idx-self.live_msrmt_data.latency_samples > 0:
-                        self.live_msrmt_data.recorded_signal[
-                            (start_idx - self.live_msrmt_data.latency_samples):
-                            (end_idx-self.live_msrmt_data.latency_samples)
-                        ] = input_data[:frames, 0]
-                    # If play_idx is before signal start, but end of buffer is
-                    # after signal start, save a subset of recorded data
-                    elif (end_idx-self.live_msrmt_data.latency_samples) > 0:
-                        sig_samples = end_idx - self.live_msrmt_data.latency_samples
-                        self.live_msrmt_data.recorded_signal[
-                            0:sig_samples
-                        ] = input_data[
-                            frames-sig_samples:frames,
-                            0
-                        ]
-                # If play_idx is after measurement end, finish measurement and
-                # crop recorded signal to measurement length
-                if ((start_idx - self.live_msrmt_data.latency_samples)
-                    > self.recording_data.msrmt_samples):
-                    self.state = MsrmtState.FINISHING
-                    self.live_msrmt_data.recorded_signal = (
-                        self.live_msrmt_data.recorded_signal[
-                            :self.recording_data.msrmt_samples]
+        # Handle the input data of the device buffer and the
+        # control parameters of the measurement flow
+
+        rec_start_idx = self.live_msrmt_data.record_idx
+        rec_end_idx = rec_start_idx + frames
+
+        match self.state:
+            case MsrmtState.SETUP:
+                # clear buffer of audio device during setup
+                # by playing and recording mute signal
+                self.i_init_runs += 1
+                if self.i_init_runs >= NUM_INIT_RUNS:
+                    self.live_msrmt_data.play_idx = 0
+                    frames = 0
+                    self.live_msrmt_data.record_idx = 0
+                    self.set_state(MsrmtState.SYNCING)
+                else:
+                    self.live_msrmt_data.record_idx += frames
+            case MsrmtState.SYNCING:
+                if end_idx < len(self.live_msrmt_data.sync_recorded):
+                    self.live_msrmt_data.sync_recorded[start_idx:end_idx] = (
+                        input_data[:frames, SYNC_INPUT_CHANNEL-1]
+                    )
+                else:
+                    # End of sync recording reached
+                    # Store remaining frames, compute latency,
+                    # and transition to next state
+
+                    num_remaining_frames = (
+                        len(self.live_msrmt_data.sync_recorded) - start_idx
                     )
 
-            case MsrmtState.FINISHING:
-                # Play mute if measurement is finishing
-                output_data[:] = 0
+                    self.live_msrmt_data.sync_recorded[start_idx:] = (
+                        input_data[:num_remaining_frames, SYNC_INPUT_CHANNEL-1]
+                    )
+                    self.set_state(MsrmtState.COMPUTING)
 
-            case MsrmtState.FINISHED:
-                # Play mute if measurement is finished
-                output_data[:] = 0
+            case MsrmtState.COMPUTING:
+                self.compute_latency()
+                if self.live_msrmt_data.latency_samples <= 0:
+                    self.set_state(MsrmtState.CANCELED)
+                    print('Invalid latency - measurement canceled.')
+                else:
+                    self.set_state(MsrmtState.STARTING)
+                    self.live_msrmt_data.play_idx = 0
+                    self.live_msrmt_data.record_idx = 0
+                    frames = 0
 
-            case MsrmtState.CANCELED:
-                # Play mute if measurement has been canceled
-                output_data[:] = 0
+            case MsrmtState.STARTING:
+                # latency computation successful
+                # ignore data before latency has been compensated
+                msrmt_start_idx = self.live_msrmt_data.latency_samples
+                if rec_start_idx <= msrmt_start_idx <= rec_end_idx:
+                    # input frames contains beginning of measurement data
+                    num_remaining_frames = rec_end_idx - msrmt_start_idx
+                    self.live_msrmt_data.recorded_signal[:num_remaining_frames] = (
+                        input_data[frames - num_remaining_frames:, 0]
+                    )
+                    # set
+                    self.live_msrmt_data.record_idx = num_remaining_frames
+                    self.set_state(MsrmtState.MEASURING)
+                    # self.live_msrmt_data.play_idx = 0
+                    # frames = 0
+                else:
+                    self.live_msrmt_data.record_idx += frames
+
+            case MsrmtState.MEASURING | MsrmtState.END_MEASURING:
+                # In the recording, write the recorded data into the array;
+                # synchronized recording with compensated latency;
+                # this is the standard acquisition mode.
+                if rec_end_idx >= self.recording_data.msrmt_samples:
+                    # we have reached the end of the measurement
+                    num_remaining_frames = self.recording_data.msrmt_samples - rec_start_idx
+                    self.live_msrmt_data.recorded_signal[
+                        rec_start_idx:rec_start_idx+num_remaining_frames
+                    ] = input_data[:num_remaining_frames, 0]
+                    self.set_state(MsrmtState.FINISHING)
+                else:
+                    self.live_msrmt_data.recorded_signal[
+                        rec_start_idx:rec_end_idx] = input_data[:frames, 0]
+
+                self.live_msrmt_data.record_idx = rec_end_idx
 
         # Update play_idx
         self.live_msrmt_data.play_idx += frames

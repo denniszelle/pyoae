@@ -9,7 +9,7 @@ Key steps performed by this script:
 - Configures and generates sinusoidal stimulus signals
 - Sets up real-time visualization of signal and spectrum
 - Runs a synchronized two-channel playback and recording loop
-- Applies artifact rejection based on RMS thresholding
+- Applies artifact rejection based on an RMS threshold
 - Saves the measurement data to a `.npz` file for further analysis
 
 This script is intended as an example and a starting point for continuous
@@ -37,6 +37,7 @@ from pyoae import cdpoae
 from pyoae.cdpoae import DpoaePlotInfo, DpoaeUpdateInfo
 from pyoae.sync import (
     HardwareData,
+    PeriodicSignal,
     PeriodicRampSignal,
     RecordingData,
     SyncMsrmt
@@ -55,7 +56,7 @@ LEVEL2: float = -35.
 LEVEL1: float = -15.
 """Level in dB re full-scale of the first primary tone."""
 
-F2: float = 8000.
+F2: float = 1000.
 """Frequency of the second primary tone in Hz."""
 
 F2F1_RATIO: float = 1.2
@@ -63,6 +64,9 @@ F2F1_RATIO: float = 1.2
 
 RECORDING_DURATION: float = 10.
 """Total recording duration in seconds."""
+
+NUM_AVERAGING_BLOCKS: int = 30
+"""Number of blocks used for averaging."""
 
 BLOCK_DURATION: float = .1
 """Duration of a single measurement block in seconds."""
@@ -83,37 +87,46 @@ def main() -> None:
     f2 = cdpoae.correct_frequency(
         F2, BLOCK_DURATION
     )
+    print(f'Setting f2 frequency to: {f2:.2f} Hz')
     f1 = cdpoae.correct_frequency(
         f2/F2F1_RATIO, BLOCK_DURATION
     )
+    print(f'Setting f1 frequency to: {f1:.2f} Hz')
 
-    ramp_len = int(BLOCK_DURATION * device_config.FS/2)
+    ramp_len = int(0.005 * device_config.FS)  # 5 ms
     ramp = signal.get_window('hann', ramp_len*2)[:ramp_len].astype(np.float32)
 
     # Generate output signals
+    num_block_samples = int(device_config.FS * BLOCK_DURATION)
     samples = np.arange(
-        int(device_config.FS * BLOCK_DURATION), dtype=np.float32
+        num_block_samples, dtype=np.float32
     )
     t = samples / device_config.FS
     play_signal1 = amplitude1 * np.sin(2*np.pi*f1*t).astype(np.float32)
-    signal1 = PeriodicRampSignal(
-        play_signal1,
-        int(RECORDING_DURATION * device_config.FS),
-        ramp
-    )
+    signal1 = PeriodicSignal(play_signal1)
 
     play_signal2 = amplitude2 * np.sin(2*np.pi*f2*t).astype(np.float32)
-    signal2 = PeriodicRampSignal(
-        play_signal2,
-        int(RECORDING_DURATION * device_config.FS),
-        ramp
-    )
+    signal2 = PeriodicSignal(play_signal2)
+    # signal1 = PeriodicRampSignal(
+    #     play_signal1,
+    #     int(RECORDING_DURATION * device_config.FS),
+    #     ramp
+    # )
+
+    # play_signal2 = amplitude2 * np.sin(2*np.pi*f2*t).astype(np.float32)
+    # signal2 = PeriodicRampSignal(
+    #     play_signal2,
+    #     int(RECORDING_DURATION * device_config.FS),
+    #     ramp
+    # )
 
     # Create plot
+    num_total_recording_samples = num_block_samples * NUM_AVERAGING_BLOCKS
+    total_recording_duration = num_total_recording_samples / device_config.FS
     fig, ax_time, line_time, ax_spec, line_spec = cdpoae.setup_plot(
-        RECORDING_DURATION,
+        total_recording_duration,
         device_config.FS,
-        int(BLOCK_DURATION * device_config.FS),
+        num_block_samples,
         (f1*0.6, f2*1.5),
         LIVE_DISPLAY_DURATION
     )
@@ -131,7 +144,7 @@ def main() -> None:
     update_info = DpoaeUpdateInfo(
         dpoae_info,
         device_config.FS,
-        int(BLOCK_DURATION * device_config.FS),
+        num_block_samples,
         f1,
         f2,
         ARTIFACT_REJECTION_THR
@@ -141,8 +154,9 @@ def main() -> None:
     print("Starting recording...")
     rec_data = RecordingData(
         float(device_config.FS),
-        float(RECORDING_DURATION),
-        int(RECORDING_DURATION * device_config.FS),
+        float(total_recording_duration),
+        num_total_recording_samples,
+        num_block_samples,
         device_config.DEVICE_BUFFER_SIZE
     )
     hw_data = HardwareData(

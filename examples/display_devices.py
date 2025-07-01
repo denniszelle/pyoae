@@ -1,5 +1,4 @@
-"""
-Sound device display script.
+"""Sound device display script.
 
 This module provides a simple command-line interface for listing available
 sound devices on the system. It supports the following usage patterns:
@@ -25,8 +24,6 @@ import sys
 
 import sounddevice as sd
 
-# The string you want to search for in the device names
-
 
 def print_info(search_param: str | int | None):
     """Print info about devices."""
@@ -37,7 +34,7 @@ def print_info(search_param: str | int | None):
         return
 
     for device in sd.query_devices():
-        if search_param.lower() in device['name'].lower(): #type: ignore
+        if search_param.lower() in device['name'].lower():  # type: ignore
             print(f'{device}\n')
 
 

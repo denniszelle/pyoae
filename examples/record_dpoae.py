@@ -30,7 +30,6 @@ from datetime import datetime
 import os
 
 import numpy as np
-from scipy import signal
 
 from examples import device_config
 from pyoae import cdpoae
@@ -42,7 +41,6 @@ from pyoae.sync import (
     RecordingData,
     SyncMsrmt
 )
-
 
 UPDATE_INTERVAL: float = 100.
 """Interval in milliseconds for updating the plots."""
@@ -78,6 +76,17 @@ Reject blocks with root-mean-squared(RMS) larger than
 artifact_rejection_thr * average RMS
 """
 
+USE_RAMP = True
+"""Flag enabling/disabling fade-in/out of stimuli using a ramp.
+
+If set to True, the script applies a ramp to fade-in the stimuli
+at the start of the first data block and fade-out at the end of
+the last block, respectively.
+"""
+
+RAMP_DURATION = 5
+"""Duration of fade-in/out ramp in ms."""
+
 
 def main() -> None:
     """Main function executing the continuous DPOAE measurement."""
@@ -93,9 +102,6 @@ def main() -> None:
     )
     print(f'Setting f1 frequency to: {f1:.2f} Hz')
 
-    ramp_len = int(0.005 * device_config.FS)  # 5 ms
-    ramp = signal.get_window('hann', ramp_len*2)[:ramp_len].astype(np.float32)
-
     # Generate output signals
     num_block_samples = int(device_config.FS * BLOCK_DURATION)
     samples = np.arange(
@@ -103,22 +109,18 @@ def main() -> None:
     )
     t = samples / device_config.FS
     play_signal1 = amplitude1 * np.sin(2*np.pi*f1*t).astype(np.float32)
-    signal1 = PeriodicSignal(play_signal1)
-
     play_signal2 = amplitude2 * np.sin(2*np.pi*f2*t).astype(np.float32)
-    signal2 = PeriodicSignal(play_signal2)
-    # signal1 = PeriodicRampSignal(
-    #     play_signal1,
-    #     int(RECORDING_DURATION * device_config.FS),
-    #     ramp
-    # )
 
-    # play_signal2 = amplitude2 * np.sin(2*np.pi*f2*t).astype(np.float32)
-    # signal2 = PeriodicRampSignal(
-    #     play_signal2,
-    #     int(RECORDING_DURATION * device_config.FS),
-    #     ramp
-    # )
+
+    if USE_RAMP:
+        ramp_len = int(RAMP_DURATION*1E-3 * device_config.FS)
+        ramp = 0.5*(1 - np.cos(2*np.pi*np.arange(ramp_len)/(2*ramp_len)))
+        ramp = ramp.astype(np.float32)
+        signal1 = PeriodicRampSignal(play_signal1, ramp)
+        signal2 = PeriodicRampSignal(play_signal2, ramp)
+    else:
+        signal1 = PeriodicSignal(play_signal1)
+        signal2 = PeriodicSignal(play_signal2)
 
     # Create plot
     num_total_recording_samples = num_block_samples * NUM_AVERAGING_BLOCKS

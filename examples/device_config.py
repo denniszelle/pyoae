@@ -26,7 +26,7 @@ in the system settings (Windows) or MIDI setup (macOS).
 DEVICE_BUFFER_SIZE: int = 4096
 """Device buffer size used for a single device callback.
 
-Buffer size should be increased with increasing sampling rate
-to allow for continuous audio output and data acquisition
-without gaps.
+Buffer size might need to be increased with increasing
+sampling rate to allow for continuous audio output
+and data acquisition without gaps.
 """

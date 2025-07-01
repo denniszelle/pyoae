@@ -13,17 +13,11 @@ import scipy.signal
 from scipy.signal import windows
 
 
-SYNC_WIDTH: Final[float] = 5.
-"""Width of the sync pulse in milliseconds."""
-
 SYNC_DURATION: Final[float] = 1.0
 """Duration of the sync signal (with mute) in seconds."""
 
-SYNC_START: Final[float] = 100.
-"""Start time in milliseconds of the sync pulse in the sync signal."""
-
 SYNC_CROSS: Final[int] = 50
-"""Number of zero crossings in sync signal."""
+"""Number of minimum zero crossings in sync signal."""
 
 SYNC_AMPLITUDE: Final[float] = 0.1
 """Amplitude of the sync signal in digital full scale."""
@@ -142,9 +136,6 @@ class PeriodicSignal(Signal):
 class PeriodicRampSignal(PeriodicSignal):
     """Periodic signal with fade-in and fade-out ramps."""
 
-    n_recording_samples: int
-    """Number of total samples of the recording."""
-
     ramp: npt.NDArray[np.float32]
     """1D NumPy array with the envelope of the ramp."""
 
@@ -161,10 +152,7 @@ class PeriodicRampSignal(PeriodicSignal):
         fade-out the signal, respectively.
         """
 
-        if start_idx > self.n_recording_samples:
-            return np.zeros(end_idx-start_idx, dtype=np.float32)
-
-        data = super().get_data(start_idx, end_idx)
+        data = super().get_data(start_idx, end_idx, is_stop)
 
         # Apply fade-in if in the fade-in region
         if start_idx < len(self.ramp):
@@ -172,25 +160,32 @@ class PeriodicRampSignal(PeriodicSignal):
             fade_end = min(end_idx, len(self.ramp))
             ramp_start = fade_start
             ramp_end = fade_end
+            # we need to manipulate data, create a copy
+            # to avoid altering original data
+            data = data.copy()
             data[0:fade_end - start_idx] *= self.ramp[ramp_start:ramp_end]
 
-        # Apply fade-out if in the fade-out region (end of the array)
-        fade_out_start = self.n_recording_samples - len(self.ramp)
-        if end_idx > fade_out_start:
-            fade_start = max(start_idx, fade_out_start)
-            fade_end = min(end_idx, self.n_recording_samples)
+        if is_stop:
+            # Last output block, apply fade-out if in the fade-out region
+            num_block_samples = len(self.signal_data)
+            length = end_idx - start_idx
+            start_mod = start_idx % num_block_samples
+            fade_out_start = num_block_samples - len(self.ramp)
 
-            ramp_start = fade_start - fade_out_start
-            ramp_end = fade_end - fade_out_start
-            seg_start = fade_start - start_idx
-            seg_end = fade_end - start_idx
+            if start_mod + length > fade_out_start:
+                fade_start = max(start_mod, fade_out_start)
+                fade_end = min(start_mod + length, num_block_samples)
 
-            # Ensure that we actually have something to apply
-            if ramp_end > ramp_start and seg_end > seg_start:
-                data[seg_start:seg_end] *= self.ramp[::-1][ramp_start:ramp_end]
+                ramp_start = fade_start - fade_out_start
+                ramp_end = fade_end - fade_out_start
+                seg_start = fade_start - start_idx
+                seg_end = fade_end - start_idx
 
-        if end_idx > self.n_recording_samples:
-            data[self.n_recording_samples-end_idx:] = 0
+                # Ensure that we actually have something to apply
+                if ramp_end > ramp_start and seg_end > seg_start:
+                    # manipulate data on a copy
+                    data = data.copy()
+                    data[seg_start:seg_end] *= self.ramp[::-1][ramp_start:ramp_end]
 
         return data
 

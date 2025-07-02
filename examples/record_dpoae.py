@@ -51,7 +51,7 @@ LIVE_DISPLAY_DURATION: float = 100.
 LEVEL2: float = -5.
 """Level in dB re full-scale of the second primary tone."""
 
-LEVEL1: float = -15.
+LEVEL1: float = -3.
 """Level in dB re full-scale of the first primary tone."""
 
 F2: float = 1480.

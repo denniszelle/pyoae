@@ -16,7 +16,7 @@ INPUT_DEVICE: int | str = 'Input'
 OUTPUT_DEVICE: int | str = 'Output'
 """Index or name of the output device."""
 
-FS: float = 96000.
+FS: float = 192000.
 """Sampling frequency in Hz.
 
 Sampling frequency must match that of the device set

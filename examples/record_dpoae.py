@@ -48,13 +48,13 @@ UPDATE_INTERVAL: float = 100.
 LIVE_DISPLAY_DURATION: float = 100.
 """Duration that will be displayed in the live time plot in milliseconds."""
 
-LEVEL2: float = -35.
+LEVEL2: float = -5.
 """Level in dB re full-scale of the second primary tone."""
 
 LEVEL1: float = -15.
 """Level in dB re full-scale of the first primary tone."""
 
-F2: float = 1000.
+F2: float = 1480.
 """Frequency of the second primary tone in Hz."""
 
 F2F1_RATIO: float = 1.2
@@ -63,7 +63,7 @@ F2F1_RATIO: float = 1.2
 RECORDING_DURATION: float = 10.
 """Total recording duration in seconds."""
 
-NUM_AVERAGING_BLOCKS: int = 30
+NUM_AVERAGING_BLOCKS: int = 10
 """Number of blocks used for averaging."""
 
 BLOCK_DURATION: float = .1
@@ -111,19 +111,27 @@ def main() -> None:
     play_signal1 = amplitude1 * np.sin(2*np.pi*f1*t).astype(np.float32)
     play_signal2 = amplitude2 * np.sin(2*np.pi*f2*t).astype(np.float32)
 
-
+    num_total_recording_samples = num_block_samples * NUM_AVERAGING_BLOCKS
+    print(num_total_recording_samples)
     if USE_RAMP:
         ramp_len = int(RAMP_DURATION*1E-3 * device_config.FS)
         ramp = 0.5*(1 - np.cos(2*np.pi*np.arange(ramp_len)/(2*ramp_len)))
         ramp = ramp.astype(np.float32)
-        signal1 = PeriodicRampSignal(play_signal1, ramp)
-        signal2 = PeriodicRampSignal(play_signal2, ramp)
+        signal1 = PeriodicRampSignal(
+            play_signal1,
+            num_total_recording_samples,
+            ramp
+        )
+        signal2 = PeriodicRampSignal(
+            play_signal2,
+            num_total_recording_samples,
+            ramp
+        )
     else:
-        signal1 = PeriodicSignal(play_signal1)
-        signal2 = PeriodicSignal(play_signal2)
+        signal1 = PeriodicSignal(play_signal1, num_total_recording_samples)
+        signal2 = PeriodicSignal(play_signal2, num_total_recording_samples)
 
     # Create plot
-    num_total_recording_samples = num_block_samples * NUM_AVERAGING_BLOCKS
     total_recording_duration = num_total_recording_samples / device_config.FS
     fig, ax_time, line_time, ax_spec, line_spec = cdpoae.setup_plot(
         total_recording_duration,

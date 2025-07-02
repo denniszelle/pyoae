@@ -1,6 +1,5 @@
 """Functions and classes for a synchronized measurement."""
 
-from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import auto, Enum
@@ -13,13 +12,13 @@ import scipy.signal
 from scipy.signal import windows
 
 
-SYNC_DURATION: Final[float] = 1.0
+SYNC_DURATION: Final[float] = 0.4
 """Duration of the sync signal (with mute) in seconds."""
 
-SYNC_CROSS: Final[int] = 50
+SYNC_CROSS: Final[int] = 5
 """Number of minimum zero crossings in sync signal."""
 
-SYNC_AMPLITUDE: Final[float] = 0.1
+SYNC_AMPLITUDE: Final[float] = 0.3
 """Amplitude of the sync signal in digital full scale."""
 
 SYNC_FREQUENCY: Final[float] = 4000
@@ -28,10 +27,10 @@ SYNC_FREQUENCY: Final[float] = 4000
 SYNC_OUTPUT_CHANNEL: Final[int] = 1
 """Output channel of the sync signal."""
 
-SYNC_INPUT_CHANNEL: Final[int] = 1
+SYNC_INPUT_CHANNEL: Final[int] = 2
 """Input channel to record the sync signal."""
 
-NUM_INIT_RUNS: Final[int] = 3
+NUM_INIT_RUNS: Final[int] = 5
 """Number of initial runs to clear device buffers.
 
 A measurement callback by the sound device is considered
@@ -63,39 +62,43 @@ def generate_sync(fs: float) -> npt.NDArray[np.float32]:
     return sync_pulse
 
 
-class Signal(ABC):
-    """Abstract base class for output signals."""
+class Signal:
+    """Simple base class to store and handle output signals."""
 
-    @abstractmethod
-    def get_data(
-        self,
-        start_idx: int,
-        end_idx: int,
-        is_stop: bool = False
-    ) -> npt.NDArray[np.float32]:
-        """Returns data of the signal."""
+    num_total_samples: int
+    """Number of total output samples.
 
+    Note:
+        Output samples can be reached by signal repetition.
+    """
 
-@dataclass
-class SimpleSignal(Signal):
-    """Simple signal for output."""
+    num_signal_samples: int
+    """Number of samples of the provided signal template.
+
+    This is the length of signal data.
+    """
 
     signal_data: npt.NDArray[np.float32]
     """1D NumPy array with the output signal."""
 
+    def __init__(
+        self,
+        signal_data: npt.NDArray[np.float32],
+        num_total_samples: int
+    ) -> None:
+        self.signal_data = signal_data
+        self.num_signal_samples = len(signal_data)
+        self.num_total_samples = num_total_samples
+
     def get_data(
         self,
         start_idx: int,
-        end_idx: int,
-        is_stop: bool = False
+        end_idx: int
     ) -> npt.NDArray[np.float32]:
-        """Returns data of the signal"""
-        if end_idx>len(self.signal_data):
-            raise IndexError('Signal out of bounds.')
+        """Returns signal data for requested buffer interval."""
         return self.signal_data[start_idx:end_idx]
 
 
-@dataclass
 class PeriodicSignal(Signal):
     """Periodic output signal.
 
@@ -103,91 +106,145 @@ class PeriodicSignal(Signal):
     continuation.
     """
 
-    signal_data: npt.NDArray[np.float32]
-    """1D NumPy array with the harmonic output signal."""
-
     def get_data(
         self,
         start_idx: int,
-        end_idx: int,
-        is_stop: bool = False
+        end_idx: int
     ) -> npt.NDArray[np.float32]:
-        """Returns frames of a periodic signal.
+        """Returns frames of the periodic signal.
 
         Returns the data with continuation.
-        """
-        num_block_samples = len(self.signal_data)
-        length = end_idx - start_idx
-        start_mod = start_idx % num_block_samples
-        end_mod = (start_mod + length) % num_block_samples
 
-        if start_mod + length <= num_block_samples:
+        Note:
+            This overwrites `get_data` from the base class.
+        """
+        length = end_idx - start_idx
+        start_mod = start_idx % self.num_signal_samples
+        end_mod = (start_mod + length) % self.num_signal_samples
+
+        if start_mod + length <= self.num_signal_samples:
             # Single slice, no wraparound
             return self.signal_data[start_mod:start_mod + length]
         # Wraps around: concatenate tail and head
         tail = self.signal_data[start_mod:]
-        if is_stop:
+        if end_idx >= (self.num_total_samples - 1):
+            # end of requested playback reached
             return tail
         head = self.signal_data[:end_mod]
         return np.concatenate((tail, head))
 
 
-@dataclass
 class PeriodicRampSignal(PeriodicSignal):
     """Periodic signal with fade-in and fade-out ramps."""
 
     ramp: npt.NDArray[np.float32]
     """1D NumPy array with the envelope of the ramp."""
 
+    idx_fade_out: int
+    """Index at which the fade-out ramp starts."""
+
+    def __init__(
+        self,
+        signal_data: npt.NDArray[np.float32],
+        num_total_samples: int,
+        ramp: npt.NDArray[np.float32]
+    ) -> None:
+        super().__init__(signal_data, num_total_samples)
+        self.ramp = ramp
+        self.idx_fade_out = self.num_total_samples - len(ramp)
+
     def get_data(
         self,
         start_idx: int,
-        end_idx: int,
-        is_stop: bool = False
+        end_idx: int
     ) -> npt.NDArray[np.float32]:
-        """Returns data of the periodic continuation of the signal.
+        """Returns signal data with fade-in and fade-out applied."""
+        data = super().get_data(start_idx, end_idx)
 
-        At the beginning and the end of the recording, the output
-        is multiplied with the ramp envelope to fade-in and
-        fade-out the signal, respectively.
-        """
-
-        data = super().get_data(start_idx, end_idx, is_stop)
-
-        # Apply fade-in if in the fade-in region
+        # Apply fade-in
         if start_idx < len(self.ramp):
-            fade_start = max(0, start_idx)
-            fade_end = min(end_idx, len(self.ramp))
-            ramp_start = fade_start
-            ramp_end = fade_end
-            # we need to manipulate data, create a copy
-            # to avoid altering original data
+            fade_len = min(end_idx, len(self.ramp)) - start_idx
             data = data.copy()
-            data[0:fade_end - start_idx] *= self.ramp[ramp_start:ramp_end]
+            data[:fade_len] *= self.ramp[start_idx:start_idx + fade_len]
 
-        if is_stop:
-            # Last output block, apply fade-out if in the fade-out region
-            num_block_samples = len(self.signal_data)
-            length = end_idx - start_idx
-            start_mod = start_idx % num_block_samples
-            fade_out_start = num_block_samples - len(self.ramp)
+        # Apply fade-out
+        if end_idx > self.idx_fade_out:
+            fade_start = max(start_idx, self.idx_fade_out)
+            ramp_start = fade_start - self.idx_fade_out
+            ramp_len = end_idx - fade_start
+            available_ramp_len = len(self.ramp) - ramp_start
+            # the effective ramp length is applied if end
+            # of output data was reached; i.e., the data
+            # was trimmed in super().get_data(...)
+            effective_ramp_len = min(ramp_len, available_ramp_len)
+            data = data.copy()
+            data[-effective_ramp_len:] *= self.ramp[::-1][ramp_start:ramp_start + effective_ramp_len]
 
-            if start_mod + length > fade_out_start:
-                fade_start = max(start_mod, fade_out_start)
-                fade_end = min(start_mod + length, num_block_samples)
-
-                ramp_start = fade_start - fade_out_start
-                ramp_end = fade_end - fade_out_start
-                seg_start = fade_start - start_idx
-                seg_end = fade_end - start_idx
-
-                # Ensure that we actually have something to apply
-                if ramp_end > ramp_start and seg_end > seg_start:
-                    # manipulate data on a copy
-                    data = data.copy()
-                    data[seg_start:seg_end] *= self.ramp[::-1][ramp_start:ramp_end]
 
         return data
+
+    # def get_data(
+    #     self,
+    #     start_idx: int,
+    #     end_idx: int
+    # ) -> npt.NDArray[np.float32]:
+    #     """Returns data of the periodic continuation of the signal.
+
+    #     At the beginning and the end of the recording, the output
+    #     is multiplied with the ramp envelope to fade-in and
+    #     fade-out the signal, respectively.
+    #     """
+
+    #     data = super().get_data(start_idx, end_idx)
+
+    #     # Apply fade-in if in the fade-in region
+    #     if start_idx < len(self.ramp):
+    #         fade_start = max(0, start_idx)
+    #         fade_end = min(end_idx, len(self.ramp))
+    #         ramp_start = fade_start
+    #         ramp_end = fade_end
+    #         # we need to manipulate data, create a copy
+    #         # to avoid altering original data
+    #         data = data.copy()
+    #         data[0:fade_end - start_idx] *= self.ramp[ramp_start:ramp_end]
+
+    #     if end_idx >= self.idx_fade_out:
+    #         # apply fade-out ramp
+    #         print('Start fade out')
+    #         # manipulate data on a copy
+    #         data = data.copy()
+
+    #         num_ramp_samples = len(self.ramp)
+    #         num_data_samples = len(data)
+    #         played_ramp_samples = start_idx - self.idx_fade_out
+    #         if num_data_samples >= num_ramp_samples:
+    #             if len(data) < (end_idx - start_idx):
+    #                 # end of the continuous data output reached
+    #                 if played_ramp_samples > 0:
+    #                     print('Play remaining ramp samples.')
+    #                     num_ramp_out_samples = num_ramp_samples - played_ramp_samples
+    #                     data[-num_ramp_out_samples:] *= self.ramp[::-1][played_ramp_samples:]
+    #                 else:
+    #                     data[-num_ramp_samples:] *= self.ramp[::-1]
+    #             else:
+    #                 # ramp will reach into the next buffer
+    #                 print('Ramp will reach into next buffer.')
+    #                 if start_idx <  self.idx_fade_out:
+    #                     # ramp starts
+    #                     idx_ramp_start = self.idx_fade_out % self.num_signal_samples
+    #                     length = len(data) - idx_ramp_start
+    #                     print(f'idx_ramp_start: {idx_ramp_start}')
+    #                     print(f'apply ramp to {length} samples.')
+    #                     data[idx_ramp_start:] *= self.ramp[::-1][:length]
+    #         else:
+    #             if played_ramp_samples > 0:
+    #                 print('Play remaining ramp samples.')
+    #                 num_ramp_out_samples = num_ramp_samples - played_ramp_samples
+    #                 data[-num_ramp_out_samples:] *= self.ramp[::-1][played_ramp_samples:]
+    #             else:
+    #                 data[-num_ramp_samples:] *= self.ramp[::-1]
+
+    #     return data
 
 
 class MsrmtState(Enum):
@@ -353,12 +410,19 @@ class SyncMsrmt:
         self.recording_data = recording_data
         self.hardware_data = hardware_data
 
+        num_sync_samples = recording_data.block_size * 8
+        sync_duration = (num_sync_samples / recording_data.fs) * 1E3
+        print(
+            f'Length of sync-signal with mute: {num_sync_samples} ({sync_duration:.2f} ms)')
+
         sync_output = np.zeros(
-            int(self.recording_data.fs * SYNC_DURATION),
+            #int(self.recording_data.fs * SYNC_DURATION),
+            num_sync_samples,
             dtype=np.float32
         )
         sync_recorded = np.zeros(
-            int(self.recording_data.fs * SYNC_DURATION),
+            #int(self.recording_data.fs * SYNC_DURATION),
+            num_sync_samples,
             dtype=np.float32
         )
         sync_pulse = generate_sync(self.recording_data.fs)
@@ -394,12 +458,8 @@ class SyncMsrmt:
             if isinstance(signal_i, Signal):
                 self.live_msrmt_data.output_signals.append(signal_i)
             else:
-                if len(signal_i) != self.recording_data.msrmt_samples:
-                    raise ValueError(
-                        'Input signal duration must match measurement duration'
-                    )
                 self.live_msrmt_data.output_signals.append(
-                    SimpleSignal(signal_i)
+                    Signal(signal_i, self.recording_data.msrmt_samples)
                 )
 
     def start_msrmt(self, start_plot: Callable, info: Any) -> None:
@@ -415,15 +475,28 @@ class SyncMsrmt:
 
     def compute_latency(self) -> None:
         """Computes the stream latency from sync measurement."""
+        self.live_msrmt_data.sync_recorded /= np.max(
+            np.abs(self.live_msrmt_data.sync_recorded)
+        )
+        self.live_msrmt_data.sync_output /= np.max(
+            np.abs(self.live_msrmt_data.sync_output)
+        )
         correlation = scipy.signal.correlate(
             self.live_msrmt_data.sync_recorded,
             self.live_msrmt_data.sync_output
         )
+        # idx_rec_max = np.argmax(self.live_msrmt_data.sync_recorded)
+        # idx_out_max = np.argmax(self.live_msrmt_data.sync_output)
         num_acq_samples = len(self.live_msrmt_data.sync_output)
         lag = np.argmax(correlation) - num_acq_samples + 1
         latency_time = (lag/self.recording_data.fs) * 1E3
 
-        print(f'Measured latency: {latency_time:.4f} ms ({lag} samples)')
+        print(
+            f'Measured latency: {latency_time:.4f} ms ({lag} samples) ({num_acq_samples} samples acquired)'
+        )
+        # print(f'Position of maximum in sync output: {idx_out_max}')
+        # print(f'Position of maximum in sync record: {idx_rec_max}')
+        # print(f'Maximum based lag: {idx_rec_max - idx_out_max} samples')
         if not isinstance(lag, np.integer):
             print(
                 'Warning: Cannot obtain latency.  '
@@ -502,15 +575,13 @@ class SyncMsrmt:
             case MsrmtState.MEASURING | MsrmtState.STARTING:
                 # Convert each signal to output data
                 chunks = []
-                i_current_block = (start_idx // self.recording_data.num_block_samples) + 1
-                num_max_avg = int(self.recording_data.msrmt_samples / self.recording_data.num_block_samples)
-                is_stop = i_current_block == num_max_avg
+                # i_current_block = (start_idx // self.recording_data.num_block_samples) + 1
+                # num_max_avg = int(self.recording_data.msrmt_samples / self.recording_data.num_block_samples)
 
                 for signal_i in self.live_msrmt_data.output_signals:
                     chunk_i = signal_i.get_data(
                         start_idx,
-                        end_idx,
-                        is_stop=is_stop
+                        end_idx
                     )
 
                     if len(chunk_i) < frames:

@@ -13,7 +13,11 @@ from scipy.signal import windows
 
 
 SYNC_DURATION: Final[float] = 0.5
-"""Duration of the sync signal (with mute) in seconds."""
+"""Duration of the sync signal (with mute) in seconds.
+
+Will be adjusted to a correspond to a number of samples
+that is a multiple of the device's buffer size.
+"""
 
 SYNC_CROSS: Final[int] = 5
 """Number of minimum zero crossings in sync signal."""
@@ -31,10 +35,14 @@ SYNC_INPUT_CHANNEL: Final[int] = 2
 """Input channel to record the sync signal."""
 
 NUM_INIT_RUNS: Final[int] = 3
-"""Number of initial runs to clear device buffers.
+"""Number of initialization runs to clear device buffers.
 
 A measurement callback by the sound device is considered
-a run.
+a run. Depending on the system configuration and device
+properties, the input buffers might contain previously
+collected data. During the initialization runs a mute
+signal clears these buffers, especially for the sync(monitoring)
+channel.
 """
 
 
@@ -170,81 +178,18 @@ class PeriodicRampSignal(PeriodicSignal):
         # Apply fade-out
         if end_idx > self.idx_fade_out:
             fade_start = max(start_idx, self.idx_fade_out)
-            ramp_start = fade_start - self.idx_fade_out
+            k = fade_start - self.idx_fade_out
             ramp_len = end_idx - fade_start
-            available_ramp_len = len(self.ramp) - ramp_start
+            available_len = len(self.ramp) - k
             # the effective ramp length is applied if end
             # of output data was reached; i.e., the data
             # was trimmed in super().get_data(...)
-            effective_ramp_len = min(ramp_len, available_ramp_len)
+            effective_len = min(ramp_len, available_len)
             data = data.copy()
-            data[-effective_ramp_len:] *= self.ramp[::-1][ramp_start:ramp_start + effective_ramp_len]
+            data[-effective_len:] *= self.ramp[::-1][k:k + effective_len]
 
 
         return data
-
-    # def get_data(
-    #     self,
-    #     start_idx: int,
-    #     end_idx: int
-    # ) -> npt.NDArray[np.float32]:
-    #     """Returns data of the periodic continuation of the signal.
-
-    #     At the beginning and the end of the recording, the output
-    #     is multiplied with the ramp envelope to fade-in and
-    #     fade-out the signal, respectively.
-    #     """
-
-    #     data = super().get_data(start_idx, end_idx)
-
-    #     # Apply fade-in if in the fade-in region
-    #     if start_idx < len(self.ramp):
-    #         fade_start = max(0, start_idx)
-    #         fade_end = min(end_idx, len(self.ramp))
-    #         ramp_start = fade_start
-    #         ramp_end = fade_end
-    #         # we need to manipulate data, create a copy
-    #         # to avoid altering original data
-    #         data = data.copy()
-    #         data[0:fade_end - start_idx] *= self.ramp[ramp_start:ramp_end]
-
-    #     if end_idx >= self.idx_fade_out:
-    #         # apply fade-out ramp
-    #         print('Start fade out')
-    #         # manipulate data on a copy
-    #         data = data.copy()
-
-    #         num_ramp_samples = len(self.ramp)
-    #         num_data_samples = len(data)
-    #         played_ramp_samples = start_idx - self.idx_fade_out
-    #         if num_data_samples >= num_ramp_samples:
-    #             if len(data) < (end_idx - start_idx):
-    #                 # end of the continuous data output reached
-    #                 if played_ramp_samples > 0:
-    #                     print('Play remaining ramp samples.')
-    #                     num_ramp_out_samples = num_ramp_samples - played_ramp_samples
-    #                     data[-num_ramp_out_samples:] *= self.ramp[::-1][played_ramp_samples:]
-    #                 else:
-    #                     data[-num_ramp_samples:] *= self.ramp[::-1]
-    #             else:
-    #                 # ramp will reach into the next buffer
-    #                 print('Ramp will reach into next buffer.')
-    #                 if start_idx <  self.idx_fade_out:
-    #                     # ramp starts
-    #                     idx_ramp_start = self.idx_fade_out % self.num_signal_samples
-    #                     length = len(data) - idx_ramp_start
-    #                     print(f'idx_ramp_start: {idx_ramp_start}')
-    #                     print(f'apply ramp to {length} samples.')
-    #                     data[idx_ramp_start:] *= self.ramp[::-1][:length]
-    #         else:
-    #             if played_ramp_samples > 0:
-    #                 print('Play remaining ramp samples.')
-    #                 num_ramp_out_samples = num_ramp_samples - played_ramp_samples
-    #                 data[-num_ramp_out_samples:] *= self.ramp[::-1][played_ramp_samples:]
-    #             else:
-    #                 data[-num_ramp_samples:] *= self.ramp[::-1]
-
-    #     return data
 
 
 class MsrmtState(Enum):
@@ -321,9 +266,10 @@ class LiveMsrmtData:
     """Variable storage for the live measurement."""
 
     play_idx: int
-    """Raw measurement index."""
+    """Current index in output array to get playback frames."""
 
     record_idx: int
+    """Current index to write frames in input array."""
 
     latency_samples: int
     """DAQ latency of the measurement device in samples.
@@ -391,6 +337,7 @@ class SyncMsrmt:
     """
 
     monitoring_amp: npt.NDArray[np.float32]
+    """Signal amplitude of monitoring channel during playback start."""
 
     def __init__(
         self,
@@ -417,7 +364,9 @@ class SyncMsrmt:
         num_sync_samples = recording_data.block_size * k
         sync_duration = (num_sync_samples / recording_data.fs) * 1E3
         print(
-            f'Duration of sync-signal with mute: {num_sync_samples} ({sync_duration:.2f} ms)')
+            'Duration of sync-signal with mute: '
+            f'{num_sync_samples} ({sync_duration:.2f} ms)'
+        )
 
         sync_output = np.zeros(
             num_sync_samples,
@@ -488,18 +437,14 @@ class SyncMsrmt:
             self.live_msrmt_data.sync_recorded,
             self.live_msrmt_data.sync_output
         )
-        # idx_rec_max = np.argmax(self.live_msrmt_data.sync_recorded)
-        # idx_out_max = np.argmax(self.live_msrmt_data.sync_output)
         num_acq_samples = len(self.live_msrmt_data.sync_output)
         lag = np.argmax(correlation) - num_acq_samples + 1
         latency_time = (lag/self.recording_data.fs) * 1E3
 
         print(
-            f'Measured latency: {latency_time:.4f} ms ({lag} samples) ({num_acq_samples} samples acquired)'
+            f'Measured latency: {latency_time:.4f} ms ({lag} samples) '
+            f'({num_acq_samples} samples acquired)'
         )
-        # print(f'Position of maximum in sync output: {idx_out_max}')
-        # print(f'Position of maximum in sync record: {idx_rec_max}')
-        # print(f'Maximum based lag: {idx_rec_max - idx_out_max} samples')
         if not isinstance(lag, np.integer):
             print(
                 'Warning: Cannot obtain latency.  '
@@ -508,7 +453,6 @@ class SyncMsrmt:
             self.live_msrmt_data.latency_samples = 0
             return
 
-        lag = int(lag)
         if lag < 0:
             print('Warning: Cannot obtain latency. Negative value detected.')
             print('Please check cable connections.')
@@ -544,9 +488,9 @@ class SyncMsrmt:
 
         Args:
             input_data: A 2D matrix of shape (frames, n_input_channels)
-                with recorded data from device
+              with recorded data from device
             output_data: A 2D matrix of shape (frames, n_output_channels)
-                that needs to be filled with data to record
+              that needs to be filled with data to record
             frames: Number of frames that need to be read/written
             time: object containing info about timings of AD/DA conversions
             status: Status containing information about the callback
@@ -554,10 +498,6 @@ class SyncMsrmt:
         """
         del time
         del status
-
-        # if self.state is not MsrmtState.FINISHED:
-        #     print(f'Playback index: {self.live_msrmt_data.play_idx}')
-        #     print(f'Recording index: {self.live_msrmt_data.record_idx}')
 
         # Set the end of the measurement index for this callback
         start_idx = self.live_msrmt_data.play_idx
@@ -569,7 +509,7 @@ class SyncMsrmt:
                 data = self.live_msrmt_data.sync_output[start_idx:end_idx]
 
                 # If sync signal has been finished, pad with zeros
-                # Currently not used, because sync samples are a
+                # NB: Currently not used, because sync samples are a
                 # multiple of device block size
                 # if len(data) < frames:
                 #     data = np.pad(data, (0, frames-len(data)))
@@ -580,16 +520,10 @@ class SyncMsrmt:
                 # Add data to sync output channel
                 data_stereo[:, SYNC_OUTPUT_CHANNEL-1] = data
                 output_data[:] = data_stereo
-                max_out = np.max(output_data)
-                max_out_pos = np.argmax(output_data[:, SYNC_OUTPUT_CHANNEL-1])
-                if max_out > 0.01:
-                    print(f'Max sync out {max_out} at {max_out_pos}')
 
             case MsrmtState.MEASURING | MsrmtState.STARTING:
                 # Convert each signal to output data
                 chunks = []
-                # i_current_block = (start_idx // self.recording_data.num_block_samples) + 1
-                # num_max_avg = int(self.recording_data.msrmt_samples / self.recording_data.num_block_samples)
 
                 for signal_i in self.live_msrmt_data.output_signals:
                     chunk_i = signal_i.get_data(
@@ -627,10 +561,6 @@ class SyncMsrmt:
                 else:
                     self.live_msrmt_data.record_idx += frames
             case MsrmtState.SYNCING:
-                max_in = np.max(input_data)
-                max_in_pos = np.argmax(input_data[:, SYNC_INPUT_CHANNEL-1])
-                if max_in > 0.01:
-                    print(f'Max sync in {max_in} at {max_in_pos} (start: {rec_start_idx})')
                 if end_idx < len(self.live_msrmt_data.sync_recorded):
                     self.live_msrmt_data.sync_recorded[rec_start_idx:rec_end_idx] = (
                         input_data[:frames, SYNC_INPUT_CHANNEL-1]
@@ -664,8 +594,8 @@ class SyncMsrmt:
                 # latency computation successful
                 # ignore data before latency has been compensated
 
-                # TODO: check if latency is shifted by +- 1 device_block_size
                 msrmt_start_idx = self.live_msrmt_data.latency_samples
+
                 max_monitor = np.max(input_data[:, SYNC_INPUT_CHANNEL-1])
                 if self.monitoring_amp.size:
                     # compare current maximum to average maximum in previous blocks
@@ -681,7 +611,6 @@ class SyncMsrmt:
                     print(f'Early signal detected: correcting latency to: {msrmt_start_idx}')
 
                 if rec_start_idx <= msrmt_start_idx <= rec_end_idx:
-                    #if is_signal:
                     # input frames contains beginning of measurement data
                     print(f'Start compensating at {rec_start_idx}.')
                     num_remaining_frames = rec_end_idx - msrmt_start_idx
@@ -690,10 +619,6 @@ class SyncMsrmt:
                     )
                     self.live_msrmt_data.record_idx = num_remaining_frames
                     self.set_state(MsrmtState.MEASURING)
-                    # else:
-                    #     print('No signal detected in expected block.')
-                    #     msrmt_start_idx += self.recording_data.block_size
-                    #     print(f'Correcting latency to: {msrmt_start_idx}')
                 else:
                     self.live_msrmt_data.record_idx += frames
 

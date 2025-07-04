@@ -1,4 +1,4 @@
-"""Functions to record continuous DPOAEs
+"""Classes and functions to record continuous DPOAEs
 
 This module contains utility functions used to acquire, process
 and analyze continuous distortion-product otoacoustic emissions (cDPOAE).

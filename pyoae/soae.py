@@ -1,5 +1,4 @@
-"""
-Classes and functions to record SOAE.
+"""Classes and functions to record SOAE.
 
 This module contains classes and utility functions used to
 acquire, process, and analyze Spontaneous Otoacoustic Emissions
@@ -12,21 +11,23 @@ Key functionalities include:
 
 Typical usage:
 
+```
     import pyoae.soae
+```
 
 This module is not intended to be run directly.
 """
 
-from typing import Literal
 from dataclasses import dataclass
+from typing import Literal
 
-import numpy as np
-import scipy.signal
 from matplotlib import pyplot as plt
 from matplotlib.animation import FuncAnimation
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
+import numpy as np
+import scipy.signal
 
 from pyoae.sync import SyncMsrmt, MsrmtState
 from pyoae.calib import MicroTransferFunction
@@ -34,7 +35,7 @@ from pyoae.calib import MicroTransferFunction
 
 @dataclass
 class SoaePlotInfo:
-    """Data container for the measurement plot."""
+    """Container with data for the measurement plot."""
 
     fig: Figure
     """Figure corresponding to the plot window."""
@@ -116,12 +117,12 @@ def setup_plot(
     ax_time.set_xlim(-live_display_duration, 0)
     ax_time.set_title("Recorded Waveform")
     ax_time.set_xlabel("Time (ms)")
-    ax_time.set_ylabel("Amplitude (full-scale)")
+    ax_time.set_ylabel("Amplitude (re full scale)")
 
     # Set up frequency plot
-    fft_freqs = np.fft.rfftfreq(window_size, 1 / fs)
-    fft_vals = np.zeros(len(fft_freqs))
-    line_spec, = ax_spec.plot(fft_freqs, fft_vals)
+    fft_frequencies = np.fft.rfftfreq(window_size, 1 / fs)
+    fft_values = np.zeros(len(fft_frequencies))
+    line_spec, = ax_spec.plot(fft_frequencies, fft_values)
     ax_spec.set_xlim(500, 20*1E3)
     ax_spec.set_xscale('log')
     # ax_spec.set_xlim(500, fs/2)
@@ -131,7 +132,7 @@ def setup_plot(
     if is_calib_available:
         ax_spec.set_ylabel('Level (dB SPL)')
     else:
-        ax_spec.set_ylabel("Level (dB re full-scale)")
+        ax_spec.set_ylabel("Level (dBFS)")
 
     return fig, ax_time, line_time, ax_spec, line_spec
 
@@ -139,11 +140,11 @@ def setup_plot(
 def welch_artifact_rejection(
     x: np.ndarray,
     fs: float,
-    window:str='hann',
-    window_samples:int=256,
-    overlap_samples: int|None =None,
-    detrend:Literal['linear', 'constant']='constant',
-    artifact_rejection_thr:float=1.8
+    window: str = 'hann',
+    window_samples: int = 256,
+    overlap_samples: int | None = None,
+    detrend: Literal['linear', 'constant'] = 'constant',
+    artifact_rejection_thr: float = 1.8
 ) -> tuple[np.ndarray, np.ndarray]:
     """Estimates a welch spectrum with basic measurement artifact rejection.
 
@@ -189,8 +190,8 @@ def welch_artifact_rejection(
 
     # Obtain RMS values of spectrum
     rms_vals = np.sqrt(np.mean(np.square(spectrum), axis=1))
-    avg_rms = np.median(rms_vals)
-    accepted_idc = np.where(rms_vals < artifact_rejection_thr*avg_rms)[0]
+    median_rms = np.median(rms_vals)
+    accepted_idc = np.where(rms_vals < artifact_rejection_thr*median_rms)[0]
 
     if len(accepted_idc):
         spec_avg = spectrum[accepted_idc].mean(axis=0)
@@ -220,7 +221,6 @@ def process_spectrum(
 
     Returns:
         Float array containing the asynchronous averaged spectrum
-
     """
 
     spectrum = None
@@ -418,9 +418,10 @@ def plot_offline(sync_msrmt: SyncMsrmt, info: SoaeUpdateInfo) -> None:
         info.plot_info.live_display_duration,
         info.correction_tf is not None
     )
-    line_time.set_xdata(np.arange(len(recorded_signal))/info.fs*1E3)
+    line_time.set_xdata(np.arange(len(recorded_signal))/info.fs)
     line_time.set_ydata(recorded_signal)
-    ax_time.set_xlim(0, sync_msrmt.recording_data.msrmt_duration*1E3)
+    ax_time.set_xlim(0, sync_msrmt.recording_data.msrmt_duration)
+    ax_time.set_xlabel("Recording Time (s)")
 
     spec_min = min(spectrum[1:])
     spec_max = max(spectrum)

@@ -45,6 +45,30 @@ signal clears these buffers, especially for the sync(monitoring)
 channel.
 """
 
+USE_EARLY_LATENCY_CORRECTION: Final[bool] = False
+"""Flag enabling(True)/disabling(False) early latency monitoring.
+
+This requires the sync-input channel to be a monitoring channel,
+i.e., the sync-input channel must differ from the microphone
+input channel.
+
+By default, the microphone input channel is ch. 01. Hence,
+the recommend input channel for syncing and monitoring
+is ch. 02.
+
+Some audio interfaces may exhibit a varying number of
+input/output buffers leading to an invalid compensation
+of the device latency between playback and recording.
+
+This occurs, if the device (or its drivers) utilizes
+more buffers during the synchronization than during the
+main measurement.
+
+When enabling the early latency detection, a simple
+maximum-based signal detection is performed while
+compensating the expected device latency.
+"""
+
 
 def generate_sync(fs: float) -> npt.NDArray[np.float32]:
     """Generates and returns the sync signal.
@@ -601,19 +625,31 @@ class SyncMsrmt:
 
                 msrmt_start_idx = self.live_msrmt_data.latency_samples
 
-                max_monitor = np.max(input_data[:, SYNC_INPUT_CHANNEL-1])
-                if self.monitoring_amp.size:
-                    # compare current maximum to average maximum in previous blocks
-                    signal_thresh = 1.5 * np.mean(self.monitoring_amp)
-                    is_signal = max_monitor > signal_thresh
-                    print(f'Monitoring amp.: {max_monitor}, threshold: {signal_thresh}')
-                else:
-                    is_signal = False
-                self.monitoring_amp = np.append(self.monitoring_amp, max_monitor)
+                if USE_EARLY_LATENCY_CORRECTION:
+                    # try to detect an early measurement start
+                    # (see `USE_EARLY_LATENCY_CORRECTION` for
+                    # explanation)
+                    max_monitor = np.max(input_data[:, SYNC_INPUT_CHANNEL-1])
+                    if self.monitoring_amp.size:
+                        # compare current maximum to average in previous blocks
+                        signal_thresh = 1.5 * np.mean(self.monitoring_amp)
+                        is_signal = max_monitor > signal_thresh
+                        print(
+                            f'Monitoring amp.: {max_monitor}, '
+                            f'threshold: {signal_thresh}'
+                        )
+                    else:
+                        is_signal = False
+                    self.monitoring_amp = np.append(
+                        self.monitoring_amp, max_monitor
+                    )
 
-                if is_signal and rec_end_idx < msrmt_start_idx:
-                    msrmt_start_idx -= self.recording_data.block_size
-                    print(f'Early signal detected: correcting latency to: {msrmt_start_idx}')
+                    if is_signal and rec_end_idx < msrmt_start_idx:
+                        msrmt_start_idx -= self.recording_data.block_size
+                        print(
+                            'Early signal detected: correcting '
+                            f'latency to: {msrmt_start_idx}'
+                        )
 
                 if rec_start_idx <= msrmt_start_idx <= rec_end_idx:
                     # input frames contains beginning of measurement data

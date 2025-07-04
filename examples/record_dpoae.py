@@ -49,10 +49,10 @@ LIVE_DISPLAY_DURATION: float = 100.
 """Duration that will be displayed in the live time plot in milliseconds."""
 
 LEVEL2: float = -35.
-"""Level in dB re full-scale of the second primary tone."""
+"""Level in dB re full scale (dBFS) of the second primary tone."""
 
 LEVEL1: float = -25.
-"""Level in dB re full-scale of the first primary tone."""
+"""Level in dB re full scale (dBFS) of the first primary tone."""
 
 F2: float = 3000.
 """Frequency of the second primary tone in Hz."""
@@ -83,8 +83,8 @@ Total recording time is
 ARTIFACT_REJECTION_THR = 1.8
 """Threshold for simple artifact rejection.
 
-Reject blocks with root-mean-squared(RMS) larger than
-artifact_rejection_thr * average RMS
+Reject blocks with a root-mean-square (RMS) value
+exceeding ARTIFACT_REJECTION_THR * median_rms.
 """
 
 USE_RAMP = True
@@ -102,27 +102,38 @@ RAMP_DURATION = 5
 def main() -> None:
     """Main function executing the continuous DPOAE measurement."""
 
+    # calculate number of samples and ensure an integer number
+    num_block_samples = int(device_config.FS * BLOCK_DURATION)
+    # ensure block duration matches number of block samples
+    block_duration = num_block_samples / device_config.FS
+    if block_duration != BLOCK_DURATION:
+        print(
+            f'Block duration adjusted to {block_duration*1E3:.2f} ms'
+        )
+
     amplitude2 = 10**(LEVEL2/20)
     amplitude1 = 10**(LEVEL1/20)
-    f2 = cdpoae.correct_frequency(
-        F2, BLOCK_DURATION
+    f2 = cdpoae.correct_frequency(F2, num_block_samples/block_duration)
+    f1 = cdpoae.correct_frequency(f2/F2F1_RATIO, block_duration)
+    print(
+        'Setting primary-tone frequencies: '
+        f'f1: {f1:.2f} Hz, f2: {f2:.2f} Hz, '
+        f'(f2/f1 = {f2/f1: .3f})'
     )
-    print(f'Setting f2 frequency to: {f2:.2f} Hz')
-    f1 = cdpoae.correct_frequency(
-        f2/F2F1_RATIO, BLOCK_DURATION
+    print(
+        'Setting output levels: '
+        f'L1: {LEVEL1:.1f} dBFS ({amplitude1:.5f} re FS).'
+        f'L2: {LEVEL2:.1f} dBFS ({amplitude2:.5f} re FS).'
     )
-    print(f'Setting f1 frequency to: {f1:.2f} Hz')
 
     # Generate output signals
-    num_block_samples = int(device_config.FS * BLOCK_DURATION)
-    samples = np.arange(
-        num_block_samples, dtype=np.float32
-    )
+    samples = np.arange(num_block_samples, dtype=np.float32)
     t = samples / device_config.FS
     play_signal1 = amplitude1 * np.sin(2*np.pi*f1*t).astype(np.float32)
     play_signal2 = amplitude2 * np.sin(2*np.pi*f2*t).astype(np.float32)
 
     num_total_recording_samples = num_block_samples * NUM_AVERAGING_BLOCKS
+
     if USE_RAMP:
         ramp_len = int(RAMP_DURATION*1E-3 * device_config.FS)
         ramp = 0.5*(1 - np.cos(2*np.pi*np.arange(ramp_len)/(2*ramp_len)))

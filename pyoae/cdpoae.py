@@ -20,15 +20,15 @@ This module is not intended to be run directly.
 
 from dataclasses import dataclass
 
-import numpy as np
 from matplotlib import pyplot as plt
 from matplotlib.animation import FuncAnimation
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
+import numpy as np
 
-from pyoae.sync import SyncMsrmt, MsrmtState
 from pyoae.calib import MicroTransferFunction
+from pyoae.sync import SyncMsrmt, MsrmtState
 
 
 @dataclass
@@ -71,23 +71,44 @@ class DpoaeUpdateInfo:
     """Number of samples in each block."""
 
     f1: float
-    """Lower stimulus frequency in Hz."""
+    """Stimulus frequency in Hz of the first primary tone.
+
+    Typically, f2/f1 = 1.2.
+    """
 
     f2: float
-    """Upper stimulus frequency in Hz."""
+    """Stimulus frequency in Hz of the second primary tone."""
 
     artifact_rejection_thr: float
-    """Threshold for artifact rejection"""
+    """Threshold for simple artifact rejection.
+
+    Reject blocks with a root-mean-square (RMS) value
+    exceeding ARTIFACT_REJECTION_THR * median_rms.
+    """
 
     correction_tf: MicroTransferFunction | None = None
-    """Microphone transfer function"""
+    """Handle to microphone transfer function.
+
+    A microphone transfer function is used to correct the
+    recorded signal from the microphone characteristics.
+
+    Note:
+        This is a dummy object for future implementation.
+    """
 
 
-def correct_frequency(frequency: float, segment_duration: float) -> float:
-    """Corrects frequency to obtain an integer number of periods in segment."""
-    periods = segment_duration*frequency
+def correct_frequency(frequency: float, block_duration: float) -> float:
+    """Corrects frequency to obtain an integer number of periods.
+
+    Args:
+        frequency: Stimulus frequency in Hz.
+        block_duration: Length of acquisition block in seconds.
+          A block represents a time segment that is repeatedly
+          presented and used for averaging.
+    """
+    periods = block_duration*frequency
     periods = round(periods)
-    return periods/segment_duration
+    return periods/block_duration
 
 
 def setup_plot(
@@ -115,14 +136,13 @@ def setup_plot(
         - **fig**: Object containing the plots
         - **line_time**: Line object with the time-domain data of the signal
         - **line_spec**: Line object with the spectral data of the signal
-
     """
 
     fig, axes = plt.subplots(2, 1, figsize=(10, 6))
     axes: list[Axes]
     (ax_time, ax_spec) = axes
 
-    # Setup time plot
+    # Set up time plot
     x_wave = np.arange(round(recording_duration*fs), dtype=np.float32) / fs * 1E3
     y_wave = np.zeros_like(x_wave)
     line_time, = ax_time.plot(
@@ -133,13 +153,13 @@ def setup_plot(
     ax_time.set_xlim(-live_display_duration, 0)
     ax_time.set_title("Recorded Waveform")
     ax_time.set_xlabel("Time (ms)")
-    ax_time.set_ylabel("Amplitude (full-scale)")
+    ax_time.set_ylabel("Amplitude (full scale)")
 
-    # Setup frequency plot
-    fft_freqs = np.fft.rfftfreq(block_size, 1 / fs)
-    fft_vals = np.zeros(len(fft_freqs))
-    line_spec, = ax_spec.plot(fft_freqs, fft_vals)
-    print(f'Plotting spectral x-data with length: {len(fft_freqs)}')
+    # Set up frequency plot
+    fft_frequencies = np.fft.rfftfreq(block_size, 1 / fs)
+    fft_values = np.zeros(len(fft_frequencies))
+    line_spec, = ax_spec.plot(fft_frequencies, fft_values)
+    print(f'Plotting spectral x-data with length: {len(fft_frequencies)}')
     ax_spec.set_xlim(frequency_range[0], frequency_range[1])
     ax_spec.set_ylim(-50, 100)
     ax_spec.set_title("Spectrum")
@@ -147,7 +167,7 @@ def setup_plot(
     if is_calib_available:
         ax_spec.set_ylabel('Level (dB SPL)')
     else:
-        ax_spec.set_ylabel("Level (dB re full-scale)")
+        ax_spec.set_ylabel("Level (dBFS)")
     return fig, ax_time, line_time, ax_spec, line_spec
 
 
@@ -159,9 +179,16 @@ def process_spectrum(
 ) -> np.ndarray:
     """Processes recorded signal to obtain spectrum.
 
-    The signal is averaged in the time domain rejecting blocks above some
-    value relative to the average RMS. Then, the spectrum is obtained from
-    the averaged signal.
+    The signal is averaged in the time domain rejecting blocks
+    above some value relative to the average RMS. Then, the
+    spectrum is obtained from the averaged signal.
+
+    In a typical setting evoking continuous DPOAE, the primary
+    tones in the first and last acquisition block are multiplied
+    with cosine-shaped fade-in and fade-out ramps, respectively.
+    To avoid these ramps to influence the averaged spectrum, the
+    first and last blocks are excluded from the overall averaging.
+
 
     Args:
         recorded_signal: float array of measurement data
@@ -172,7 +199,6 @@ def process_spectrum(
 
     Returns:
         Array of floats containing the averaged spectrum.
-
     """
 
     spectrum = None
@@ -181,25 +207,24 @@ def process_spectrum(
     block_data = recorded_signal[:total_blocks*block_size]
     # Only apply processing for at least 3 blocks
     if total_blocks > 2:
-        # Reshape data into block structure removing the first and final blocks
-        blocks = block_data.reshape(
-            -1,
-            block_size
-        )[1:-1]
+        # Reshape data into block structure and
+        # remove the first and last block
+        blocks = block_data.reshape(-1, block_size)[1:-1]
 
-        # Reject RMS values larger than artifact_rejection_thr*average_rms
+        # Reject RMS values larger than a scaled version
+        # of the median RMS value.
         rms_vals = np.sqrt(np.mean(np.square(blocks), axis=1))
-        avg_rms = np.median(rms_vals)
-        accepted_idc = np.where(rms_vals<artifact_rejection_thr*avg_rms)[0]
+        median_rms = np.median(rms_vals)
+        accepted_idc = np.where(rms_vals<artifact_rejection_thr*median_rms)[0]
 
-        #Average blocks
+        # Average blocks
         if len(accepted_idc):
             avg = blocks[accepted_idc].mean(axis=0)
         else:
             avg = np.zeros(block_size)
 
-        # Apply FFT, correct spectrum by microphone calibration, convert to
-        # dB or dB SPL scale
+        # Apply FFT, correct spectrum by microphone calibration,
+        # convert to dBFS or dB SPL.
         if np.sqrt(np.mean(np.square(avg))) > 0:
             spectrum = np.abs(np.fft.rfft(avg))/len(avg)*2
             if correction_tf is None:
@@ -219,8 +244,8 @@ def get_results(
 ) -> tuple[np.ndarray, np.ndarray]:
     """Processes data and returns plot results.
 
-    If the measurement is currently running, the recorded signal is obtained
-    and a synchronously averaged spectrum is estimated.
+    If the measurement is currently running, the recorded signal
+    is obtained and a synchronously averaged spectrum is estimated.
 
     Args:
         sync_msrmt: Measurement object that handles the synchronized
@@ -232,7 +257,6 @@ def get_results(
 
         - **recorded_signal**: Float array with the recorded signal
         - **spectrum**: Float array with the spectral estimate
-
     """
 
     # Only update while or after main measurement
@@ -241,7 +265,6 @@ def get_results(
         MsrmtState.FINISHING,
         MsrmtState.FINISHED
     ]:
-
         recorded_signal = sync_msrmt.get_recorded_signal()
 
         spectrum = process_spectrum(
@@ -275,18 +298,19 @@ def update_plot_data(
 
         - **line_time**: Line object with the time-domain data of the signal
         - **line_spec**: Line object with the spectral data of the signal
-
     """
 
     if len(spectrum) == 0:
         return info.plot_info.line_time, info.plot_info.line_spec
 
-    n_samples_displayed = int(info.plot_info.live_display_duration*1E-3*info.fs)
+    n_samples_displayed = int(
+        info.plot_info.live_display_duration * 1E-3 * info.fs
+    )
 
     if len(recorded_signal) < n_samples_displayed:
         return info.plot_info.line_time, info.plot_info.line_spec
 
-    x_data = -np.flipud(np.arange(n_samples_displayed)/info.fs*1E3)
+    x_data = -np.flipud(np.arange(n_samples_displayed) / info.fs * 1E3)
 
     info.plot_info.line_time.set_data(
         x_data,
@@ -300,14 +324,13 @@ def update_plot_data(
     spec_max = max(spectrum)
     padding = 15  # dB of padding on top and bottom
 
-    if (spec_min < info.plot_info.ax_spec.get_ylim()[0]
+    if (
+        spec_min < info.plot_info.ax_spec.get_ylim()[0]
         or spec_min > info.plot_info.ax_spec.get_ylim()[0] + 2*padding
         or spec_max > info.plot_info.ax_spec.get_ylim()[1]
-        or spec_max < info.plot_info.ax_spec.get_ylim()[1] - 2*padding):
-
+        or spec_max < info.plot_info.ax_spec.get_ylim()[1] - 2*padding
+    ):
         info.plot_info.ax_spec.set_ylim(spec_min - padding, spec_max + padding)
-
-
 
     return info.plot_info.line_time, info.plot_info.line_spec
 
@@ -329,9 +352,7 @@ def update_msrmt(
 
         - **line_time**: Line object with the time-domain data of the signal
         - **line_spec**: Line object with the spectral data of the signal
-
     """
-
 
     del frame
 
@@ -362,15 +383,16 @@ def start_plot(sync_msrmt: SyncMsrmt, info: DpoaeUpdateInfo) -> None:
     if sync_msrmt.state not in [MsrmtState.FINISHING, MsrmtState.FINISHED]:
         sync_msrmt.state = MsrmtState.CANCELED
 
+
 def plot_offline(sync_msrmt: SyncMsrmt, info: DpoaeUpdateInfo) -> None:
     """Plots the final results in a non-updating plot.
 
     This function obtains the results from the measurement object, creates a
     plot and shows the complete measurement as well as the spectral estimate.
-
     """
     if sync_msrmt.state != MsrmtState.FINISHED:
         return
+
     recorded_signal, spectrum = get_results(sync_msrmt, info)
     _, ax_time, line_time, ax_spec, line_spec = setup_plot(
         sync_msrmt.recording_data.msrmt_duration,
@@ -382,6 +404,7 @@ def plot_offline(sync_msrmt: SyncMsrmt, info: DpoaeUpdateInfo) -> None:
     line_time.set_xdata(np.arange(len(recorded_signal))/info.fs)
     line_time.set_ydata(recorded_signal)
     ax_time.set_xlim(0, sync_msrmt.recording_data.msrmt_duration)
+    ax_time.set_xlabel("Recording Time (s)")
 
     spec_min = min(spectrum[1:])
     spec_max = max(spectrum)

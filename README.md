@@ -17,7 +17,7 @@ To use **PyOAE**, we recommend installing the dependencies in a virtual environm
 ### Install via pip
 
 ```bash
-python -m venv .venv
+python3 -m venv .venv  # or python -m venv .venv (depending on your Python installation)
 source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
@@ -49,13 +49,13 @@ Use the helper script to list connected audio devices and identify your sound ca
 Make sure to run the command from the project root directory (the parent folder containing both the `examples` and `pyoae` directories):
 
 ```bash
-python -m examples.display_devices
+python3 -m examples.display_devices
 ```
 
 You can also filter the output by device name:
 
 ```bash
-python -m examples.display_devices MAYA
+python3 -m examples.display_devices MAYA
 ```
 
 ### 2. Configure the Audio Device
@@ -85,7 +85,7 @@ If you experience dropouts during playback or recording, increasing the buffer s
 To run a basic recording without stimulus output, execute the `record_soae` script from the project root directory:
 
 ```bash
-python -m examples.record_soae
+python3 -m examples.record_soae
 ```
 
 #### Distortion-Product Otoacoustic Emissions (DPOAEs)
@@ -93,7 +93,7 @@ python -m examples.record_soae
 To stimulate the ear using two continuous primary tones and record a DPOAE, run the `record_dpoae` script:
 
 ```bash
-python -m examples.record_dpoae
+python3 -m examples.record_dpoae
 ```
 
 ---

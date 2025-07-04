@@ -58,19 +58,30 @@ F2: float = 3000.
 """Frequency of the second primary tone in Hz."""
 
 F2F1_RATIO: float = 1.2
-"""Primary-tone frequency ratio of f2/f1."""
+"""Primary-tone frequency ratio.
 
-RECORDING_DURATION: float = 10.
-"""Total recording duration in seconds."""
+r = f2/f1
+
+Used to calculate the frequency of the
+first primary tone.
+"""
 
 NUM_AVERAGING_BLOCKS: int = 100
-"""Number of blocks used for averaging."""
+"""Number of blocks used for averaging.
+
+Total recording time is
+  BLOCK_DURATION * NUM_AVERAGING_BLOCKS
+"""
 
 BLOCK_DURATION: float = .1
-"""Duration of a single measurement block in seconds."""
+"""Duration of a single measurement block in seconds.
+
+Total recording time is
+  BLOCK_DURATION * NUM_AVERAGING_BLOCKS
+"""
 
 ARTIFACT_REJECTION_THR = 1.8
-"""Threshold for artifact rejection
+"""Threshold for simple artifact rejection.
 
 Reject blocks with root-mean-squared(RMS) larger than
 artifact_rejection_thr * average RMS
@@ -112,7 +123,6 @@ def main() -> None:
     play_signal2 = amplitude2 * np.sin(2*np.pi*f2*t).astype(np.float32)
 
     num_total_recording_samples = num_block_samples * NUM_AVERAGING_BLOCKS
-    print(num_total_recording_samples)
     if USE_RAMP:
         ramp_len = int(RAMP_DURATION*1E-3 * device_config.FS)
         ramp = 0.5*(1 - np.cos(2*np.pi*np.arange(ramp_len)/(2*ramp_len)))
@@ -141,7 +151,7 @@ def main() -> None:
         LIVE_DISPLAY_DURATION
     )
 
-    # Create object with infos needed for updates
+    # Create object with info needed for updates
     dpoae_info = DpoaePlotInfo(
         fig,
         ax_time,
@@ -160,8 +170,6 @@ def main() -> None:
         ARTIFACT_REJECTION_THR
     )
 
-    # Start measurement
-    print("Starting recording...")
     rec_data = RecordingData(
         float(device_config.FS),
         float(total_recording_duration),
@@ -180,8 +188,12 @@ def main() -> None:
         hw_data,
         [signal1, signal2]
     )
-    msrmt.start_msrmt(cdpoae.start_plot, update_info)
 
+    print("Starting recording...")
+    # `start_msrmt` starts the application loop
+    msrmt.start_msrmt(cdpoae.start_plot, update_info)
+    # Plot all data and final result after user has
+    # closed the live-measurement window.
     cdpoae.plot_offline(msrmt, update_info)
 
     # Save measurement to file.

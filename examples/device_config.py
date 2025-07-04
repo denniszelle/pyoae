@@ -6,7 +6,7 @@ device, i.e., the sound card.
 
 Note:
     Sound device IDs or names should be known beforehand and
-    can be obtained using the display_devices script.
+      can be obtained using the display_devices script.
 """
 
 

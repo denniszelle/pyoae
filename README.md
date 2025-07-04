@@ -107,7 +107,7 @@ python3 -m examples.record_dpoae
 
 ## Documentation
 
-We provide a comprehensive online documentation of the API on the [EARLAB website](https://www.earlab.de/doc/pyoae/).
+For detailed information on the code, please refer to the [API online documentation](https://www.earlab.de/doc/pyoae/).
 
 ## Support
 

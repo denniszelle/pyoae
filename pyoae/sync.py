@@ -19,10 +19,10 @@ Will be adjusted to a correspond to a number of samples
 that is a multiple of the device's buffer size.
 """
 
-SYNC_CROSS: Final[int] = 5
+SYNC_CROSS: Final[int] = 10
 """Number of minimum zero crossings in sync signal."""
 
-SYNC_AMPLITUDE: Final[float] = 0.3
+SYNC_AMPLITUDE: Final[float] = 0.1
 """Amplitude of the sync signal in digital full scale."""
 
 SYNC_FREQUENCY: Final[float] = 4000

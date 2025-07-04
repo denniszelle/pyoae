@@ -48,13 +48,13 @@ UPDATE_INTERVAL: float = 100.
 LIVE_DISPLAY_DURATION: float = 100.
 """Duration that will be displayed in the live time plot in milliseconds."""
 
-LEVEL2: float = -5.
+LEVEL2: float = -35.
 """Level in dB re full-scale of the second primary tone."""
 
-LEVEL1: float = -3.
+LEVEL1: float = -25.
 """Level in dB re full-scale of the first primary tone."""
 
-F2: float = 1480.
+F2: float = 3000.
 """Frequency of the second primary tone in Hz."""
 
 F2F1_RATIO: float = 1.2
@@ -63,7 +63,7 @@ F2F1_RATIO: float = 1.2
 RECORDING_DURATION: float = 10.
 """Total recording duration in seconds."""
 
-NUM_AVERAGING_BLOCKS: int = 10
+NUM_AVERAGING_BLOCKS: int = 100
 """Number of blocks used for averaging."""
 
 BLOCK_DURATION: float = .1

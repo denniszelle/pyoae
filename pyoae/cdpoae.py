@@ -226,7 +226,11 @@ def process_spectrum(
         # Apply FFT, correct spectrum by microphone calibration,
         # convert to dBFS or dB SPL.
         if np.sqrt(np.mean(np.square(avg))) > 0:
-            spectrum = np.abs(np.fft.rfft(avg))/len(avg)*2
+            spectrum = 2*np.abs(np.fft.rfft(avg))/len(avg)
+            # dBFS and dB SPL represent RMS values
+            # assume FFT bins represent sine waves and estimate
+            # RMS by dividing by sqrt(2)
+            spectrum /= np.sqrt(2)
             if correction_tf is None:
                 spectrum = 20*np.log10(spectrum)
             else:

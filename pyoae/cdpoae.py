@@ -261,7 +261,8 @@ def get_results(
 
     # Only update while or after main measurement
     if sync_msrmt.state in [
-        MsrmtState.MEASURING,
+        MsrmtState.RECORDING,
+        MsrmtState.END_RECORDING,
         MsrmtState.FINISHING,
         MsrmtState.FINISHED
     ]:

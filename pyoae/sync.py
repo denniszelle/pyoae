@@ -193,7 +193,11 @@ class PeriodicRampSignal(PeriodicSignal):
 
 
 class MsrmtState(Enum):
-    """State of the measurement."""
+    """State of the measurement.
+
+    This enumeration defines the various states, PyOAE
+    takes during the acquisition.
+    """
 
     SETUP = auto()
     """Initial state when in measurement setup."""
@@ -210,13 +214,14 @@ class MsrmtState(Enum):
     STARTING = auto()
     """Start output and compensate latency."""
 
-    MEASURING = auto()
+    RECORDING = auto()
     """In main measurement."""
 
-    END_MEASURING = auto()
+    END_RECORDING = auto()
+    """Switch playback to mute signal and record remaining data."""
 
     FINISHING = auto()
-    """Completing main measurement."""
+    """Wrapping up the processing of the main measurement."""
 
     FINISHED = auto()
     """Main measurement completed."""
@@ -465,7 +470,7 @@ class SyncMsrmt:
             Recorded signal with the length of already recorded data
 
         """
-        if self.state in [MsrmtState.MEASURING, MsrmtState.END_MEASURING] :
+        if self.state in [MsrmtState.RECORDING, MsrmtState.END_RECORDING] :
             return self.live_msrmt_data.recorded_signal[
                 :self.live_msrmt_data.record_idx
             ]
@@ -521,7 +526,7 @@ class SyncMsrmt:
                 data_stereo[:, SYNC_OUTPUT_CHANNEL-1] = data
                 output_data[:] = data_stereo
 
-            case MsrmtState.MEASURING | MsrmtState.STARTING:
+            case MsrmtState.RECORDING | MsrmtState.STARTING:
                 # Convert each signal to output data
                 chunks = []
 
@@ -533,7 +538,7 @@ class SyncMsrmt:
 
                     if len(chunk_i) < frames:
                         chunk_i = np.pad(chunk_i, (0, frames-len(chunk_i)))
-                        self.set_state(MsrmtState.END_MEASURING)
+                        self.set_state(MsrmtState.END_RECORDING)
                     chunks.append(chunk_i)
                 stereo_chunk = np.column_stack(chunks)
                 output_data[:] = stereo_chunk.astype(np.float32)
@@ -618,11 +623,11 @@ class SyncMsrmt:
                         input_data[frames - num_remaining_frames:, 0]
                     )
                     self.live_msrmt_data.record_idx = num_remaining_frames
-                    self.set_state(MsrmtState.MEASURING)
+                    self.set_state(MsrmtState.RECORDING)
                 else:
                     self.live_msrmt_data.record_idx += frames
 
-            case MsrmtState.MEASURING | MsrmtState.END_MEASURING:
+            case MsrmtState.RECORDING | MsrmtState.END_RECORDING:
                 # In the recording, write the recorded data into the array;
                 # synchronized recording with compensated latency;
                 # this is the standard acquisition mode.

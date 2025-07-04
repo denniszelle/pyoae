@@ -270,7 +270,8 @@ def get_results(
     """
 
     if sync_msrmt.state in [
-        MsrmtState.MEASURING,
+        MsrmtState.RECORDING,
+        MsrmtState.END_RECORDING,
         MsrmtState.FINISHING,
         MsrmtState.FINISHED
     ]:

@@ -26,6 +26,7 @@ from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
 import numpy as np
+import numpy.typing as npt
 
 from pyoae.calib import MicroTransferFunction
 from pyoae.sync import SyncMsrmt, MsrmtState
@@ -97,20 +98,6 @@ class DpoaeUpdateInfo:
     """
 
 
-def correct_frequency(frequency: float, block_duration: float) -> float:
-    """Corrects frequency to obtain an integer number of periods.
-
-    Args:
-        frequency: Stimulus frequency in Hz.
-        block_duration: Length of acquisition block in seconds.
-          A block represents a time segment that is repeatedly
-          presented and used for averaging.
-    """
-    periods = block_duration*frequency
-    periods = round(periods)
-    return periods/block_duration
-
-
 def setup_plot(
     recording_duration: float,
     fs: float,
@@ -172,11 +159,11 @@ def setup_plot(
 
 
 def process_spectrum(
-    recorded_signal: np.ndarray,
+    recorded_signal: npt.NDArray[np.float32],
     block_size: int,
     correction_tf: MicroTransferFunction | None,
     artifact_rejection_thr:float
-) -> np.ndarray:
+) -> npt.NDArray[np.float32]:
     """Processes recorded signal to obtain spectrum.
 
     The signal is averaged in the time domain rejecting blocks
@@ -239,13 +226,13 @@ def process_spectrum(
 
     if spectrum is None:
         spectrum = np.abs(np.fft.rfft(np.zeros(block_size, np.float32)))
-    return spectrum
+    return spectrum.astype(np.float32)
 
 
 def get_results(
     sync_msrmt: SyncMsrmt,
     info: DpoaeUpdateInfo
-) -> tuple[np.ndarray, np.ndarray]:
+) -> tuple[npt.NDArray[np.float32], npt.NDArray[np.float32]]:
     """Processes data and returns plot results.
 
     If the measurement is currently running, the recorded signal
@@ -285,8 +272,8 @@ def get_results(
 
 
 def update_plot_data(
-    recorded_signal: np.ndarray,
-    spectrum: np.ndarray,
+    recorded_signal: npt.NDArray[np.float32],
+    spectrum: npt.NDArray[np.float32],
     info: DpoaeUpdateInfo
 ) -> tuple[Line2D, Line2D]:
     """Updates the plot data.

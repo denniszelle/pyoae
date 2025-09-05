@@ -19,6 +19,8 @@ This module is not intended to be run directly.
 """
 
 from dataclasses import dataclass
+from datetime import datetime
+import os
 from typing import Literal
 
 from matplotlib import pyplot as plt
@@ -27,11 +29,14 @@ from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
 import numpy as np
+import numpy.typing as npt
 import scipy.signal
 
-from pyoae.sync import SyncMsrmt, MsrmtState
 from pyoae.calib import MicroTransferFunction
-
+from pyoae.device.device_config import DeviceConfig
+from pyoae.protocols import SoaeMsrmtParams
+from pyoae.signals import PeriodicSignal
+from pyoae.sync import HardwareData, RecordingData, SyncMsrmt, MsrmtState
 
 @dataclass
 class SoaePlotInfo:
@@ -138,14 +143,14 @@ def setup_plot(
 
 
 def welch_artifact_rejection(
-    x: np.ndarray,
+    x: npt.NDArray[np.float32],
     fs: float,
     window: str = 'hann',
     window_samples: int = 256,
     overlap_samples: int | None = None,
     detrend: Literal['linear', 'constant'] = 'constant',
     artifact_rejection_thr: float = 1.8
-) -> tuple[np.ndarray, np.ndarray]:
+) -> tuple[npt.NDArray[np.float32], npt.NDArray[np.float32]]:
     """Estimates a welch spectrum with basic measurement artifact rejection.
 
     Args:
@@ -198,16 +203,16 @@ def welch_artifact_rejection(
     else:
         spec_avg = np.zeros(len(spectrum[0]))
 
-    return frequencies, spec_avg
+    return frequencies.astype(np.float32), spec_avg.astype(np.float32)
 
 
 def process_spectrum(
-    recorded_signal: np.ndarray,
+    recorded_signal: npt.NDArray[np.float32],
     fs: float,
     window_samples: int,
     correction_tf: MicroTransferFunction | None,
     artifact_rejection_thr: float = 1.8
-) -> np.ndarray:
+) -> npt.NDArray[np.float32]:
     """Processes recorded signal and obtains spectrum from averaged data.
 
     Args:
@@ -250,7 +255,7 @@ def process_spectrum(
 def get_results(
     sync_msrmt: SyncMsrmt,
     info: SoaeUpdateInfo
-) -> tuple[np.ndarray, np.ndarray]:
+) -> tuple[npt.NDArray[np.float32], npt.NDArray[np.float32]]:
     """Processes data and returns plot results.
 
     If the measurement is currently running, the recorded signal is obtained
@@ -293,8 +298,8 @@ def get_results(
 
 
 def update_plot_data(
-    recorded_signal: np.ndarray,
-    spectrum: np.ndarray,
+    recorded_signal: npt.NDArray[np.float32],
+    spectrum: npt.NDArray[np.float32],
     info: SoaeUpdateInfo
 ) -> tuple[Line2D, Line2D]:
     """Updates the plot data.
@@ -380,7 +385,7 @@ def update_msrmt(
     return update_plot_data(recorded_signal, spectrum, info)
 
 
-def start_plot(sync_msrmt: SyncMsrmt, info: SoaeUpdateInfo):
+def start_plot(sync_msrmt: SyncMsrmt, info: SoaeUpdateInfo) -> None:
     """Start the live plot."""
     _ = FuncAnimation(
         info.plot_info.fig,
@@ -431,3 +436,123 @@ def plot_offline(sync_msrmt: SyncMsrmt, info: SoaeUpdateInfo) -> None:
     line_spec.set_ydata(spectrum)
     plt.tight_layout()
     plt.show()
+
+
+class SoaeRecorder:
+    """Class to manage an SOAE recording."""
+
+    signals: list[PeriodicSignal]
+    """List of output signals for each channel
+
+    These are mute signals for SOAE acquisition.
+    """
+
+    update_info: SoaeUpdateInfo
+    """Instance to control measurement updates."""
+
+    msrmt: SyncMsrmt
+    """Instance to perform a synchronized measurement."""
+
+
+    def __init__(self, msrmt_params: SoaeMsrmtParams) -> None:
+        """Creates a SOAE recorder from measurement parameters."""
+        num_block_samples = int(
+            msrmt_params['block_duration'] * DeviceConfig.sample_rate
+        )
+        num_total_recording_samples = (
+            msrmt_params['num_averaging_blocks'] * num_block_samples
+        )
+        # block_duration = num_block_samples / DeviceConfig.sample_rate
+        recording_duration = num_total_recording_samples / DeviceConfig.sample_rate
+
+        self.signals = []
+        self.generate_output_signals(num_total_recording_samples)
+
+        soae_info = self.setup_info(recording_duration, num_block_samples)
+        self.update_info = SoaeUpdateInfo(
+            soae_info,
+            DeviceConfig.sample_rate,
+            num_block_samples,
+            msrmt_params['artifact_rejection_thresh']
+        )
+        # Prepare measurement
+        rec_data = RecordingData(
+            DeviceConfig.sample_rate,
+            recording_duration,
+            num_total_recording_samples,
+            num_block_samples,
+            DeviceConfig.device_buffer_size
+        )
+        hw_data = HardwareData(
+            2,
+            2,
+            DeviceConfig.input_device,
+            DeviceConfig.output_device
+        )
+        self.msrmt = SyncMsrmt(rec_data, hw_data, self.signals)
+
+    def record(self) -> None:
+        """Starts the recording."""
+        print("Starting SOAE recording...")
+        self.msrmt.start_msrmt(start_plot, self.update_info)
+
+        # Plot offline results after measurement
+        plot_offline(self.msrmt, self.update_info)
+
+
+    def save_recording(self) -> None:
+        """Stores the measurement data in binary files."""
+        # Save measurement to file.
+        save_path = os.path.join(
+            os.getcwd(),
+            'measurements'
+        )
+        os.makedirs(save_path, exist_ok=True)
+        cur_time = datetime.now()
+        time_stamp = cur_time.strftime("%y%m%d-%H%M%S")
+        file_name = 'soae_msrmt_'+ time_stamp
+        save_path = os.path.join(save_path, file_name)
+        recorded_signal, spectrum = get_results(self.msrmt, self.update_info)
+        np.savez(
+            save_path,
+            spectrum=spectrum,
+            recorded_signal=recorded_signal,
+            samplerate=DeviceConfig.sample_rate
+        )
+        print(f"Saved to {save_path}")
+
+    def generate_output_signals(self, num_total_samples: int) -> None:
+        """Generates the output signals for playback."""
+        # Generate output signals
+        signal1 = PeriodicSignal(
+            np.zeros(DeviceConfig.device_buffer_size, dtype=np.float32),
+            num_total_samples
+        )
+        signal2 = PeriodicSignal(
+            np.zeros(DeviceConfig.device_buffer_size, dtype=np.float32),
+            num_total_samples
+        )
+        self.signals.append(signal1)
+        self.signals.append(signal2)
+
+    def setup_info(
+        self,
+        recording_duration: float,
+        num_block_samples: int
+    ) -> SoaePlotInfo:
+        """Sets up live plot and measurement information."""
+        fig, ax_time, line_time, ax_spec, line_spec = setup_plot(
+            recording_duration,
+            DeviceConfig.sample_rate,
+            num_block_samples,
+            DeviceConfig.live_display_duration
+        )
+        return SoaePlotInfo(
+            fig,
+            ax_time,
+            line_time,
+            ax_spec,
+            line_spec,
+            DeviceConfig.update_interval,
+            DeviceConfig.live_display_duration
+        )

@@ -25,7 +25,7 @@ import sys
 import sounddevice as sd
 
 
-def print_info(search_param: str | int | None):
+def print_info(search_param: str | int | None = None):
     """Print info about devices."""
     if search_param is None:
         search_param = ''
@@ -43,8 +43,6 @@ if __name__ == '__main__':
     if len(sys.argv) > 1:
         search_string = sys.argv[1]
         if search_string.isdigit():
-            search_string = int(search_string)
+            print_info(int(search_string))
     else:
-        search_string = ''
-
-    print_info(search_string)
+        print_info()

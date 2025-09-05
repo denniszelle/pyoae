@@ -31,7 +31,7 @@ import os
 
 import numpy as np
 
-from examples import device_config
+from pyoae.device import device_config
 from pyoae import cdpoae
 from pyoae.cdpoae import DpoaePlotInfo, DpoaeUpdateInfo
 from pyoae.sync import (

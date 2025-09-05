@@ -3,14 +3,15 @@
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import auto, Enum
-from typing import Any, Literal, Final
+from typing import Any, Generic, Literal, Final, TypeVar
 
-import sounddevice as sd
 import numpy as np
 import numpy.typing as npt
 import scipy.signal
-from scipy.signal import windows
+import sounddevice as sd
 
+from pyoae import generator
+from pyoae.signals import Signal
 
 SYNC_DURATION: Final[float] = 0.5
 """Duration of the sync signal (with mute) in seconds.
@@ -19,19 +20,10 @@ Will be adjusted to a correspond to a number of samples
 that is a multiple of the device's buffer size.
 """
 
-SYNC_CROSS: Final[int] = 10
-"""Number of minimum zero crossings in sync signal."""
-
-SYNC_AMPLITUDE: Final[float] = 0.1
-"""Amplitude of the sync signal in digital full scale."""
-
-SYNC_FREQUENCY: Final[float] = 4000
-"""Carrier frequency of the sync pulse in Hz."""
-
-SYNC_OUTPUT_CHANNEL: Final[int] = 1
+SYNC_OUTPUT_CHANNEL: Final[int] = 0
 """Output channel of the sync signal."""
 
-SYNC_INPUT_CHANNEL: Final[int] = 2
+SYNC_INPUT_CHANNEL: Final[int] = 1
 """Input channel to record the sync signal."""
 
 NUM_INIT_RUNS: Final[int] = 3
@@ -40,9 +32,9 @@ NUM_INIT_RUNS: Final[int] = 3
 A measurement callback by the sound device is considered
 a run. Depending on the system configuration and device
 properties, the input buffers might contain previously
-collected data. During the initialization runs a mute
-signal clears these buffers, especially for the sync(monitoring)
-channel.
+collected data. During the initialization the program
+runs a mute signal that clears these buffers,
+especially for the sync(monitoring) channel.
 """
 
 USE_EARLY_LATENCY_CORRECTION: Final[bool] = False
@@ -70,150 +62,7 @@ compensating the expected device latency.
 """
 
 
-def generate_sync(fs: float) -> npt.NDArray[np.float32]:
-    """Generates and returns the sync signal.
-
-    Args:
-        fs: Sampling frequency in Hz
-
-    Returns:
-        sync_pulse: 1D array of sync pulse signal
-    """
-    k = np.ceil(fs / (4.0 * SYNC_FREQUENCY))
-    samples_per_sync_period = 4.0 * k
-    f_sync = fs / samples_per_sync_period
-    p = np.ceil((SYNC_CROSS + 1) / 2)
-    t_off = (p / f_sync) - 1/fs
-
-    num_samples = int(t_off * fs)
-    t = np.arange(num_samples) / fs
-    y = np.sin(2 * np.pi * f_sync * t)
-    w = windows.tukey(num_samples)
-    sync_pulse = SYNC_AMPLITUDE * w * y
-
-    return sync_pulse
-
-
-class Signal:
-    """Simple base class to store and handle output signals."""
-
-    num_total_samples: int
-    """Number of total output samples.
-
-    Note:
-        Output samples can be reached by signal repetition.
-    """
-
-    num_signal_samples: int
-    """Number of samples of the provided signal template.
-
-    This is the length of signal data.
-    """
-
-    signal_data: npt.NDArray[np.float32]
-    """1D NumPy array with the output signal."""
-
-    def __init__(
-        self,
-        signal_data: npt.NDArray[np.float32],
-        num_total_samples: int
-    ) -> None:
-        self.signal_data = signal_data
-        self.num_signal_samples = len(signal_data)
-        self.num_total_samples = num_total_samples
-
-    def get_data(
-        self,
-        start_idx: int,
-        end_idx: int
-    ) -> npt.NDArray[np.float32]:
-        """Returns signal data for requested buffer interval."""
-        return self.signal_data[start_idx:end_idx]
-
-
-class PeriodicSignal(Signal):
-    """Periodic output signal.
-
-    Represents a harmonic signal and its periodic
-    continuation.
-    """
-
-    def get_data(
-        self,
-        start_idx: int,
-        end_idx: int
-    ) -> npt.NDArray[np.float32]:
-        """Returns frames of the periodic signal.
-
-        Returns the data with continuation.
-
-        Note:
-            This overwrites `get_data` from the base class.
-        """
-        length = end_idx - start_idx
-        start_mod = start_idx % self.num_signal_samples
-        end_mod = (start_mod + length) % self.num_signal_samples
-
-        if start_mod + length <= self.num_signal_samples:
-            # Single slice, no wraparound
-            return self.signal_data[start_mod:start_mod + length]
-        # Wraps around: concatenate tail and head
-        tail = self.signal_data[start_mod:]
-        if end_idx >= (self.num_total_samples - 1):
-            # end of requested playback reached
-            return tail
-        head = self.signal_data[:end_mod]
-        return np.concatenate((tail, head))
-
-
-class PeriodicRampSignal(PeriodicSignal):
-    """Periodic signal with fade-in and fade-out ramps."""
-
-    ramp: npt.NDArray[np.float32]
-    """1D NumPy array with the envelope of the ramp."""
-
-    idx_fade_out: int
-    """Index at which the fade-out ramp starts."""
-
-    def __init__(
-        self,
-        signal_data: npt.NDArray[np.float32],
-        num_total_samples: int,
-        ramp: npt.NDArray[np.float32]
-    ) -> None:
-        super().__init__(signal_data, num_total_samples)
-        self.ramp = ramp
-        self.idx_fade_out = self.num_total_samples - len(ramp)
-
-    def get_data(
-        self,
-        start_idx: int,
-        end_idx: int
-    ) -> npt.NDArray[np.float32]:
-        """Returns signal data with fade-in and fade-out applied."""
-        data = super().get_data(start_idx, end_idx)
-
-        # Apply fade-in
-        if start_idx < len(self.ramp):
-            fade_len = min(end_idx, len(self.ramp)) - start_idx
-            data = data.copy()
-            data[:fade_len] *= self.ramp[start_idx:start_idx + fade_len]
-
-        # Apply fade-out
-        if end_idx > self.idx_fade_out:
-            fade_start = max(start_idx, self.idx_fade_out)
-            k = fade_start - self.idx_fade_out
-            ramp_len = end_idx - fade_start
-            available_len = len(self.ramp) - k
-            # the effective ramp length is applied if end
-            # of output data was reached; i.e., the data
-            # was trimmed in super().get_data(...)
-            effective_len = min(ramp_len, available_len)
-            data = data.copy()
-            data[-effective_len:] *= self.ramp[::-1][k:k + effective_len]
-
-
-        return data
+SignalT = TypeVar('SignalT', bound=Signal)
 
 
 class MsrmtState(Enum):
@@ -291,7 +140,7 @@ class HardwareData:
 
 
 @dataclass
-class LiveMsrmtData:
+class LiveMsrmtData(Generic[SignalT]):
     """Variable storage for the live measurement."""
 
     play_idx: int
@@ -311,7 +160,7 @@ class LiveMsrmtData:
     output and input in the main measurement are synchronized.
     """
 
-    output_signals: list[Signal]
+    output_signals: list[SignalT]
     """List of input signal objects."""
 
     sync_output: npt.NDArray[np.float32]
@@ -335,7 +184,7 @@ class LiveMsrmtData:
     """1D NumPy array with recorded main measurement."""
 
 
-class SyncMsrmt:
+class SyncMsrmt(Generic[SignalT]):
     """Class to perform a synchronized OAE measurement."""
 
     state: MsrmtState
@@ -350,7 +199,7 @@ class SyncMsrmt:
     hardware_data: HardwareData
     """Object containing information about the hardware."""
 
-    live_msrmt_data: LiveMsrmtData
+    live_msrmt_data: LiveMsrmtData[SignalT]
     """Object containing variables and data for the live measurement."""
 
     i_init_runs: int
@@ -372,7 +221,7 @@ class SyncMsrmt:
         self,
         recording_data: RecordingData,
         hardware_data: HardwareData,
-        output_signals: list[npt.NDArray[np.float32] | Signal],
+        output_signals: list[SignalT],
         latency_type: Literal['low', 'high']='high'
     ) -> None:
         """Initializes the object.
@@ -405,43 +254,29 @@ class SyncMsrmt:
             num_sync_samples,
             dtype=np.float32
         )
-        sync_pulse = generate_sync(self.recording_data.fs)
+        sync_pulse = generator.generate_sync(self.recording_data.fs)
         sync_output[:len(sync_pulse)] = sync_pulse
         recorded_signal = np.zeros(
             self.recording_data.msrmt_samples,
             dtype=np.float32
         )
-        self.live_msrmt_data = LiveMsrmtData(
+        self.live_msrmt_data = LiveMsrmtData[SignalT](
             play_idx=0,
             record_idx=0,
             latency_samples=-1,
-            output_signals=[],
+            output_signals=output_signals,
             sync_output=sync_output,
             sync_recorded=sync_recorded,
             latency_type=latency_type,
             recorded_signal=recorded_signal
         )
         self.i_init_runs = 0
-        self.set_output_signals(output_signals)
         self.monitoring_amp = np.empty(0, dtype=np.float32)
 
     def set_state(self, state: MsrmtState) -> None:
         """Sets the currently active state of this measurement."""
         self.state = state
         print(f"Measurement state set to {self.state}.")
-
-    def set_output_signals(
-        self,
-        signals: list[npt.NDArray[np.float32] | Signal]
-    ) -> None:
-        """Sets the output signal for the main measurement."""
-        for signal_i in signals:
-            if isinstance(signal_i, Signal):
-                self.live_msrmt_data.output_signals.append(signal_i)
-            else:
-                self.live_msrmt_data.output_signals.append(
-                    Signal(signal_i, self.recording_data.msrmt_samples)
-                )
 
     def start_msrmt(self, start_plot: Callable, info: Any) -> None:
         """Starts the measurement
@@ -547,7 +382,7 @@ class SyncMsrmt:
                     (frames, self.hardware_data.n_out_channels)
                 )
                 # Add data to sync output channel
-                data_stereo[:, SYNC_OUTPUT_CHANNEL-1] = data
+                data_stereo[:, SYNC_OUTPUT_CHANNEL] = data
                 output_data[:] = data_stereo
 
             case MsrmtState.RECORDING | MsrmtState.STARTING:
@@ -592,7 +427,7 @@ class SyncMsrmt:
             case MsrmtState.SYNCING:
                 if end_idx < len(self.live_msrmt_data.sync_recorded):
                     self.live_msrmt_data.sync_recorded[rec_start_idx:rec_end_idx] = (
-                        input_data[:frames, SYNC_INPUT_CHANNEL-1]
+                        input_data[:frames, SYNC_INPUT_CHANNEL]
                     )
                 else:
                     # End of sync recording reached
@@ -603,7 +438,7 @@ class SyncMsrmt:
                     )
                     rec_end_idx = rec_start_idx + num_remaining_frames
                     self.live_msrmt_data.sync_recorded[rec_start_idx:] = (
-                        input_data[:num_remaining_frames, SYNC_INPUT_CHANNEL-1]
+                        input_data[:num_remaining_frames, SYNC_INPUT_CHANNEL]
                     )
                     self.set_state(MsrmtState.COMPUTING)
                 self.live_msrmt_data.record_idx = rec_end_idx
@@ -629,7 +464,7 @@ class SyncMsrmt:
                     # try to detect an early measurement start
                     # (see `USE_EARLY_LATENCY_CORRECTION` for
                     # explanation)
-                    max_monitor = np.max(input_data[:, SYNC_INPUT_CHANNEL-1])
+                    max_monitor = np.max(input_data[:, SYNC_INPUT_CHANNEL])
                     if self.monitoring_amp.size:
                         # compare current maximum to average in previous blocks
                         signal_thresh = 1.5 * np.mean(self.monitoring_amp)

@@ -94,7 +94,7 @@ class DpoaeUpdateInfo:
     exceeding ARTIFACT_REJECTION_THR * median_rms.
     """
 
-    correction_tf: MicroTransferFunction | None = None
+    input_trans_fun: MicroTransferFunction | None = None
     """Handle to microphone transfer function.
 
     A microphone transfer function is used to correct the
@@ -269,7 +269,7 @@ def get_results(
         spectrum = process_spectrum(
             recorded_signal,
             info.block_size,
-            info.correction_tf,
+            info.input_trans_fun,
             info.artifact_rejection_thr
         )
 

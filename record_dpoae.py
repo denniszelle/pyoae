@@ -29,6 +29,7 @@ Note:
 import argparse
 
 from pyoae import files
+from pyoae.calib import MicroTransferFunction
 from pyoae.device.device_config import DeviceConfig
 from pyoae.cdpoae import DpoaeRecorder
 
@@ -38,6 +39,7 @@ DEVICE_CONFIG_FILE = 'device_config.json'
 
 def main(
     protocol: str = '',
+    mic: str = '',
     subject: str = '',
     ear: str = '',
     save: bool = False
@@ -53,6 +55,17 @@ def main(
     print('Loading configuration.')
     files.load_device_config(DEVICE_CONFIG_FILE)
     print(DeviceConfig())
+
+    if mic:
+        print('Loading microphone calibration.')
+        mic_calib_data = files.load_micro_calib(mic)
+        mic_trans_fun = MicroTransferFunction(
+            mic_calib_data['abs_calibration'],
+            mic_calib_data['transfer_function']
+        )
+
+    else:
+        mic_calib = None
 
     dpoae_protocol = files.load_dpoae_protocol(protocol)
     for msrmt_params in dpoae_protocol:
@@ -70,6 +83,12 @@ parser.add_argument(
     help='Specify path to measurement protocol JSON file.'
 )
 parser.add_argument(
+    '--mic',
+    default=argparse.SUPPRESS,
+    type=str,
+    help='Specify path to microphone calibration JSON file.'
+)
+parser.add_argument(
     '--subject',
     default=argparse.SUPPRESS,
     type=str,
@@ -81,7 +100,6 @@ parser.add_argument(
     type=str,
     help='Specify the recording side, left/right, l/r.'
 )
-
 parser.add_argument(
     '--save',
     action=argparse.BooleanOptionalAction,

@@ -4,6 +4,7 @@ import json
 
 from typing import Any
 
+from pyoae import calib
 from pyoae.device.device_config import DeviceConfig
 from pyoae import protocols
 
@@ -26,6 +27,21 @@ def load_device_config(file_path: str) -> None:
         for key, entry in config_data.items():
             DeviceConfig.set(key, entry)
     # TODO: log errors if configuration was not found or was invalid
+
+
+def load_micro_calib(file_path: str) -> calib.MicroCalibData:
+    """Loads the microphone calibration data from JSON."""
+    d = {}
+    if file_path:
+        d = load_json_file(file_path)
+    micro_calib_data = calib.get_empty_micro_calib_data()
+
+    if d:
+        for key in micro_calib_data:
+            if key in d:
+                micro_calib_data[key] = d[key]
+
+    return micro_calib_data
 
 
 def load_soae_protocol(file_path: str | None = None) -> protocols.SoaeMsrmtParams:

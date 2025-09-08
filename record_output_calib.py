@@ -29,25 +29,24 @@ Note:
 import argparse
 
 from pyoae import files
+from pyoae import protocols
 from pyoae.calib import MicroTransferFunction
 from pyoae.device.device_config import DeviceConfig
-from pyoae.cdpoae import DpoaeRecorder
+from pyoae.calibrator import OutputCalibRecorder
 
 
 DEVICE_CONFIG_FILE = 'device_config.json'
 
 
 def main(
-    protocol: str = '',
     mic: str = '',
     subject: str = '',
     ear: str = '',
     save: bool = False
 ) -> None:
-    """Main function executing a DPOAE measurement."""
+    """Main function executing a multi-tone measurement."""
 
-    print('DPOAE recorder started with following options:')
-    print(f'  Protocol: {protocol}')
+    print('Multi-tone output calibrator started with following options:')
     print(f'  Subject ID: {subject} - ear: {ear}')
     if save:
         print('Recording will be saved in files.')
@@ -67,24 +66,18 @@ def main(
     else:
         mic_trans_fun = None
 
-    dpoae_protocol = files.load_dpoae_protocol(protocol)
-    for msrmt_params in dpoae_protocol:
-        dpoae_recorder = DpoaeRecorder(
-            msrmt_params,
-            mic_trans_fun
-        )
-        dpoae_recorder.record()
-        if save:
-            dpoae_recorder.save_recording()
+    #dpoae_protocol = files.load_dpoae_protocol(protocol)
+    msrmt_params = protocols.get_default_calib_msrmt_params()
+    calib_recorder = OutputCalibRecorder(
+        msrmt_params,
+        mic_trans_fun=mic_trans_fun
+    )
+    calib_recorder.record()
+    # if save:
+    #     calib_recorder.save_recording()
 
 
 parser = argparse.ArgumentParser(description='PyOAE DPOAE Recorder')
-parser.add_argument(
-    '--protocol',
-    default=argparse.SUPPRESS,
-    type=str,
-    help='Specify path to measurement protocol JSON file.'
-)
 parser.add_argument(
     '--mic',
     default=argparse.SUPPRESS,

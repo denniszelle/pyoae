@@ -45,6 +45,19 @@ class MicroCalibData(TypedDict):
     transfer_function: TransferFunData
 
 
+class SpeakerCalibData(TypedDict):
+    """Container to save/load speaker calibration data.
+
+    Container is compatible with JSON export.
+    """
+    date: str
+    frequencies: list[float]
+    max_out_ch01: list[float]
+    max_out_ch02: list[float]
+    phase_ch01: list[float]
+    phase_ch02: list[float]
+
+
 def get_empty_micro_calib_data() -> MicroCalibData:
     """Returns an empty container for microphone-calibration data."""
     a: AbsCalibData = {

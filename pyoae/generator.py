@@ -121,6 +121,7 @@ def correct_frequency(frequency: float, block_duration: float) -> float:
 
 
 def calculate_pt1_level(msrmt_params: DpoaeMsrmtParams) -> float:
+    """Calculates the stimulus level of the first primary tone."""
     if msrmt_params['level1'] is None:
         # as first approximation, use Kummer et al. 1998
         # TODO: add other rules
@@ -167,8 +168,7 @@ def calculate_pressure_amplitudes(
     return (amplitude1, amplitude2)
 
 
-
-def generate_sync(fs: float) -> npt.NDArray[np.float32]:
+def generate_sync(sample_rate: float) -> npt.NDArray[np.float32]:
     """Generates and returns the sync signal.
 
     Args:
@@ -177,14 +177,76 @@ def generate_sync(fs: float) -> npt.NDArray[np.float32]:
     Returns:
         sync_pulse: 1D array of sync pulse signal
     """
-    k = np.ceil(fs / (4.0 * SYNC_FREQUENCY))
+    k = np.ceil(sample_rate / (4.0 * SYNC_FREQUENCY))
     samples_per_sync_period = 4.0 * k
-    f_sync = fs / samples_per_sync_period
+    f_sync = sample_rate / samples_per_sync_period
     p = np.ceil((SYNC_CROSS + 1) / 2)
-    t_off = (p / f_sync) - 1/fs
-    num_samples = int(t_off * fs)
-    t = np.arange(num_samples) / fs
+    t_off = (p / f_sync) - 1/sample_rate
+    num_samples = int(t_off * sample_rate)
+    t = np.arange(num_samples) / sample_rate
     y = np.sin(2 * np.pi * f_sync * t)
     w = windows.tukey(num_samples)
     sync_pulse = SYNC_AMPLITUDE * w * y
     return sync_pulse
+
+
+def compute_mt_frequencies(
+    f_start: float,
+    f_stop: float,
+    lines_per_octave: float
+) -> npt.NDArray[np.floating]:
+    """Computes multi-tone frequencies.
+
+    Computes frequency lines from start to stop frequency adjusted to
+    segment length with the specified lines per octave.
+    """
+    b = 2 ** (1/lines_per_octave)
+    n = int(np.log(f_stop/f_start)/np.log(b))
+    f = f_start * b ** (np.arange(n))
+    f = np.round(f)
+    return f
+
+
+def compute_mt_phases(num_frequencies: int) -> npt.NDArray[np.floating]:
+    """Computes approximately equally distributed phases"""
+    phi = np.zeros(num_frequencies)
+    for i in range(num_frequencies):
+        phi[i] = np.random.uniform(0, 2 * np.pi)
+    return phi
+
+
+def interlace_mt_frequencies(
+    frequencies: npt.NDArray[np.floating],
+    num_tones: int
+) -> list[npt.NDArray[np.floating]]:
+    """Creates interlaced frequency lists.
+
+    Splits frequency array into `num_tones` interlaced sets.
+    Each set contains every nth frequency starting at a different offset.
+    """
+    return [frequencies[i::num_tones] for i in range(num_tones)]
+
+
+def get_time_vector(
+    num_samples: int,
+    sample_rate: float
+) -> npt.NDArray[np.float32]:
+    """Computes and returns a time vector in seconds."""
+    time_vec = np.arange(num_samples) / sample_rate
+    return time_vec.astype(np.float32)
+
+
+def generate_mt_signal(
+    num_samples: int,
+    sample_rate: float,
+    frequencies: npt.NDArray[np.float32],
+    phases: npt.NDArray[np.float32]
+) -> npt.NDArray[np.float32]:
+    """Create a multi-tone signal used for output calibration."""
+    time_vec = get_time_vector(num_samples, sample_rate)
+
+    mt_signal = np.zeros_like(time_vec)
+    for i, f in enumerate(frequencies):
+        mt_signal += np.sin(2 * np.pi * f * time_vec + phases[i])
+
+    return mt_signal

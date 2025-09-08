@@ -1,7 +1,7 @@
 """Module providing functions for file handling."""
 
 import json
-
+import os
 from typing import Any
 
 from pyoae import calib
@@ -67,3 +67,27 @@ def load_dpoae_protocol(file_path: str) -> list[protocols.DpoaeMsrmtParams]:
         if 'msrmts' in d:
             return d['msrmts']
     return []
+
+
+def save_output_calibration(
+    time_stamp: str,
+    out_calib: calib.SpeakerCalibData
+) -> None:
+    """Saves output calibration results to JSON."""
+    file_path = os.path.join(
+        os.getcwd(),
+        'measurements'
+    )
+    os.makedirs(file_path, exist_ok=True)
+    file_name = time_stamp + 'out_calib.json'
+    file_path = os.path.join(file_path, file_name)
+
+    try:
+        with open(file_path, mode='w', encoding='utf-8') as output_file:
+            json.dump(out_calib, output_file, indent="\t")
+            #json.dump(out_calib, output_file, indent="\t", cls=ExportDataNumpyEncoder)
+
+    except (FileNotFoundError, TypeError, ValueError) as e:
+        print(f'Error saving {file_path}.')
+        print(e)
+    print('Output calibration saved to {file_name}.')

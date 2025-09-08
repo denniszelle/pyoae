@@ -41,3 +41,13 @@ def load_soae_protocol(file_path: str | None = None) -> protocols.SoaeMsrmtParam
                 msrmt_params[key] = d[key]
 
     return msrmt_params
+
+
+def load_dpoae_protocol(file_path: str) -> list[protocols.DpoaeMsrmtParams]:
+    """Loads a DPOAE measurement protocol."""
+    # TODO: check content of protocol
+    if file_path:
+        d = load_json_file(file_path)
+        if 'msrmts' in d:
+            return d['msrmts']
+    return []

@@ -1,5 +1,6 @@
 """Functions to generate output signals."""
 
+from dataclasses import dataclass
 from typing import Final
 
 import numpy as np
@@ -10,7 +11,7 @@ from pyoae import converter
 from pyoae.calib import OutputCalibration
 from pyoae.device.device_config import DeviceConfig
 from pyoae.protocols import DpoaeMsrmtParams
-from pyoae.signals import PeriodicRampSignal
+# from pyoae.signals import PeriodicRampSignal
 
 
 SYNC_CROSS: Final[int] = 10
@@ -21,6 +22,88 @@ SYNC_AMPLITUDE: Final[float] = 0.1
 
 SYNC_FREQUENCY: Final[float] = 4000
 """Carrier frequency of the sync pulse in Hz."""
+
+
+@dataclass
+class DpoaeStimulus:
+    """Container for DPOAE stimulus parameters."""
+
+    f1: float
+    """Frequency of first primary tone in Hz."""
+
+    f2: float
+    """Frequency of second primary tone in Hz."""
+
+    level1: float
+    """Stimulus level of first primary tone in dB SPL."""
+
+    level2: float
+    """Stimulus level of second primary tone in dB SPL."""
+
+    def calculate_cdpoae_frequencies(
+        self,
+        msrmt_params: DpoaeMsrmtParams,
+        block_duration: float
+    ) -> tuple[float, float]:
+        """Calculate primary-tone frequencies f1 and f2 for cDPOAE acquisition."""
+        self.f2 = correct_frequency(msrmt_params['f2'], block_duration)
+        if msrmt_params['f1'] is None:
+            if msrmt_params['f2f1_ratio'] is None:
+                self.f1 = 0.0  # invalid stimulus parameters
+                # TODO: log error
+            else:
+                self.f1 = self.f2/msrmt_params['f2f1_ratio']
+                self.f1 = correct_frequency(self.f1, block_duration)
+        else:
+            self.f1 = correct_frequency(msrmt_params['f1'], block_duration)
+
+        print(
+            'Setting primary-tone frequencies: '
+            f'f1: {self.f1:.2f} Hz, f2: {self.f2:.2f} Hz, '
+            f'(f2/f1 = {self.f2/self.f1: .3f})'
+        )
+        return (self.f1, self.f2)
+
+    def generate_cdpoae_stimuli(
+        self,
+        num_block_samples: int,
+        output_calibration: OutputCalibration | None = None
+    ) -> tuple[npt.NDArray[np.float32], npt.NDArray[np.float32]]:
+        """Generates primary tones for continuous DPOAE acquisition."""
+
+        if output_calibration is None:
+            # No calibration for output channels available.
+            amplitude1, amplitude2 = calculate_full_scale_amplitudes(
+                self.level2,
+                self.level1
+            )
+        else:
+            pressure1, pressure2 = calculate_pressure_amplitudes(
+                self.level2,
+                self.level1
+            )
+            amplitude1 = output_calibration.pressure_to_full_scale(
+                0,
+                pressure1,
+                self.f1
+            )
+            amplitude2 = output_calibration.pressure_to_full_scale(
+                1,
+                pressure2,
+                self.f2
+            )
+            print(
+                'Setting output amplitudes for DPOAE acquisition: '
+                f'p1: {pressure1:.1f} muPa ({amplitude1:.5f} re FS).'
+                f'p2: {pressure2:.1f} muPa ({amplitude2:.5f} re FS).'
+            )
+
+        # Generate output signals
+        samples = np.arange(num_block_samples, dtype=np.float32)
+        t = samples / DeviceConfig.sample_rate
+        stimulus1 = amplitude1 * np.sin(2*np.pi*self.f1*t).astype(np.float32)
+        stimulus2 = amplitude2 * np.sin(2*np.pi*self.f2*t).astype(np.float32)
+        return (stimulus1, stimulus2)
 
 
 def correct_frequency(frequency: float, block_duration: float) -> float:
@@ -37,28 +120,14 @@ def correct_frequency(frequency: float, block_duration: float) -> float:
     return periods/block_duration
 
 
-def calculate_cdpoae_frequencies(
-    msrmt_params: DpoaeMsrmtParams,
-    block_duration: float
-) -> tuple[float, float]:
-    """Calculate primary-tone frequencies f1 and f2 for cDPOAE acquisition."""
-    f2 = correct_frequency(msrmt_params['f2'], block_duration)
-    if msrmt_params['f1'] is None:
-        if msrmt_params['f2f1_ratio'] is None:
-            f1 = 0.0  # invalid stimulus parameters
-            # TODO: log error
-        else:
-            f1 = f2/msrmt_params['f2f1_ratio']
-            f1 = correct_frequency(f1, block_duration)
+def calculate_pt1_level(msrmt_params: DpoaeMsrmtParams) -> float:
+    if msrmt_params['level1'] is None:
+        # as first approximation, use Kummer et al. 1998
+        # TODO: add other rules
+        level1 = 0.4 * msrmt_params['level2'] + 39
     else:
-        f1 = correct_frequency(msrmt_params['f1'], block_duration)
-
-    print(
-        'Setting primary-tone frequencies: '
-        f'f1: {f1:.2f} Hz, f2: {f2:.2f} Hz, '
-        f'(f2/f1 = {f2/f1: .3f})'
-    )
-    return (f1, f2)
+        level1 = msrmt_params['level1']
+    return level1
 
 
 def calculate_full_scale_amplitudes(
@@ -85,20 +154,15 @@ def calculate_full_scale_amplitudes(
 
 def calculate_pressure_amplitudes(
     level2: float,
-    level1: float | None
+    level1: float
 ) -> tuple[float, float]:
     """Calculates peak pressure amplitudes from dB SPL levels."""
-    if level1 is None:
-        # as first approximation, use Kummer et al. 1998
-        # TODO: add other rules
-        level1 = 0.4 * level2 + 39
-
     amplitude1 = converter.db_spl_to_peak_mupa(level1)
     amplitude2 = converter.db_spl_to_peak_mupa(level2)
     print(
         'Setting output pressures for DPOAE acquisition: '
         f'L1: {level1:.1f} dB SPL ({amplitude1:.5f} re FS).'
-        f'L2: {level2:.1f} dBFS ({amplitude2:.5f} re FS).'
+        f'L2: {level2:.1f} dB SPL ({amplitude2:.5f} re FS).'
     )
     return (amplitude1, amplitude2)
 
@@ -124,80 +188,3 @@ def generate_sync(fs: float) -> npt.NDArray[np.float32]:
     w = windows.tukey(num_samples)
     sync_pulse = SYNC_AMPLITUDE * w * y
     return sync_pulse
-
-
-def generate_cdpoae_stimuli(
-    msrmt_params: DpoaeMsrmtParams,
-    output_calibration: OutputCalibration | None = None
-) -> tuple[PeriodicRampSignal, PeriodicRampSignal]:
-    """Generates primary tones for continuous DPOAE acquisition."""
-
-    # calculate number of samples and ensure an integer number
-    num_block_samples = int(
-        DeviceConfig.sample_rate * msrmt_params['block_duration']
-    )
-    # ensure block duration matches number of block samples
-    block_duration = num_block_samples / DeviceConfig.sample_rate
-    if block_duration != msrmt_params['block_duration']:
-        print(
-            f'Block duration adjusted to {block_duration*1E3:.2f} ms'
-        )
-
-    f1, f2 = calculate_cdpoae_frequencies(msrmt_params, block_duration)
-
-    if output_calibration is None:
-        # No calibration for output channels available.
-        amplitude1, amplitude2 = calculate_full_scale_amplitudes(
-            msrmt_params['level2'],
-            msrmt_params['level1']
-        )
-    else:
-        pressure1, pressure2 = calculate_pressure_amplitudes(
-            msrmt_params['level2'],
-            msrmt_params['level1']
-        )
-        amplitude1 = output_calibration.pressure_to_full_scale(
-            0,
-            pressure1,
-            f1
-        )
-        amplitude2 = output_calibration.pressure_to_full_scale(
-            1,
-            pressure2,
-            f2
-        )
-        print(
-            'Setting output amplitudes for DPOAE acquisition: '
-            f'p1: {pressure1:.1f} muPa ({amplitude1:.5f} re FS).'
-            f'p2: {pressure2:.1f} muPa ({amplitude2:.5f} re FS).'
-        )
-
-
-    # Generate output signals
-    samples = np.arange(num_block_samples, dtype=np.float32)
-    t = samples / DeviceConfig.sample_rate
-    stimulus1 = amplitude1 * np.sin(2*np.pi*f1*t).astype(np.float32)
-    stimulus2 = amplitude2 * np.sin(2*np.pi*f2*t).astype(np.float32)
-
-    num_total_recording_samples = (
-        num_block_samples * msrmt_params['num_averaging_blocks']
-    )
-
-    # we always use rising and falling edges
-    ramp_len = int(
-        DeviceConfig.ramp_duration * 1E-3 * DeviceConfig.sample_rate
-    )
-    ramp = 0.5*(1 - np.cos(2*np.pi*np.arange(ramp_len)/(2*ramp_len)))
-    ramp = ramp.astype(np.float32)
-
-    signal1 = PeriodicRampSignal(
-        stimulus1,
-        num_total_recording_samples,
-        ramp
-    )
-    signal2 = PeriodicRampSignal(
-        stimulus2,
-        num_total_recording_samples,
-        ramp
-    )
-    return (signal1, signal2)

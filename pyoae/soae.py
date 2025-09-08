@@ -448,14 +448,14 @@ class SoaeRecorder:
     """
 
     update_info: SoaeUpdateInfo
-    """Instance to control measurement updates."""
+    """Instance to control SOAE measurement updates."""
 
     msrmt: SyncMsrmt
-    """Instance to perform a synchronized measurement."""
+    """Instance to perform a synchronized OAE measurement."""
 
 
     def __init__(self, msrmt_params: SoaeMsrmtParams) -> None:
-        """Creates a SOAE recorder from measurement parameters."""
+        """Creates an SOAE recorder from measurement parameters."""
         num_block_samples = int(
             msrmt_params['block_duration'] * DeviceConfig.sample_rate
         )
@@ -499,9 +499,8 @@ class SoaeRecorder:
         # Plot offline results after measurement
         plot_offline(self.msrmt, self.update_info)
 
-
     def save_recording(self) -> None:
-        """Stores the measurement data in binary files."""
+        """Stores the measurement data in binary file."""
         # Save measurement to file.
         save_path = os.path.join(
             os.getcwd(),

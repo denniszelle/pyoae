@@ -1,20 +1,22 @@
-"""Example script to record SOAEs (Spontaneous Otoacoustic Emissions).
+"""Example script to record continuous DPOAEs.
 
-This script demonstrates how to acquire and visualize SOAE data in real-time.
-It uses a synchronized playback and recording setup. A live time-domain
-and frequency-domain plot is shown during the measurement.
+This script performs a real-time acquisition of continuous distortion-product
+otoacoustic emissions (DPOAEs) using two primary tones (f1 and f2).
+The recorded microphone signal is analyzed in real time, and live plots of
+the time signal and spectrum are displayed.
 
 Key steps performed by this script:
-- Configures signal generators and buffer parameters
-- Sets up real-time plots for signal and spectrum display
-- Runs a synchronized measurement using input and output sound devices
-- Saves the recorded signal and sampling rate to a .npz file
+- Configures and generates sinusoidal stimulus signals
+- Sets up real-time visualization of signal and spectrum
+- Runs a synchronized two-channel playback and recording loop
+- Applies artifact rejection based on an RMS threshold
+- Saves the measurement data to a `.npz` file for further analysis
 
-This script is intended to be used as an example and entry point for
-SOAE measurements.
+This script is intended as an example and a starting point for continuous
+DPOAE measurements.
 
 Run the following command from the project root directory to start:
-    python -m examples.live_soae_script
+    python -m examples.live_cdpoae_script
 
 Note:
     Sound device IDs or names should be known beforehand and can be obtained
@@ -28,7 +30,7 @@ import argparse
 
 from pyoae import files
 from pyoae.device.device_config import DeviceConfig
-from pyoae.soae import SoaeRecorder
+from pyoae.cdpoae import DpoaeRecorder
 
 
 DEVICE_CONFIG_FILE = 'device_config.json'
@@ -40,9 +42,9 @@ def main(
     ear: str = '',
     save: bool = False
 ) -> None:
-    """Main function executing an SOAE measurement."""
+    """Main function executing a DPOAE measurement."""
 
-    print('SOAE recorder started with following options:')
+    print('DPOAE recorder started with following options:')
     print(f'  Protocol: {protocol}')
     print(f'  Subject ID: {subject} - ear: {ear}')
     if save:
@@ -52,14 +54,15 @@ def main(
     files.load_device_config(DEVICE_CONFIG_FILE)
     print(DeviceConfig())
 
-    msrmt_params = files.load_soae_protocol(protocol)
-    soae_recorder = SoaeRecorder(msrmt_params)
-    soae_recorder.record()
-    if save:
-        soae_recorder.save_recording()
+    dpoae_protocol = files.load_dpoae_protocol(protocol)
+    for msrmt_params in dpoae_protocol:
+        dpoae_recorder = DpoaeRecorder(msrmt_params)
+        dpoae_recorder.record()
+        if save:
+            dpoae_recorder.save_recording()
 
 
-parser = argparse.ArgumentParser(description='PyOAE SOAE Recorder')
+parser = argparse.ArgumentParser(description='PyOAE DPOAE Recorder')
 parser.add_argument(
     '--protocol',
     default=argparse.SUPPRESS,

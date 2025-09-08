@@ -19,6 +19,8 @@ This module is not intended to be run directly.
 """
 
 from dataclasses import dataclass
+from datetime import datetime
+import os
 
 from matplotlib import pyplot as plt
 from matplotlib.animation import FuncAnimation
@@ -28,8 +30,13 @@ from matplotlib.lines import Line2D
 import numpy as np
 import numpy.typing as npt
 
+from pyoae import generator
 from pyoae.calib import MicroTransferFunction
-from pyoae.sync import SyncMsrmt, MsrmtState
+from pyoae.device.device_config import DeviceConfig
+from pyoae.generator import DpoaeStimulus
+from pyoae.protocols import DpoaeMsrmtParams
+from pyoae.signals import PeriodicRampSignal
+from pyoae.sync import HardwareData, RecordingData, SyncMsrmt, MsrmtState
 
 
 @dataclass
@@ -405,3 +412,174 @@ def plot_offline(sync_msrmt: SyncMsrmt, info: DpoaeUpdateInfo) -> None:
     line_spec.set_ydata(spectrum)
     plt.tight_layout()
     plt.show()
+
+
+class DpoaeRecorder:
+    """Class to manage a DPOAE recording."""
+
+    stimulus: DpoaeStimulus
+    """Parameters of primary tones."""
+
+    signals: list[PeriodicRampSignal]
+    """List of output signals for each channel."""
+
+    update_info: DpoaeUpdateInfo
+    """Instance to control DPOAE measurement updates."""
+
+    msrmt: SyncMsrmt
+    """Instance to perform a synchronized OAE measurement."""
+
+    def __init__(self, msrmt_params: DpoaeMsrmtParams) -> None:
+        """Creates a DPOAE recorder for given measurement parameters."""
+        num_block_samples = int(
+            msrmt_params['block_duration'] * DeviceConfig.sample_rate
+        )
+        num_total_recording_samples = (
+            msrmt_params['num_averaging_blocks'] * num_block_samples
+        )
+        block_duration = num_block_samples / DeviceConfig.sample_rate
+        recording_duration = num_total_recording_samples / DeviceConfig.sample_rate
+
+        if block_duration != msrmt_params["block_duration"]:
+            print(
+                f'Block duration adjusted to {block_duration*1E3:.2f} ms'
+            )
+
+        self.stimulus = DpoaeStimulus(
+            f1=0.0,
+            f2=0.0,
+            level1=0.0,
+            level2=0.0
+        )
+        self.signals = []
+        self.generate_output_signals(
+            msrmt_params,
+            block_duration,
+            num_block_samples,
+            num_total_recording_samples
+        )
+        dpoae_info = self.setup_info(
+            recording_duration,
+            num_block_samples,
+
+        )
+        ARTIFACT_REJ_RATIO = 1.8  # TODO: replace
+        self.update_info = DpoaeUpdateInfo(
+            dpoae_info,
+            DeviceConfig.sample_rate,
+            num_block_samples,
+            self.stimulus.f1,
+            self.stimulus.f2,
+            ARTIFACT_REJ_RATIO
+        )
+        rec_data = RecordingData(
+            DeviceConfig.sample_rate,
+            recording_duration,
+            num_total_recording_samples,
+            num_block_samples,
+            DeviceConfig.device_buffer_size
+        )
+        hw_data = HardwareData(
+            2,
+            2,
+            DeviceConfig.input_device,
+            DeviceConfig.output_device,
+        )
+        self.msrmt = SyncMsrmt(
+            rec_data,
+            hw_data,
+            self.signals
+        )
+
+    def record(self) -> None:
+        """Starts the recording."""
+        print("Starting recording...")
+        # `start_msrmt` starts the application loop
+        self.msrmt.start_msrmt(start_plot, self.update_info)
+
+        # Plot all data and final result after user has
+        # closed the live-measurement window.
+        plot_offline(self.msrmt, self.update_info)
+
+    def save_recording(self) -> None:
+        """Stores the measurement data in binary file."""
+        save_path = os.path.join(
+            os.getcwd(),
+            'measurements'
+        )
+        os.makedirs(save_path, exist_ok=True)
+        cur_time = datetime.now()
+        time_stamp = cur_time.strftime("%y%m%d-%H%M%S")
+        file_name = 'cdpoae_msrmt_'+ time_stamp
+        save_path = os.path.join(save_path, file_name)
+        recorded_signal, spectrum = get_results(self.msrmt, self.update_info)
+        np.savez(save_path,
+            spectrum=spectrum,
+            recorded_signal=recorded_signal,
+            samplerate=DeviceConfig.sample_rate,
+            recorded_sync=self.msrmt.live_msrmt_data.sync_recorded
+        )
+        print(f"Saved measurement to {save_path}")
+
+    def generate_output_signals(
+        self,
+        msrmt_params: DpoaeMsrmtParams,
+        block_duration: float,
+        num_block_samples: int,
+        num_total_recording_samples: int,
+    ) -> None:
+        """Generates the output signals for playback."""
+        self.stimulus.calculate_cdpoae_frequencies(
+            msrmt_params,
+            block_duration
+        )
+        self.stimulus.level1 = generator.calculate_pt1_level(msrmt_params)
+        self.stimulus.level2 = msrmt_params["level2"]
+        # TODO: add output calibration
+        stimulus1, stimulus2 = self.stimulus.generate_cdpoae_stimuli(
+            num_block_samples
+        )
+
+        # we always use rising and falling edges
+        ramp_len = int(
+            DeviceConfig.ramp_duration * 1E-3 * DeviceConfig.sample_rate
+        )
+        ramp = 0.5*(1 - np.cos(2*np.pi*np.arange(ramp_len)/(2*ramp_len)))
+        ramp = ramp.astype(np.float32)
+
+        signal1 = PeriodicRampSignal(
+            stimulus1,
+            num_total_recording_samples,
+            ramp
+        )
+        signal2 = PeriodicRampSignal(
+            stimulus2,
+            num_total_recording_samples,
+            ramp
+        )
+
+        self.signals.append(signal1)
+        self.signals.append(signal2)
+
+    def setup_info(
+        self,
+        recording_duration: float,
+        num_block_samples: int
+    ) -> DpoaePlotInfo:
+        """Sets up live plot and measurement information."""
+        fig, ax_time, line_time, ax_spec, line_spec = setup_plot(
+            recording_duration,
+            DeviceConfig.sample_rate,
+            num_block_samples,
+            (self.stimulus.f1*0.6, self.stimulus.f2*1.5),
+            DeviceConfig.live_display_duration
+        )
+        return DpoaePlotInfo(
+            fig,
+            ax_time,
+            line_time,
+            ax_spec,
+            line_spec,
+            DeviceConfig.update_interval,
+            DeviceConfig.live_display_duration
+        )

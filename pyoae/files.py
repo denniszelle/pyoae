@@ -85,6 +85,18 @@ def load_dpoae_protocol(file_path: str) -> list[protocols.DpoaeMsrmtParams]:
     return []
 
 
+def load_pulsed_dpoae_protocol(
+    file_path: str
+) -> list[protocols.PulseDpoaeMsrmtParams]:
+    """Loads a Pulse-DPOAE measurement protocol."""
+    # TODO: check content of protocol
+    if file_path:
+        d = load_json_file(file_path)
+        if 'msrmts' in d:
+            return d['msrmts']
+    return []
+
+
 def save_output_calibration(
     out_calib: calib.SpeakerCalibData
 ) -> None:

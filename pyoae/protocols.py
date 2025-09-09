@@ -25,6 +25,21 @@ class DpoaeMsrmtParams(MsrmtParams):
     f2f1_ratio: float | None
 
 
+class PulseStimulus(TypedDict):
+    """Time markers defining a pulsed stimulus."""
+    t_rise: float
+    t_fall: float
+    t_on: float
+    duration: float
+    is_short_pulse: bool
+
+
+class PulseDpoaeMsrmtParams(DpoaeMsrmtParams):
+    """Measurement parameters for a single pulse DPOAE measurement."""
+    f1_pulse: PulseStimulus
+    f2_pulse: PulseStimulus
+
+
 class SoaeMsrmtParams(MsrmtParams):
     """Measurement parameters for SOAE measurement."""
     artifact_rejection_thresh: float

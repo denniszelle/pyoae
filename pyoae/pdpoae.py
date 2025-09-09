@@ -33,9 +33,9 @@ import numpy.typing as npt
 from pyoae import generator
 from pyoae.calib import MicroTransferFunction, OutputCalibration
 from pyoae.device.device_config import DeviceConfig
-from pyoae.generator import ContDpoaeStimulus
-from pyoae.protocols import DpoaeMsrmtParams
-from pyoae.signals import PeriodicRampSignal
+from pyoae.generator import PulseDpoaeStimulus
+from pyoae.protocols import PulseDpoaeMsrmtParams
+from pyoae.signals import PeriodicSignal
 from pyoae.sync import HardwareData, RecordingData, SyncMsrmt, MsrmtState
 
 
@@ -417,13 +417,13 @@ def plot_offline(sync_msrmt: SyncMsrmt, info: DpoaeUpdateInfo) -> None:
     plt.show()
 
 
-class DpoaeRecorder:
+class PulseDpoaeRecorder:
     """Class to manage a DPOAE recording."""
 
-    stimulus: ContDpoaeStimulus
+    stimulus: PulseDpoaeStimulus
     """Parameters of primary tones."""
 
-    signals: list[PeriodicRampSignal]
+    signals: list[PeriodicSignal]
     """List of output signals for each channel."""
 
     update_info: DpoaeUpdateInfo
@@ -434,7 +434,7 @@ class DpoaeRecorder:
 
     def __init__(
         self,
-        msrmt_params: DpoaeMsrmtParams,
+        msrmt_params: PulseDpoaeMsrmtParams,
         mic_trans_fun: MicroTransferFunction | None = None,
         out_trans_fun: OutputCalibration | None = None
     ) -> None:
@@ -458,7 +458,7 @@ class DpoaeRecorder:
                 f'Block duration adjusted to {block_duration*1E3:.2f} ms'
             )
 
-        self.stimulus = ContDpoaeStimulus(
+        self.stimulus = PulseDpoaeStimulus(
             f1=0.0,
             f2=0.0,
             level1=0.0,
@@ -539,40 +539,29 @@ class DpoaeRecorder:
 
     def generate_output_signals(
         self,
-        msrmt_params: DpoaeMsrmtParams,
+        msrmt_params: PulseDpoaeMsrmtParams,
         block_duration: float,
         num_block_samples: int,
         num_total_recording_samples: int,
         out_calib: OutputCalibration | None = None
     ) -> None:
         """Generates the output signals for playback."""
-        self.stimulus.calculate_frequencies(
-            msrmt_params,
-            block_duration
-        )
+        self.stimulus.calculate_frequencies(msrmt_params)
         self.stimulus.level1 = generator.calculate_pt1_level(msrmt_params)
         self.stimulus.level2 = msrmt_params["level2"]
+        self.stimulus.create_stimulus_mask(block_duration, msrmt_params)
         stimulus1, stimulus2 = self.stimulus.generate_stimuli(
             num_block_samples,
             output_calibration=out_calib
         )
 
-        # we always use rising and falling edges
-        ramp_len = int(
-            DeviceConfig.ramp_duration * 1E-3 * DeviceConfig.sample_rate
-        )
-        ramp = 0.5*(1 - np.cos(2*np.pi*np.arange(ramp_len)/(2*ramp_len)))
-        ramp = ramp.astype(np.float32)
-
-        signal1 = PeriodicRampSignal(
+        signal1 = PeriodicSignal(
             stimulus1,
             num_total_recording_samples,
-            ramp
         )
-        signal2 = PeriodicRampSignal(
+        signal2 = PeriodicSignal(
             stimulus2,
             num_total_recording_samples,
-            ramp
         )
 
         self.signals.append(signal1)

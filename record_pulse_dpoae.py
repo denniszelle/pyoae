@@ -1,9 +1,7 @@
-"""Example script to record continuous DPOAEs.
+"""Example script to record pulsed DPOAEs.
 
-This script performs a real-time acquisition of continuous distortion-product
-otoacoustic emissions (DPOAEs) using two primary tones (f1 and f2).
-The recorded microphone signal is analyzed in real time, and live plots of
-the time signal and spectrum are displayed.
+This script performs a real-time acquisition of pulsed distortion-product
+otoacoustic emissions (DPOAEs) using two pulsed primary tones (f1 and f2).
 
 Key steps performed by this script:
 - Configures and generates sinusoidal stimulus signals
@@ -32,7 +30,7 @@ import os
 from pyoae import files
 from pyoae.calib import MicroTransferFunction, OutputCalibration
 from pyoae.device.device_config import DeviceConfig
-from pyoae.cdpoae import DpoaeRecorder
+from pyoae.pdpoae import PulseDpoaeRecorder
 
 
 DEVICE_CONFIG_FILE = 'device_config.json'
@@ -46,9 +44,9 @@ def main(
     ear: str = '',
     save: bool = False
 ) -> None:
-    """Main function executing a DPOAE measurement."""
+    """Main function executing a pulsed DPOAE measurement."""
 
-    print('DPOAE recorder started with following options:')
+    print('Pulse DPOAE recorder started with following options:')
     print(f'  Protocol: {protocol}')
     print(f'  Subject ID: {subject} - ear: {ear}')
     if save:
@@ -78,9 +76,9 @@ def main(
         output_calib_fun = None
 
     protocol_path = os.path.join(os.getcwd(), protocol)
-    dpoae_protocol = files.load_dpoae_protocol(protocol_path)
+    dpoae_protocol = files.load_pulsed_dpoae_protocol(protocol_path)
     for msrmt_params in dpoae_protocol:
-        dpoae_recorder = DpoaeRecorder(
+        dpoae_recorder = PulseDpoaeRecorder(
             msrmt_params,
             mic_trans_fun,
             out_trans_fun=output_calib_fun
@@ -90,7 +88,7 @@ def main(
             dpoae_recorder.save_recording()
 
 
-parser = argparse.ArgumentParser(description='PyOAE DPOAE Recorder')
+parser = argparse.ArgumentParser(description='PyOAE Pulse-DPOAE Recorder')
 parser.add_argument(
     '--protocol',
     default=argparse.SUPPRESS,

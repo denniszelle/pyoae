@@ -31,7 +31,7 @@ import numpy as np
 import numpy.typing as npt
 
 from pyoae import generator
-from pyoae.calib import MicroTransferFunction
+from pyoae.calib import MicroTransferFunction, OutputCalibration
 from pyoae.device.device_config import DeviceConfig
 from pyoae.generator import DpoaeStimulus
 from pyoae.protocols import DpoaeMsrmtParams
@@ -392,13 +392,16 @@ def plot_offline(sync_msrmt: SyncMsrmt, info: DpoaeUpdateInfo) -> None:
     if sync_msrmt.state != MsrmtState.FINISHED:
         return
 
+    has_input_calib =  info.input_trans_fun is not None
+
     recorded_signal, spectrum = get_results(sync_msrmt, info)
     _, ax_time, line_time, ax_spec, line_spec = setup_plot(
         sync_msrmt.recording_data.msrmt_duration,
         sync_msrmt.recording_data.fs,
         info.block_size,
         (info.f1*0.6, info.f2*1.5),
-        info.plot_info.live_display_duration
+        info.plot_info.live_display_duration,
+        is_calib_available=has_input_calib
     )
     line_time.set_xdata(np.arange(len(recorded_signal))/info.fs)
     line_time.set_ydata(recorded_signal)
@@ -432,7 +435,8 @@ class DpoaeRecorder:
     def __init__(
         self,
         msrmt_params: DpoaeMsrmtParams,
-        mic_trans_fun: MicroTransferFunction | None = None
+        mic_trans_fun: MicroTransferFunction | None = None,
+        out_trans_fun: OutputCalibration | None = None
     ) -> None:
         """Creates a DPOAE recorder for given measurement parameters."""
         num_block_samples = int(
@@ -465,12 +469,14 @@ class DpoaeRecorder:
             msrmt_params,
             block_duration,
             num_block_samples,
-            num_total_recording_samples
+            num_total_recording_samples,
+            out_calib=out_trans_fun
         )
+        has_input_calib = mic_trans_fun is not None
         dpoae_info = self.setup_info(
             recording_duration,
             num_block_samples,
-
+            is_calib_available=has_input_calib
         )
         ARTIFACT_REJ_RATIO = 1.8  # TODO: replace
         self.update_info = DpoaeUpdateInfo(
@@ -537,6 +543,7 @@ class DpoaeRecorder:
         block_duration: float,
         num_block_samples: int,
         num_total_recording_samples: int,
+        out_calib: OutputCalibration | None = None
     ) -> None:
         """Generates the output signals for playback."""
         self.stimulus.calculate_cdpoae_frequencies(
@@ -547,7 +554,8 @@ class DpoaeRecorder:
         self.stimulus.level2 = msrmt_params["level2"]
         # TODO: add output calibration
         stimulus1, stimulus2 = self.stimulus.generate_cdpoae_stimuli(
-            num_block_samples
+            num_block_samples,
+            output_calibration=out_calib
         )
 
         # we always use rising and falling edges
@@ -574,7 +582,8 @@ class DpoaeRecorder:
     def setup_info(
         self,
         recording_duration: float,
-        num_block_samples: int
+        num_block_samples: int,
+        is_calib_available: bool = False,
     ) -> DpoaePlotInfo:
         """Sets up live plot and measurement information."""
         fig, ax_time, line_time, ax_spec, line_spec = setup_plot(
@@ -582,7 +591,8 @@ class DpoaeRecorder:
             DeviceConfig.sample_rate,
             num_block_samples,
             (self.stimulus.f1*0.6, self.stimulus.f2*1.5),
-            DeviceConfig.live_display_duration
+            DeviceConfig.live_display_duration,
+            is_calib_available=is_calib_available
         )
         return DpoaePlotInfo(
             fig,

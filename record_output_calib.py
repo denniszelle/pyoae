@@ -73,8 +73,11 @@ def main(
         mic_trans_fun=mic_trans_fun
     )
     calib_recorder.record()
-    # if save:
-    #     calib_recorder.save_recording()
+    if save:
+        calib_recorder.save_recording()
+        if calib_recorder.results is not None:
+            calib_id = calib_recorder.results["date"]
+            print(f'Calibration saved with time stamp: {calib_id}.')
 
 
 parser = argparse.ArgumentParser(description='PyOAE DPOAE Recorder')

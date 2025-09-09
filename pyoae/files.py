@@ -15,6 +15,7 @@ def load_json_file(file_path: str) -> dict[str, Any]:
         with open(file_path, 'r', encoding='utf-8') as input_file:
             output_dict = json.load(input_file)
     except FileNotFoundError:
+        print(f'Could not load {file_path}. File not found.')
         output_dict = {}
 
     return output_dict
@@ -44,6 +45,21 @@ def load_micro_calib(file_path: str) -> calib.MicroCalibData:
     return micro_calib_data
 
 
+def load_output_calib(file_path: str) -> calib.SpeakerCalibData:
+    """Loads the output calibration from a JSON."""
+    d = {}
+    if file_path:
+        d = load_json_file(file_path)
+    out_calib_data = calib.get_empty_speaker_calib_data()
+
+    if d:
+        for key in out_calib_data:
+            if key in d:
+                out_calib_data[key] = d[key]
+
+    return out_calib_data
+
+
 def load_soae_protocol(file_path: str | None = None) -> protocols.SoaeMsrmtParams:
     """Loads the SOAE measurement parameters or returns default."""
     msrmt_params = protocols.get_default_soae_msrmt_params()
@@ -70,7 +86,6 @@ def load_dpoae_protocol(file_path: str) -> list[protocols.DpoaeMsrmtParams]:
 
 
 def save_output_calibration(
-    time_stamp: str,
     out_calib: calib.SpeakerCalibData
 ) -> None:
     """Saves output calibration results to JSON."""
@@ -79,7 +94,7 @@ def save_output_calibration(
         'measurements'
     )
     os.makedirs(file_path, exist_ok=True)
-    file_name = time_stamp + 'out_calib.json'
+    file_name = out_calib['date'] + '_out_calib.json'
     file_path = os.path.join(file_path, file_name)
 
     try:

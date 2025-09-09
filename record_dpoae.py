@@ -27,9 +27,10 @@ Note:
 """
 
 import argparse
+import os
 
 from pyoae import files
-from pyoae.calib import MicroTransferFunction
+from pyoae.calib import MicroTransferFunction, OutputCalibration
 from pyoae.device.device_config import DeviceConfig
 from pyoae.cdpoae import DpoaeRecorder
 
@@ -40,6 +41,7 @@ DEVICE_CONFIG_FILE = 'device_config.json'
 def main(
     protocol: str = '',
     mic: str = '',
+    calib: str = '',
     subject: str = '',
     ear: str = '',
     save: bool = False
@@ -63,15 +65,27 @@ def main(
             mic_calib_data['abs_calibration'],
             mic_calib_data['transfer_function']
         )
-
     else:
         mic_trans_fun = None
 
-    dpoae_protocol = files.load_dpoae_protocol(protocol)
+    if calib:
+        print('Loading output calibration.')
+        out_file_name = calib + '_out_calib.json'
+        out_file_path = os.path.join(os.getcwd(), 'measurements', out_file_name)
+        speaker_calib_data = files.load_output_calib(out_file_path)
+        output_calib_fun = OutputCalibration(speaker_calib_data)
+    else:
+        output_calib_fun = None
+
+
+
+    protocol_path = os.path.join(os.getcwd(), protocol)
+    dpoae_protocol = files.load_dpoae_protocol(protocol_path)
     for msrmt_params in dpoae_protocol:
         dpoae_recorder = DpoaeRecorder(
             msrmt_params,
-            mic_trans_fun
+            mic_trans_fun,
+            out_trans_fun=output_calib_fun
         )
         dpoae_recorder.record()
         if save:
@@ -90,6 +104,12 @@ parser.add_argument(
     default=argparse.SUPPRESS,
     type=str,
     help='Specify path to microphone calibration JSON file.'
+)
+parser.add_argument(
+    '--calib',
+    default=argparse.SUPPRESS,
+    type=str,
+    help='Specify output calibration time stamp.'
 )
 parser.add_argument(
     '--subject',

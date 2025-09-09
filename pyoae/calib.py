@@ -9,7 +9,6 @@ Note:
     This is a dummy module. Functionality will be added in future revisions.‚
 """
 
-from dataclasses import dataclass
 from typing import TypedDict
 
 import numpy as np
@@ -84,18 +83,78 @@ def get_empty_micro_calib_data() -> MicroCalibData:
     return d
 
 
-@dataclass
+def get_empty_speaker_calib_data() -> SpeakerCalibData:
+    """Returns an empty container for speaker-calibration data."""
+    d: SpeakerCalibData = {
+        'date': '',
+        'frequencies': [],
+        'max_out_ch01': [],
+        'max_out_ch02': [],
+        'phase_ch01': [],
+        'phase_ch02': []
+    }
+    return d
+
+
 class OutputCalibration:
     """Linear scaling functions to apply output calibration."""
 
     frequencies: npt.NDArray[np.float32]
     """Frequencies of the output sensitivity function."""
 
-    sensitivity: npt.NDArray[np.float32]
+    amplitudes: npt.NDArray[np.float32]
     """Output sensitivity function (transfer function).
 
     This is a 2D array of dimensions [num_ch, num_bins]
     """
+
+    phases: npt.NDArray[np.float32]
+    """Phases of the transfer function in radiant."""
+
+    num_samples: int | None
+    """Number of samples for which the transfer function was interpolated."""
+
+    sample_rate: float | None
+    """Sample rate in Hz for which the transfer function was interpolated"""
+
+    def __init__(
+        self,
+        calib_data: SpeakerCalibData,
+        num_samples: int | None = None,
+        sample_rate: float | None = None
+    ) -> None:
+        self.frequencies = np.array(calib_data['frequencies'], dtype=np.float32)
+        amp_ch01 = np.array(calib_data['max_out_ch01'], dtype=np.float32)
+        amp_ch02 = np.array(calib_data['max_out_ch02'], dtype=np.float32)
+        self.amplitudes = np.array([amp_ch01, amp_ch02], dtype=np.float32)
+        phi_ch01 = np.array(calib_data['phase_ch01'], dtype=np.float32)
+        phi_ch02 = np.array(calib_data['phase_ch02'], dtype=np.float32)
+        self.phases = np.array([phi_ch01, phi_ch02], dtype=np.float32)
+
+        self.num_samples = num_samples
+        self.sample_rate = sample_rate
+
+    def interpolate_transfer_fun(self) -> None:
+        """Interpolates the transfer function """
+        if self.num_samples is None or self.sample_rate is None:
+            return
+
+        num_bins = (self.num_samples // 2) + 1
+        df = self.sample_rate / self.num_samples
+        frequencies_ip = np.arange(num_bins, dtype=np.float32) * df
+
+        amplitudes_ip = []
+        phases_ip = []
+        for i in range(2):
+            h_ip = np.interp(frequencies_ip, self.frequencies, self.amplitudes[i,:])
+            phi_ip = np.interp(frequencies_ip, self.frequencies, self.phases[i, :])
+            amplitudes_ip.append(h_ip)
+            phases_ip.append(phi_ip)
+
+        # store interpolated data
+        self.frequencies = frequencies_ip
+        self.amplitudes = np.array(amplitudes_ip, np.float32)
+        self.phases = np.array(phases_ip, np.float32)
 
     def get_sensitivity(self, ch: int, f: float) -> float:
         """Returns the output sensitivity in DFS/muPa.
@@ -104,7 +163,7 @@ class OutputCalibration:
             ch: index of the output channel starting at 0
             f: frequency of the output stimulus
         """
-        if ch >= self.sensitivity.shape[0]:
+        if ch >= self.amplitudes.shape[0]:
             # TODO: log error
             return 0.0
 
@@ -113,12 +172,12 @@ class OutputCalibration:
         # (alternatively, we could store the frequency resolution
         # in order to calculate the frequency-bin index)
         idx = np.argmin(np.abs(self.frequencies - f))
-        return self.sensitivity[ch, idx]
+        return self.amplitudes[ch, idx]
 
     def pressure_to_full_scale(self, ch: int, p: float, f: float) -> float:
         """Calculates digital full-scale amplitude from peak pressure."""
         s = self.get_sensitivity(ch, f)
-        return p * s
+        return p / s
 
 
 class MicroTransferFunction:

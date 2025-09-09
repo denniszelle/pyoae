@@ -37,12 +37,6 @@ class PlotInfo:
     line_time: Line2D
     """Line object for the time plot."""
 
-    ax_spec: Axes
-    """Axis object of the spectral plot."""
-
-    line_spec: Line2D
-    """Line object for the spectral plot."""
-
     update_interval: float
     """Interval to apply processing and plot update during measurement."""
 
@@ -76,12 +70,8 @@ class UpdateInfo:
 
 def setup_plot(
     recording_duration: float,
-    fs: float,
-    block_size: int,
-    frequency_range: tuple[float, float],
-    live_display_duration: float,
-    is_calib_available:bool=False
-) -> tuple[Figure, Axes, Line2D, Axes, Line2D]:
+    fs: float
+) -> tuple[Figure, Axes, Line2D]:
     """Sets up the plots.
 
     Args:
@@ -101,38 +91,22 @@ def setup_plot(
         - **line_spec**: Line object with the spectral data of the signal
     """
 
-    fig, axes = plt.subplots(2, 1, figsize=(10, 6))
-    axes: list[Axes]
-    (ax_time, ax_spec) = axes
+    fig, ax = plt.subplots(1, 1, figsize=(10, 6))
 
     # Set up time plot
     x_wave = np.arange(round(recording_duration*fs), dtype=np.float32) / fs * 1E3
     y_wave = np.zeros_like(x_wave)
-    line_time, = ax_time.plot(
+    line_time, = ax.plot(
         x_wave,
         y_wave
     )
-    ax_time.set_ylim(-1, 1)
-    ax_time.set_xlim(-live_display_duration, 0)
-    ax_time.set_title("Recorded Waveform")
-    ax_time.set_xlabel("Time (ms)")
-    ax_time.set_ylabel("Amplitude (full scale)")
+    ax.set_ylim(-1, 1)
+    ax.set_xlim(0, recording_duration)
+    ax.set_title("Recorded Waveform")
+    ax.set_xlabel("Time (ms)")
+    ax.set_ylabel("Amplitude (full scale)")
 
-    # Set up frequency plot
-    fft_frequencies = np.fft.rfftfreq(block_size, 1 / fs)
-    fft_values = np.zeros(len(fft_frequencies))
-    line_spec, = ax_spec.plot(fft_frequencies, fft_values)
-    print(f'Plotting spectral x-data with length: {len(fft_frequencies)}')
-    ax_spec.set_xlim(frequency_range[0], frequency_range[1])
-    ax_spec.set_ylim(-50, 100)
-    ax_spec.set_xscale('log')
-    ax_spec.set_title("Spectrum")
-    ax_spec.set_xlabel("Frequency (Hz)")
-    if is_calib_available:
-        ax_spec.set_ylabel('Level (dB SPL)')
-    else:
-        ax_spec.set_ylabel("Level (dBFS)")
-    return fig, ax_time, line_time, ax_spec, line_spec
+    return fig, ax, line_time
 
 
 def setup_offline_plot(
@@ -166,7 +140,7 @@ def setup_offline_plot(
         ax.set_xlim(frequency_range[0], frequency_range[1])
         ax.set_ylim(-50, 100)
         ax.set_xscale('log')
-        ax.set_title("Spectrum of Channel {i}")
+        ax.set_title(f"Spectrum of Channel {i}")
         ax.set_xlabel("Frequency (Hz)")
         if is_calib_available:
             ax.set_ylabel('Level (dB SPL)')
@@ -177,7 +151,6 @@ def setup_offline_plot(
 
 def process_spectrum(
     recorded_signal: npt.NDArray[np.float32],
-    block_size: int,
     correction_tf: MicroTransferFunction | None
 ) -> npt.NDArray[np.float32]:
     """Processes recorded signal to obtain spectrum.
@@ -204,10 +177,7 @@ def process_spectrum(
     return spectrum.astype(np.float32)
 
 
-def get_results(
-    sync_msrmt: SyncMsrmt,
-    info: UpdateInfo
-) -> tuple[npt.NDArray[np.float32], npt.NDArray[np.float32]]:
+def get_results(sync_msrmt: SyncMsrmt) -> npt.NDArray[np.float32]:
     """Processes data and returns plot results.
 
     If the measurement is currently running, the recorded signal
@@ -233,19 +203,9 @@ def get_results(
         MsrmtState.FINISHED
     ]:
         recorded_signal = sync_msrmt.get_recorded_signal()
+        return recorded_signal
 
-        if len(recorded_signal) == sync_msrmt.recording_data.msrmt_samples:
-            spectrum = process_spectrum(
-                recorded_signal,
-                info.block_size,
-                None
-            )
-        else:
-            spectrum = np.zeros(0, np.float32)
-
-        return recorded_signal, spectrum
-
-    return np.zeros(0,np.float32), np.zeros(0,np.float32)
+    return np.zeros(0,np.float32)
 
 
 def get_channel_spectra(
@@ -275,12 +235,10 @@ def get_channel_spectra(
 
     spectrum_ch01 = process_spectrum(
         recorded_signal[:block_size],
-        block_size,
         info.input_trans_fun,
     )
     spectrum_ch02 = process_spectrum(
         recorded_signal[block_size:],
-        block_size,
         info.input_trans_fun
     )
     return [spectrum_ch01, spectrum_ch02]
@@ -288,9 +246,8 @@ def get_channel_spectra(
 
 def update_plot_data(
     recorded_signal: npt.NDArray[np.float32],
-    spectrum: npt.NDArray[np.float32],
     info: UpdateInfo
-) -> tuple[Line2D, Line2D]:
+) -> Line2D:
     """Updates the plot data.
 
     Create and set the plot objects for the data.
@@ -307,46 +264,31 @@ def update_plot_data(
         - **line_spec**: Line object with the spectral data of the signal
     """
 
-    if len(spectrum) == 0:
-        return info.plot_info.line_time, info.plot_info.line_spec
-
     n_samples_displayed = int(
         info.plot_info.live_display_duration * 1E-3 * info.fs
     )
 
-    if len(recorded_signal) < n_samples_displayed:
-        return info.plot_info.line_time, info.plot_info.line_spec
+    num_recorded_samples = len(recorded_signal)
 
-    x_data = -np.flipud(np.arange(n_samples_displayed) / info.fs * 1E3)
+    if num_recorded_samples < n_samples_displayed:
+        return info.plot_info.line_time
+
+    #x_data = -np.flipud(np.arange(n_samples_displayed) / info.fs * 1E3)
+    x_data = np.arange(num_recorded_samples) / info.fs
 
     info.plot_info.line_time.set_data(
         x_data,
-        recorded_signal[-n_samples_displayed:]
+        recorded_signal
     )
 
-    info.plot_info.line_spec.set_ydata(spectrum)
-
-    # Update y-axis limits.
-    spec_min = min(spectrum[1:])
-    spec_max = max(spectrum)
-    padding = 15  # dB of padding on top and bottom
-
-    if (
-        spec_min < info.plot_info.ax_spec.get_ylim()[0]
-        or spec_min > info.plot_info.ax_spec.get_ylim()[0] + 2*padding
-        or spec_max > info.plot_info.ax_spec.get_ylim()[1]
-        or spec_max < info.plot_info.ax_spec.get_ylim()[1] - 2*padding
-    ):
-        info.plot_info.ax_spec.set_ylim(spec_min - padding, spec_max + padding)
-
-    return info.plot_info.line_time, info.plot_info.line_spec
+    return info.plot_info.line_time
 
 
 def update_msrmt(
     frame,
     sync_msrmt: SyncMsrmt,
     info: UpdateInfo
-) -> tuple[Line2D, Line2D]:
+) -> tuple[Line2D,]:
     """Processes results from data and update the plots.
 
     Args:
@@ -355,24 +297,26 @@ def update_msrmt(
         info: Info object containing meta infos and plot objects
 
     Returns:
-        tuple[line_time, line_spec]
+        tuple[line_time, ]
 
         - **line_time**: Line object with the time-domain data of the signal
-        - **line_spec**: Line object with the spectral data of the signal
+    Notes:
+        A tuple is returned with at least one line object to be compatible
+          with `FuncAnimation`.
     """
 
     del frame
 
     if sync_msrmt.state == MsrmtState.FINISHED:
         # plt.close(info.fig)
-        return info.plot_info.line_time, info.plot_info.line_spec
+        return (info.plot_info.line_time, )
 
     if sync_msrmt.state == MsrmtState.FINISHING:
         sync_msrmt.state = MsrmtState.FINISHED
 
-    recorded_signal, spectrum = get_results(sync_msrmt, info)
+    recorded_signal = get_results(sync_msrmt)
 
-    return update_plot_data(recorded_signal, spectrum, info)
+    return (update_plot_data(recorded_signal, info), )
 
 
 def start_plot(sync_msrmt: SyncMsrmt, info: UpdateInfo) -> None:
@@ -391,7 +335,6 @@ def start_plot(sync_msrmt: SyncMsrmt, info: UpdateInfo) -> None:
         sync_msrmt.state = MsrmtState.CANCELED
 
 
-# TODO: refactor!
 def plot_offline(
     sync_msrmt: SyncMsrmt,
     info: UpdateInfo,
@@ -424,7 +367,6 @@ def plot_offline(
     output_overhead = 20*np.log10(1/output_amplitude)
 
     padding = 15  # dB of padding on top and bottom
-    calib_results: list[npt.NDArray[np.float32]] = []
     for i, ax in enumerate(axes):
         out_db_spl = ch_spectra[i][mt_bin_idx]
 
@@ -441,23 +383,6 @@ def plot_offline(
         ax.plot(mt_frequencies, out_db_spl + output_overhead, 'bo-')
         ax.plot(mt_frequencies, out_max_db_spl, 'r--')
         ax.set_ylim(spec_min - padding, spec_max + padding)
-        calib_results.append(p_out_max.astype(np.float32))
-
-
-    # write data to json
-    # TODO: return handle to json for DPOAE recorder
-    cur_time = datetime.now()
-    time_stamp = cur_time.strftime("%y%m%d-%H%M%S")
-    out_calib: SpeakerCalibData = {
-        "date": time_stamp,
-        "frequencies": mt_frequencies.tolist(),
-        "max_out_ch01": calib_results[0].tolist(),
-        "max_out_ch02": calib_results[0].tolist(),
-        "phase_ch01": np.zeros_like(mt_frequencies).tolist(),
-        "phase_ch02": np.zeros_like(mt_frequencies).tolist(),
-    }
-
-    files.save_output_calibration(time_stamp, out_calib)
 
     plt.tight_layout()
     plt.show()
@@ -481,6 +406,9 @@ class OutputCalibRecorder:
 
     msrmt: SyncMsrmt
     """Instance to perform a synchronized measurement."""
+
+    results: SpeakerCalibData | None
+    """Calibration results for output channels."""
 
     def __init__(
         self,
@@ -513,10 +441,7 @@ class OutputCalibRecorder:
             num_block_samples,
             num_total_recording_samples
         )
-        msrmt_info = self.setup_info(
-            recording_duration,
-            num_total_recording_samples,
-        )
+        msrmt_info = self.setup_info(recording_duration)
         self.update_info = UpdateInfo(
             msrmt_info,
             DeviceConfig.sample_rate,
@@ -541,12 +466,19 @@ class OutputCalibRecorder:
             hw_data,
             self.signals
         )
+        self.results = None
 
     def record(self) -> None:
         """Starts the calibration."""
         print("Starting calibration...")
         # `start_msrmt` starts the application loop
         self.msrmt.start_msrmt(start_plot, self.update_info)
+
+        # Compute calibration results
+        self.compute_calib_results()
+
+        if self.results is None:
+            return
 
         # Plot all data and final result after user has
         # closed the live-measurement window.
@@ -557,25 +489,42 @@ class OutputCalibRecorder:
             self.output_amplitude
         )
 
-    # def save_recording(self) -> None:
-    #     """Stores the measurement data in binary file."""
-    #     save_path = os.path.join(
-    #         os.getcwd(),
-    #         'measurements'
-    #     )
-    #     os.makedirs(save_path, exist_ok=True)
-    #     cur_time = datetime.now()
-    #     time_stamp = cur_time.strftime("%y%m%d-%H%M%S")
-    #     file_name = 'cdpoae_msrmt_'+ time_stamp
-    #     save_path = os.path.join(save_path, file_name)
-    #     recorded_signal, spectrum = get_results(self.msrmt, self.update_info)
-    #     np.savez(save_path,
-    #         spectrum=spectrum,
-    #         recorded_signal=recorded_signal,
-    #         samplerate=DeviceConfig.sample_rate,
-    #         recorded_sync=self.msrmt.live_msrmt_data.sync_recorded
-    #     )
-    #     print(f"Saved measurement to {save_path}")
+    def compute_calib_results(self) -> None:
+        """Computes the output-channel transfer functions."""
+        if self.msrmt.state != MsrmtState.FINISHED:
+            return
+
+        ch_spectra = get_channel_spectra(self.msrmt, self.update_info)
+
+        # plot channel spectra
+        df = DeviceConfig.sample_rate / (0.5*self.update_info.block_size)
+
+        # find frequency indices to sample transfer function
+        mt_bin_idx = np.round((self.mt_frequencies/df)).astype(np.int_)
+
+        calib_results: list[npt.NDArray[np.float32]] = []
+        for ch_spec in ch_spectra:
+            out_db_spl = ch_spec[mt_bin_idx]
+
+            p_out_peak = np.sqrt(2) * 20 * 10**(out_db_spl/20)
+            p_out_max = p_out_peak / self.output_amplitude
+            calib_results.append(p_out_max.astype(np.float32))
+
+        cur_time = datetime.now()
+        time_stamp = cur_time.strftime("%y%m%d-%H%M%S")
+        self.results = {
+            "date": time_stamp,
+            "frequencies": self.mt_frequencies.tolist(),
+            "max_out_ch01": calib_results[0].tolist(),
+            "max_out_ch02": calib_results[0].tolist(),
+            "phase_ch01": np.zeros_like(self.mt_frequencies).tolist(),
+            "phase_ch02": np.zeros_like(self.mt_frequencies).tolist(),
+        }
+
+    def save_recording(self) -> None:
+        """Stores the measurement data in binary file."""
+        if self.results is not None:
+            files.save_output_calibration(self.results)
 
     def generate_output_signals(
         self,
@@ -624,23 +573,17 @@ class OutputCalibRecorder:
 
     def setup_info(
         self,
-        recording_duration: float,
-        num_block_samples: int
+        recording_duration: float
     ) -> PlotInfo:
         """Sets up live plot and measurement information."""
-        fig, ax_time, line_time, ax_spec, line_spec = setup_plot(
+        fig, ax_time, line_time = setup_plot(
             recording_duration,
-            DeviceConfig.sample_rate,
-            num_block_samples,
-            (100, 20000),
-            DeviceConfig.live_display_duration
+            DeviceConfig.sample_rate
         )
         return PlotInfo(
             fig,
             ax_time,
             line_time,
-            ax_spec,
-            line_spec,
             DeviceConfig.update_interval,
             DeviceConfig.live_display_duration
         )

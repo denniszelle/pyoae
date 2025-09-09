@@ -17,7 +17,7 @@ from pyoae.protocols import DpoaeMsrmtParams
 SYNC_CROSS: Final[int] = 10
 """Number of minimum zero crossings in sync signal."""
 
-SYNC_AMPLITUDE: Final[float] = 0.1
+SYNC_AMPLITUDE: Final[float] = 0.2
 """Amplitude of the sync signal in digital full scale."""
 
 SYNC_FREQUENCY: Final[float] = 4000

@@ -198,3 +198,6 @@ Thumbs.db
 # Ignore built documentation
 **/build/**/*.html
 **/build/*.js
+
+# Ignore measurement and calibration files
+/measurements/*

@@ -29,6 +29,7 @@ from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
 import numpy as np
 import numpy.typing as npt
+import scipy.signal
 
 from pyoae import generator
 from pyoae.calib import MicroTransferFunction, OutputCalibration
@@ -40,23 +41,17 @@ from pyoae.sync import HardwareData, RecordingData, SyncMsrmt, MsrmtState
 
 
 @dataclass
-class DpoaePlotInfo:
+class PulseDpoaePlotInfo:
     """Container with data for the measurement plot."""
 
     fig: Figure
     """Figure corresponding to the plot window."""
 
-    ax_time: Axes
+    axes: list[Axes]
     """Axis object of the time plot."""
 
-    line_time: Line2D
+    lines: list[Line2D]
     """Line object for the time plot."""
-
-    ax_spec: Axes
-    """Axis object of the spectral plot."""
-
-    line_spec: Line2D
-    """Line object for the spectral plot."""
 
     update_interval: float
     """Interval to apply processing and plot update during measurement."""
@@ -69,7 +64,7 @@ class DpoaePlotInfo:
 class DpoaeUpdateInfo:
     """Container with data for continuous DPOAE measurement updates."""
 
-    plot_info: DpoaePlotInfo
+    plot_info: PulseDpoaePlotInfo
     """Storage for the measurement plot."""
 
     fs: float
@@ -78,14 +73,8 @@ class DpoaeUpdateInfo:
     block_size: int
     """Number of samples in each block."""
 
-    f1: float
-    """Stimulus frequency in Hz of the first primary tone.
-
-    Typically, f2/f1 = 1.2.
-    """
-
-    f2: float
-    """Stimulus frequency in Hz of the second primary tone."""
+    num_recorded_blocks: int
+    """Number of recorded blocks."""
 
     artifact_rejection_thr: float
     """Threshold for simple artifact rejection.
@@ -106,13 +95,9 @@ class DpoaeUpdateInfo:
 
 
 def setup_plot(
-    recording_duration: float,
     fs: float,
-    block_size: int,
-    frequency_range: tuple[float, float],
-    live_display_duration: float,
-    is_calib_available:bool=False
-) -> tuple[Figure, Axes, Line2D, Axes, Line2D]:
+    block_size: int
+) -> tuple[Figure, list[Axes], list[Line2D]]:
     """Sets up the plots.
 
     Args:
@@ -134,38 +119,40 @@ def setup_plot(
 
     fig, axes = plt.subplots(2, 1, figsize=(10, 6))
     axes: list[Axes]
-    (ax_time, ax_spec) = axes
 
-    # Set up time plot
-    x_wave = np.arange(round(recording_duration*fs), dtype=np.float32) / fs * 1E3
-    y_wave = np.zeros_like(x_wave)
-    line_time, = ax_time.plot(
-        x_wave,
-        y_wave
-    )
-    ax_time.set_ylim(-1, 1)
-    ax_time.set_xlim(-live_display_duration, 0)
-    ax_time.set_title("Recorded Waveform")
-    ax_time.set_xlabel("Time (ms)")
-    ax_time.set_ylabel("Amplitude (full scale)")
+    time_vector = np.arange(block_size, dtype=np.float32) / fs * 1E3
+    block_duration = block_size / fs
+    lines: list[Line2D] = []
+    for axis in axes:
 
-    # Set up frequency plot
-    fft_frequencies = np.fft.rfftfreq(block_size, 1 / fs)
-    fft_values = np.zeros(len(fft_frequencies))
-    line_spec, = ax_spec.plot(fft_frequencies, fft_values)
-    print(f'Plotting spectral x-data with length: {len(fft_frequencies)}')
-    ax_spec.set_xlim(frequency_range[0], frequency_range[1])
-    ax_spec.set_ylim(-50, 100)
-    ax_spec.set_title("Spectrum")
-    ax_spec.set_xlabel("Frequency (Hz)")
-    if is_calib_available:
-        ax_spec.set_ylabel('Level (dB SPL)')
-    else:
-        ax_spec.set_ylabel("Level (dBFS)")
-    return fig, ax_time, line_time, ax_spec, line_spec
+        y_wave = np.zeros_like(time_vector)
+        line_time, = axis.plot(time_vector, y_wave)
+        lines.append(line_time)
+        axis.set_ylim(-1, 1)
+        axis.set_xlim(0, block_duration * 1E3)
+        axis.set_xlabel("Time (ms)")
+        axis.set_ylabel("Amplitude (full scale)")
+
+    axes[0].set_title("Recorded Segments")
+    #axes[1].set_title("Recorded Ensemble")
+
+    return fig, axes, lines
 
 
-def process_spectrum(
+# def get_measurement_blocks(
+#     recorded_signal: npt.NDArray[np.float32],
+#     block_size: int
+# ) -> npt.NDArray[np.float32]:
+#     """Returns 2D array of measurement blocks."""
+#     total_blocks = int(np.floor(len(recorded_signal)/block_size))
+#     block_data = recorded_signal[:total_blocks*block_size]
+
+#     # Reshape data into block structure and
+#     # remove the first and last block
+#     return block_data.reshape(-1, block_size)
+
+
+def process_average(
     recorded_signal: npt.NDArray[np.float32],
     block_size: int,
     correction_tf: MicroTransferFunction | None,
@@ -195,45 +182,26 @@ def process_spectrum(
         Array of floats containing the averaged spectrum.
     """
 
-    spectrum = None
     # Obtain an integer number of recorded blocks
     total_blocks = int(np.floor(len(recorded_signal)/block_size))
     block_data = recorded_signal[:total_blocks*block_size]
     # Only apply processing for at least 3 blocks
+    avg = np.zeros(block_size)
     if total_blocks > 2:
-        # Reshape data into block structure and
-        # remove the first and last block
-        blocks = block_data.reshape(-1, block_size)[1:-1]
+        blocks = block_data.reshape(-1, block_size)
 
         # Reject RMS values larger than a scaled version
         # of the median RMS value.
-        rms_vals = np.sqrt(np.mean(np.square(blocks), axis=1))
-        median_rms = np.median(rms_vals)
-        accepted_idc = np.where(rms_vals<artifact_rejection_thr*median_rms)[0]
+        # rms_vals = np.sqrt(np.mean(np.square(blocks), axis=1))
+        # median_rms = np.median(rms_vals)
+        # accepted_idc = np.where(rms_vals<artifact_rejection_thr*median_rms)[0]
 
         # Average blocks
-        if len(accepted_idc):
-            avg = blocks[accepted_idc].mean(axis=0)
-        else:
-            avg = np.zeros(block_size)
+        # if len(accepted_idc):
+        #     avg = blocks[accepted_idc].mean(axis=0)
+        avg = blocks.mean(axis=0)
 
-        # Apply FFT, correct spectrum by microphone calibration,
-        # convert to dBFS or dB SPL.
-        if np.sqrt(np.mean(np.square(avg))) > 0:
-            spectrum = 2*np.abs(np.fft.rfft(avg))/len(avg)
-            # dBFS and dB SPL represent RMS values
-            # assume FFT bins represent sine waves and estimate
-            # RMS by dividing by sqrt(2)
-            spectrum /= np.sqrt(2)
-            if correction_tf is None:
-                spectrum = 20*np.log10(spectrum)
-            else:
-                spectrum /= correction_tf.amplitudes
-                spectrum = 20*np.log10(spectrum/20)
-
-    if spectrum is None:
-        spectrum = np.abs(np.fft.rfft(np.zeros(block_size, np.float32)))
-    return spectrum.astype(np.float32)
+    return avg.astype(np.float32)
 
 
 def get_results(
@@ -258,6 +226,8 @@ def get_results(
     """
 
     # Only update while or after main measurement
+    avg = np.zeros(info.block_size, np.float32)
+    recorded_signal = np.zeros(info.block_size, np.float32)
     if sync_msrmt.state in [
         MsrmtState.RECORDING,
         MsrmtState.END_RECORDING,
@@ -266,21 +236,22 @@ def get_results(
     ]:
         recorded_signal = sync_msrmt.get_recorded_signal()
 
-        spectrum = process_spectrum(
-            recorded_signal,
-            info.block_size,
-            info.input_trans_fun,
-            info.artifact_rejection_thr
-        )
+        if sync_msrmt.state is MsrmtState.FINISHED:
+            # do not process average during measurement
+            # TODO: perform computation on distinguished thread
+            avg = process_average(
+                recorded_signal,
+                info.block_size,
+                info.input_trans_fun,
+                info.artifact_rejection_thr
+            )
 
-        return recorded_signal, spectrum
-
-    return np.zeros(0,np.float32), np.zeros(0,np.float32)
+    return recorded_signal, avg
 
 
 def update_plot_data(
     recorded_signal: npt.NDArray[np.float32],
-    spectrum: npt.NDArray[np.float32],
+    avg: npt.NDArray[np.float32],
     info: DpoaeUpdateInfo
 ) -> tuple[Line2D, Line2D]:
     """Updates the plot data.
@@ -299,39 +270,43 @@ def update_plot_data(
         - **line_spec**: Line object with the spectral data of the signal
     """
 
-    if len(spectrum) == 0:
-        return info.plot_info.line_time, info.plot_info.line_spec
+    if len(recorded_signal) < (info.block_size * (info.num_recorded_blocks + 1)):
+        return info.plot_info.lines[0], info.plot_info.lines[1]
 
-    n_samples_displayed = int(
-        info.plot_info.live_display_duration * 1E-3 * info.fs
+    #x_data = np.arange(info.block_size) / info.fs * 1E3
+
+    # determine indices of current segment interval
+    idx_start = info.num_recorded_blocks * info.block_size
+    idx_end = (info.num_recorded_blocks + 1) * info.block_size
+    info.num_recorded_blocks += 1
+    # info.plot_info.lines[0].set_data(
+    #     x_data,
+    #     recorded_signal[idx_start:idx_end]
+    # )
+    info.plot_info.lines[0].set_ydata(
+        recorded_signal[idx_start:idx_end]
     )
-
-    if len(recorded_signal) < n_samples_displayed:
-        return info.plot_info.line_time, info.plot_info.line_spec
-
-    x_data = -np.flipud(np.arange(n_samples_displayed) / info.fs * 1E3)
-
-    info.plot_info.line_time.set_data(
-        x_data,
-        recorded_signal[-n_samples_displayed:]
-    )
-
-    info.plot_info.line_spec.set_ydata(spectrum)
+    info.plot_info.lines[1].set_ydata(avg)
 
     # Update y-axis limits.
-    spec_min = min(spectrum[1:])
-    spec_max = max(spectrum)
-    padding = 15  # dB of padding on top and bottom
+    # avg_min = min(avg)
+    # avg_max = max(avg)
+    padding = 0.0 # padding on top and bottom
 
-    if (
-        spec_min < info.plot_info.ax_spec.get_ylim()[0]
-        or spec_min > info.plot_info.ax_spec.get_ylim()[0] + 2*padding
-        or spec_max > info.plot_info.ax_spec.get_ylim()[1]
-        or spec_max < info.plot_info.ax_spec.get_ylim()[1] - 2*padding
-    ):
-        info.plot_info.ax_spec.set_ylim(spec_min - padding, spec_max + padding)
+    rec_min = min(recorded_signal)
+    rec_max = max(recorded_signal)
 
-    return info.plot_info.line_time, info.plot_info.line_spec
+    rec_y_lim = info.plot_info.axes[0].get_ylim()
+    if rec_min > rec_y_lim[0] or rec_max < rec_y_lim[1]:
+        info.plot_info.axes[0].set_ylim(rec_min - padding, rec_max + padding)
+
+    # if (
+    #     avg_min < info.plot_info.axes[1].get_ylim()[0]
+    #     or avg_max > info.plot_info.axes[1].get_ylim()[1]
+    # ):
+    #     info.plot_info.axes[1].set_ylim(avg_min - padding, avg_max + padding)
+
+    return info.plot_info.lines[0], info.plot_info.lines[1]
 
 
 def update_msrmt(
@@ -357,14 +332,14 @@ def update_msrmt(
 
     if sync_msrmt.state == MsrmtState.FINISHED:
         # plt.close(info.fig)
-        return info.plot_info.line_time, info.plot_info.line_spec
+        return info.plot_info.lines[0], info.plot_info.lines[1]
 
     if sync_msrmt.state == MsrmtState.FINISHING:
         sync_msrmt.state = MsrmtState.FINISHED
 
-    recorded_signal, spectrum = get_results(sync_msrmt, info)
-
-    return update_plot_data(recorded_signal, spectrum, info)
+    # recorded_signal, avg = get_results(sync_msrmt, info)
+    return info.plot_info.lines[0], info.plot_info.lines[1]
+    #return update_plot_data(recorded_signal, avg, info)
 
 
 def start_plot(sync_msrmt: SyncMsrmt, info: DpoaeUpdateInfo) -> None:
@@ -383,7 +358,11 @@ def start_plot(sync_msrmt: SyncMsrmt, info: DpoaeUpdateInfo) -> None:
         sync_msrmt.state = MsrmtState.CANCELED
 
 
-def plot_offline(sync_msrmt: SyncMsrmt, info: DpoaeUpdateInfo) -> None:
+def plot_offline(
+    sync_msrmt: SyncMsrmt,
+    info: DpoaeUpdateInfo,
+    stimulus: PulseDpoaeStimulus
+) -> None:
     """Plots the final results in a non-updating plot.
 
     This function obtains the results from the measurement object, creates a
@@ -392,27 +371,78 @@ def plot_offline(sync_msrmt: SyncMsrmt, info: DpoaeUpdateInfo) -> None:
     if sync_msrmt.state != MsrmtState.FINISHED:
         return
 
-    has_input_calib =  info.input_trans_fun is not None
+    # has_input_calib =  info.input_trans_fun is not None
 
-    recorded_signal, spectrum = get_results(sync_msrmt, info)
-    _, ax_time, line_time, ax_spec, line_spec = setup_plot(
-        sync_msrmt.recording_data.msrmt_duration,
+    recorded_signal, avg = get_results(sync_msrmt, info)
+    _, axes, lines = setup_plot(
         sync_msrmt.recording_data.fs,
-        info.block_size,
-        (info.f1*0.6, info.f2*1.5),
-        info.plot_info.live_display_duration,
-        is_calib_available=has_input_calib
+        info.block_size
     )
-    line_time.set_xdata(np.arange(len(recorded_signal))/info.fs)
-    line_time.set_ydata(recorded_signal)
-    ax_time.set_xlim(0, sync_msrmt.recording_data.msrmt_duration)
-    ax_time.set_xlabel("Recording Time (s)")
 
-    spec_min = min(spectrum[1:])
-    spec_max = max(spectrum)
-    padding = 15  # dB of padding on top and bottom
-    ax_spec.set_ylim(spec_min - padding, spec_max + padding)
-    line_spec.set_ydata(spectrum)
+    # plot recording overview
+    lines[0].set_xdata(np.arange(len(recorded_signal))/info.fs)
+    lines[0].set_ydata(recorded_signal)
+    axes[0].set_xlim(0, sync_msrmt.recording_data.msrmt_duration)
+    axes[0].set_xlabel("Recording Time (s)")
+
+
+    # rec_min = min(recorded_signal)
+    # rec_max = max(recorded_signal)
+    padding = 0  # padding on top and bottom
+
+
+    # filter signal and convert to muPa
+    fdp = 2*stimulus.f1 - stimulus.f2
+    if info.input_trans_fun is not None:
+        s = info.input_trans_fun.get_sensitivity(fdp)
+        avg /= s  # convert to muPa
+
+    avg = avg - np.mean(avg)
+
+    hp_order = 525
+    hp_delay = int(0.5*(hp_order-1))
+
+    b_hp = scipy.signal.firwin(
+        hp_order,
+        200,
+        pass_zero='highpass',  # type: ignore
+        fs=DeviceConfig.sample_rate
+    )
+    avg_hp = np.zeros_like(avg)
+    avg_hp[:-hp_delay] = scipy.signal.lfilter(b_hp, 1, avg)[hp_delay:]
+
+    # perform simple band-pass filtering
+    t_hw_sp = generator.short_pulse_half_width(stimulus.f2) * 1E-3
+    bw = 0.5 * (1 / t_hw_sp)
+    df = int(0.5*bw)
+    cutoff = fdp + np.array([-df, df], dtype=np.float32)
+    bp_order = 1025
+    b = scipy.signal.firwin(
+        bp_order,
+        cutoff,
+        pass_zero='bandpass',  # type: ignore
+        fs=DeviceConfig.sample_rate
+    )
+
+    # add ramp
+    ramp_len = int(
+        DeviceConfig.ramp_duration * 1E-3 * DeviceConfig.sample_rate
+    )
+    ramp = 0.5*(1 - np.cos(2*np.pi*np.arange(ramp_len)/(2*ramp_len)))
+    ramp = ramp.astype(np.float32)
+    win = np.ones_like(avg)
+    win[:ramp_len] = ramp
+    win[-ramp_len:] = ramp[::-1]
+    avg_hp *= win
+
+    bp_delay = int(0.5*(bp_order-1))
+    avg_bp = np.zeros_like(avg)
+    avg_bp[:-bp_delay] = scipy.signal.lfilter(b, 1, avg_hp)[bp_delay:]
+
+    avg_min = min(avg_bp)
+    avg_max = max(avg_bp)
+    axes[1].set_ylim(avg_min - padding, avg_max + padding)
+    lines[1].set_ydata(avg_bp)
     plt.tight_layout()
     plt.show()
 
@@ -432,18 +462,26 @@ class PulseDpoaeRecorder:
     msrmt: SyncMsrmt
     """Instance to perform a synchronized OAE measurement."""
 
+    subject: str
+
+    ear: str
+
     def __init__(
         self,
         msrmt_params: PulseDpoaeMsrmtParams,
         mic_trans_fun: MicroTransferFunction | None = None,
-        out_trans_fun: OutputCalibration | None = None
+        out_trans_fun: OutputCalibration | None = None,
+        subject: str = '',
+        ear: str = ''
     ) -> None:
         """Creates a DPOAE recorder for given measurement parameters."""
+        self.subject = subject
+        self.ear = ear
         num_block_samples = int(
             msrmt_params['block_duration'] * DeviceConfig.sample_rate
         )
         num_total_recording_samples = (
-            msrmt_params['num_averaging_blocks'] * num_block_samples
+            msrmt_params['num_averaging_blocks'] * num_block_samples * 4
         )
         block_duration = num_block_samples / DeviceConfig.sample_rate
         recording_duration = num_total_recording_samples / DeviceConfig.sample_rate
@@ -472,20 +510,15 @@ class PulseDpoaeRecorder:
             num_total_recording_samples,
             out_calib=out_trans_fun
         )
-        has_input_calib = mic_trans_fun is not None
-        dpoae_info = self.setup_info(
-            recording_duration,
-            num_block_samples,
-            is_calib_available=has_input_calib
-        )
+        # has_input_calib = mic_trans_fun is not None
+        dpoae_info = self.setup_info(num_block_samples)
         ARTIFACT_REJ_RATIO = 1.8  # TODO: replace
         self.update_info = DpoaeUpdateInfo(
             dpoae_info,
             DeviceConfig.sample_rate,
             num_block_samples,
-            self.stimulus.f1,
-            self.stimulus.f2,
-            ARTIFACT_REJ_RATIO,
+            num_recorded_blocks=0,
+            artifact_rejection_thr=ARTIFACT_REJ_RATIO,
             input_trans_fun=mic_trans_fun
         )
         rec_data = RecordingData(
@@ -515,7 +548,7 @@ class PulseDpoaeRecorder:
 
         # Plot all data and final result after user has
         # closed the live-measurement window.
-        plot_offline(self.msrmt, self.update_info)
+        plot_offline(self.msrmt, self.update_info, self.stimulus)
 
     def save_recording(self) -> None:
         """Stores the measurement data in binary file."""
@@ -526,13 +559,17 @@ class PulseDpoaeRecorder:
         os.makedirs(save_path, exist_ok=True)
         cur_time = datetime.now()
         time_stamp = cur_time.strftime("%y%m%d-%H%M%S")
-        file_name = 'cdpoae_msrmt_'+ time_stamp
+        file_name = f'pdpoae_msrmt_{time_stamp}_{self.subject}_{self.ear}_{self.stimulus.f2}_{self.stimulus.level2}'
         save_path = os.path.join(save_path, file_name)
-        recorded_signal, spectrum = get_results(self.msrmt, self.update_info)
+        recorded_signal, _ = get_results(self.msrmt, self.update_info)
         np.savez(save_path,
-            spectrum=spectrum,
             recorded_signal=recorded_signal,
             samplerate=DeviceConfig.sample_rate,
+            f1=self.stimulus.f1,
+            f2=self.stimulus.f2,
+            level1=self.stimulus.level1,
+            level2=self.stimulus.level2,
+            num_block_samples=self.update_info.block_size,
             recorded_sync=self.msrmt.live_msrmt_data.sync_recorded
         )
         print(f"Saved measurement to {save_path}")
@@ -569,25 +606,17 @@ class PulseDpoaeRecorder:
 
     def setup_info(
         self,
-        recording_duration: float,
         num_block_samples: int,
-        is_calib_available: bool = False,
-    ) -> DpoaePlotInfo:
+    ) -> PulseDpoaePlotInfo:
         """Sets up live plot and measurement information."""
-        fig, ax_time, line_time, ax_spec, line_spec = setup_plot(
-            recording_duration,
+        fig, axes, lines = setup_plot(
             DeviceConfig.sample_rate,
-            num_block_samples,
-            (self.stimulus.f1*0.6, self.stimulus.f2*1.5),
-            DeviceConfig.live_display_duration,
-            is_calib_available=is_calib_available
+            num_block_samples
         )
-        return DpoaePlotInfo(
+        return PulseDpoaePlotInfo(
             fig,
-            ax_time,
-            line_time,
-            ax_spec,
-            line_spec,
+            axes,
+            lines,
             DeviceConfig.update_interval,
             DeviceConfig.live_display_duration
         )

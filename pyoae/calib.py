@@ -232,3 +232,18 @@ class MicroTransferFunction:
         self.frequencies = frequencies_ip
         self.amplitudes = amplitudes_ip.astype(np.float32)
         self.phases = phases_ip.astype(np.float32)
+
+    def get_sensitivity(self, f: float) -> float:
+        """Returns the output sensitivity in DFS/muPa.
+
+        Args:
+            f: frequency at which transfer function should be sampled
+        """
+
+
+        # TODO: check frequency boundaries
+        # find frequency-bin index
+        # (alternatively, we could store the frequency resolution
+        # in order to calculate the frequency-bin index)
+        idx = np.argmin(np.abs(self.frequencies - f))
+        return self.amplitudes[idx]

@@ -376,8 +376,8 @@ def calculate_pressure_amplitudes(
     amplitude2 = converter.db_spl_to_peak_mupa(level2)
     print(
         'Setting output pressures for DPOAE acquisition: '
-        f'L1: {level1:.1f} dB SPL ({amplitude1:.5f} re FS).'
-        f'L2: {level2:.1f} dB SPL ({amplitude2:.5f} re FS).'
+        f'L1: {level1:.1f} dB SPL ({amplitude1:.5f} muPa).'
+        f'L2: {level2:.1f} dB SPL ({amplitude2:.5f} muPa).'
     )
     return (amplitude1, amplitude2)
 

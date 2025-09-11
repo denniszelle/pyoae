@@ -1,28 +1,19 @@
-"""Example script to record continuous DPOAEs.
+"""Script to record continuous DPOAEs.
 
 This script performs a real-time acquisition of continuous distortion-product
 otoacoustic emissions (DPOAEs) using two primary tones (f1 and f2).
 The recorded microphone signal is analyzed in real time, and live plots of
 the time signal and spectrum are displayed.
 
-Key steps performed by this script:
-- Configures and generates sinusoidal stimulus signals
-- Sets up real-time visualization of signal and spectrum
-- Runs a synchronized two-channel playback and recording loop
-- Applies artifact rejection based on an RMS threshold
-- Saves the measurement data to a `.npz` file for further analysis
-
-This script is intended as an example and a starting point for continuous
-DPOAE measurements.
 
 Run the following command from the project root directory to start:
-    python -m examples.live_cdpoae_script
+    python -m record_dpoae
 
 Note:
-    Sound device IDs or names should be known beforehand and can be obtained
-      using the display_devices script.
+    Sound device IDs or names should be known beforehand and can be
+      obtained using the display_devices script.
 
-    Users should modify parameters defined in the `device_config` module
+    Users should modify parameters defined in the `device_config.json`
       to match their specific hardware and experimental setup.
 """
 

@@ -72,7 +72,7 @@ def main(
             print(f'Calibration saved with time stamp: {calib_id}.')
 
 
-parser = argparse.ArgumentParser(description='PyOAE DPOAE Recorder')
+parser = argparse.ArgumentParser(description='PyOAE Multi-Tone Calibration')
 parser.add_argument(
     '--mic',
     default=argparse.SUPPRESS,

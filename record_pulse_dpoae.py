@@ -1,26 +1,23 @@
-"""Example script to record pulsed DPOAEs.
+"""Script to record pulsed DPOAEs.
 
 This script performs a real-time acquisition of pulsed distortion-product
 otoacoustic emissions (DPOAEs) using two pulsed primary tones (f1 and f2).
 
-Key steps performed by this script:
-- Configures and generates sinusoidal stimulus signals
-- Sets up real-time visualization of signal and spectrum
-- Runs a synchronized two-channel playback and recording loop
-- Applies artifact rejection based on an RMS threshold
-- Saves the measurement data to a `.npz` file for further analysis
-
 This script is intended as an example and a starting point for continuous
 DPOAE measurements.
 
+
 Run the following command from the project root directory to start:
-    python -m examples.live_cdpoae_script
+
+    python3 -m record_pulse_dpoae --mic '2ROTIU6H_3C9CESK1W6.json'
+      --protocol 'protocols/f2sp_ieb_ae.json' --calib '250910-180811'
+      --subject 'AE' --ear 'right'  --save
 
 Note:
-    Sound device IDs or names should be known beforehand and can be obtained
-      using the display_devices script.
+    Sound device IDs or names should be known beforehand and can be
+      obtained using the `display_devices` script.
 
-    Users should modify parameters defined in the `device_config` module
+    Users should modify parameters defined in the `device_config.json`
       to match their specific hardware and experimental setup.
 """
 
@@ -81,7 +78,9 @@ def main(
         dpoae_recorder = PulseDpoaeRecorder(
             msrmt_params,
             mic_trans_fun,
-            out_trans_fun=output_calib_fun
+            out_trans_fun=output_calib_fun,
+            subject=subject,
+            ear=ear
         )
         dpoae_recorder.record()
         if save:

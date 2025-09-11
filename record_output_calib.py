@@ -1,28 +1,20 @@
-"""Example script to record continuous DPOAEs.
+"""Script to calibrate output channels.
 
-This script performs a real-time acquisition of continuous distortion-product
-otoacoustic emissions (DPOAEs) using two primary tones (f1 and f2).
-The recorded microphone signal is analyzed in real time, and live plots of
-the time signal and spectrum are displayed.
+This script performs a multi-tone calibration of output channels
+with respect to a given input calibration. Typically, it is used
+to calibrate two speakers of a DPOAE ear probe.
 
-Key steps performed by this script:
-- Configures and generates sinusoidal stimulus signals
-- Sets up real-time visualization of signal and spectrum
-- Runs a synchronized two-channel playback and recording loop
-- Applies artifact rejection based on an RMS threshold
-- Saves the measurement data to a `.npz` file for further analysis
-
-This script is intended as an example and a starting point for continuous
-DPOAE measurements.
 
 Run the following command from the project root directory to start:
-    python -m examples.live_cdpoae_script
+
+    python3 -m record_output_calib --mic '2ROTIU6H_3C9CESK1W6.json' --save
+
 
 Note:
     Sound device IDs or names should be known beforehand and can be obtained
-      using the display_devices script.
+      using the display_devices.
 
-    Users should modify parameters defined in the `device_config` module
+    Users should modify parameters defined in the `device_config.json`
       to match their specific hardware and experimental setup.
 """
 

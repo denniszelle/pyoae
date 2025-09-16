@@ -9,9 +9,7 @@ DPOAE measurements.
 
 Run the following command from the project root directory to start:
 
-    python3 -m record_pulse_dpoae --mic '2ROTIU6H_3C9CESK1W6.json'
-      --protocol 'protocols/f2sp_ieb_ae.json' --calib '250910-180811'
-      --subject 'AE' --ear 'right'  --save
+    python3 -m record_pulse_dpoae --mic '2ROTIU6H_3C9CESK1W6.json' --protocol 'protocols/pulse_dpoae_iofs.json' --calib '250913-160850' --subject 'S005' --ear 'right'  --save
 
 Note:
     Sound device IDs or names should be known beforehand and can be

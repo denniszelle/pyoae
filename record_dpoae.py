@@ -8,6 +8,7 @@ the time signal and spectrum are displayed.
 
 Run the following command from the project root directory to start:
     python -m record_dpoae
+    python3 -m record_dpoae --mic '2ROTIU6H_3C9CESK1W6.json' --protocol 'protocols/cont_dpoae_template.json' --calib '250915-171114' --save
 
 Note:
     Sound device IDs or names should be known beforehand and can be
@@ -74,7 +75,9 @@ def main(
         dpoae_recorder = DpoaeRecorder(
             msrmt_params,
             mic_trans_fun,
-            out_trans_fun=output_calib_fun
+            out_trans_fun=output_calib_fun,
+            subject=subject,
+            ear=ear
         )
         dpoae_recorder.record()
         if save:

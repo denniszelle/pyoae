@@ -1,18 +1,20 @@
-"""Classes and functions to record continuous DPOAEs
+"""Classes and functions to record pulsed DPOAEs
 
-This module contains utility functions used to acquire, process
-and analyze continuous distortion-product otoacoustic emissions (cDPOAE).
-These functions are typically used within example scripts, but can
-also be imported and reused in other analysis pipelines.
+This module contains utility functions used to acquire pulsed
+distortion-product otoacoustic emissions (pDPOAE).
+These functions are typically used within recording scripts, but can
+also be imported and reused in other recording pipelines.
 
 Key functionalities include:
-- Setup of live plots for the measurement
-- Robust, synchronous spectrum estimation
+- Setup of plots for the measurement
+- Simplified averaging
 
 Typical usage:
 
 ```
-    import pyoae.cdpoae
+    from pyoae.pdpoae import PulseDpoaeRecorder
+    dpoae_recorder = PulseDpoaeRecorder(msrmt_params)
+    dpoae_recorder.record()
 ```
 
 This module is not intended to be run directly.
@@ -32,6 +34,7 @@ import numpy.typing as npt
 import scipy.signal
 
 from pyoae import generator
+from pyoae import helpers
 from pyoae.calib import MicroTransferFunction, OutputCalibration
 from pyoae.device.device_config import DeviceConfig
 from pyoae.generator import PulseDpoaeStimulus
@@ -394,6 +397,7 @@ def plot_offline(
     # filter signal and convert to muPa
     fdp = 2*stimulus.f1 - stimulus.f2
     if info.input_trans_fun is not None:
+        # TODO: use FFT for unfiltered signals?
         s = info.input_trans_fun.get_sensitivity(fdp)
         avg /= s  # convert to muPa
 
@@ -463,8 +467,10 @@ class PulseDpoaeRecorder:
     """Instance to perform a synchronized OAE measurement."""
 
     subject: str
+    """Name/ID of the subject to be used for the measurement file name."""
 
     ear: str
+    """Recording ear (left/right) to be used for the measurement file name."""
 
     def __init__(
         self,
@@ -559,7 +565,15 @@ class PulseDpoaeRecorder:
         os.makedirs(save_path, exist_ok=True)
         cur_time = datetime.now()
         time_stamp = cur_time.strftime("%y%m%d-%H%M%S")
-        file_name = f'pdpoae_msrmt_{time_stamp}_{self.subject}_{self.ear}_{self.stimulus.f2}_{self.stimulus.level2}'
+        parts = [
+            "pdpoae_msrmt",
+            time_stamp,
+            helpers.sanitize_filename_part(self.subject),
+            helpers.sanitize_filename_part(self.ear),
+            str(self.stimulus.f2),
+            str(self.stimulus.level2),
+        ]
+        file_name = "_".join(filter(None, parts))
         save_path = os.path.join(save_path, file_name)
         recorded_signal, _ = get_results(self.msrmt, self.update_info)
         np.savez(save_path,

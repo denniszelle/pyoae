@@ -12,7 +12,9 @@ Key functionalities include:
 Typical usage:
 
 ```
-    import pyoae.cdpoae
+    from pyoae.cdpoae import DpoaeRecorder
+    dpoae_recorder = DpoaeRecorder(msrmt_params)
+    dpoae_recorder.record()
 ```
 
 This module is not intended to be run directly.
@@ -31,6 +33,7 @@ import numpy as np
 import numpy.typing as npt
 
 from pyoae import generator
+from pyoae import helpers
 from pyoae.calib import MicroTransferFunction, OutputCalibration
 from pyoae.device.device_config import DeviceConfig
 from pyoae.generator import ContDpoaeStimulus
@@ -432,13 +435,23 @@ class DpoaeRecorder:
     msrmt: SyncMsrmt
     """Instance to perform a synchronized OAE measurement."""
 
+    subject: str
+    """Name/ID of the subject to be used for the measurement file name."""
+
+    ear: str
+    """Recording ear (left/right) to be used for the measurement file name."""
+
     def __init__(
         self,
         msrmt_params: DpoaeMsrmtParams,
         mic_trans_fun: MicroTransferFunction | None = None,
-        out_trans_fun: OutputCalibration | None = None
+        out_trans_fun: OutputCalibration | None = None,
+        subject: str = '',
+        ear: str = ''
     ) -> None:
         """Creates a DPOAE recorder for given measurement parameters."""
+        self.subject = subject
+        self.ear = ear
         num_block_samples = int(
             msrmt_params['block_duration'] * DeviceConfig.sample_rate
         )
@@ -528,6 +541,15 @@ class DpoaeRecorder:
         time_stamp = cur_time.strftime("%y%m%d-%H%M%S")
         file_name = 'cdpoae_msrmt_'+ time_stamp
         save_path = os.path.join(save_path, file_name)
+        parts = [
+            "pdpoae_msrmt",
+            time_stamp,
+            helpers.sanitize_filename_part(self.subject),
+            helpers.sanitize_filename_part(self.ear),
+            str(self.stimulus.f2),
+            str(self.stimulus.level2),
+        ]
+        file_name = "_".join(filter(None, parts))
         recorded_signal, spectrum = get_results(self.msrmt, self.update_info)
         np.savez(save_path,
             spectrum=spectrum,

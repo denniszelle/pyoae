@@ -542,7 +542,7 @@ class DpoaeRecorder:
         file_name = 'cdpoae_msrmt_'+ time_stamp
         save_path = os.path.join(save_path, file_name)
         parts = [
-            "pdpoae_msrmt",
+            "cdpoae_msrmt",
             time_stamp,
             helpers.sanitize_filename_part(self.subject),
             helpers.sanitize_filename_part(self.ear),

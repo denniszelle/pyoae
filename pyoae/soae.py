@@ -12,7 +12,10 @@ Key functionalities include:
 Typical usage:
 
 ```
-    import pyoae.soae
+    from pyoae.soae import SoaeRecorder
+    msrmt_params = files.load_soae_protocol(protocol)
+    soae_recorder = SoaeRecorder(msrmt_params)
+    soae_recorder.record()
 ```
 
 This module is not intended to be run directly.
@@ -32,6 +35,7 @@ import numpy as np
 import numpy.typing as npt
 import scipy.signal
 
+from pyoae import helpers
 from pyoae.calib import MicroTransferFunction
 from pyoae.device.device_config import DeviceConfig
 from pyoae.protocols import SoaeMsrmtParams
@@ -453,9 +457,22 @@ class SoaeRecorder:
     msrmt: SyncMsrmt
     """Instance to perform a synchronized OAE measurement."""
 
+    subject: str
+    """Name/ID of the subject to be used for the measurement file name."""
 
-    def __init__(self, msrmt_params: SoaeMsrmtParams) -> None:
+    ear: str
+    """Recording ear (left/right) to be used for the measurement file name."""
+
+
+    def __init__(
+        self,
+        msrmt_params: SoaeMsrmtParams,
+        subject: str = '',
+        ear: str = ''
+    ) -> None:
         """Creates an SOAE recorder from measurement parameters."""
+        self.subject = subject
+        self.ear = ear
         num_block_samples = int(
             msrmt_params['block_duration'] * DeviceConfig.sample_rate
         )
@@ -509,7 +526,13 @@ class SoaeRecorder:
         os.makedirs(save_path, exist_ok=True)
         cur_time = datetime.now()
         time_stamp = cur_time.strftime("%y%m%d-%H%M%S")
-        file_name = 'soae_msrmt_'+ time_stamp
+        parts = [
+            'soae_msrmt',
+            time_stamp,
+            helpers.sanitize_filename_part(self.subject),
+            helpers.sanitize_filename_part(self.ear),
+        ]
+        file_name = "_".join(filter(None, parts))
         save_path = os.path.join(save_path, file_name)
         recorded_signal, spectrum = get_results(self.msrmt, self.update_info)
         np.savez(

@@ -53,7 +53,11 @@ def main(
     print(DeviceConfig())
 
     msrmt_params = files.load_soae_protocol(protocol)
-    soae_recorder = SoaeRecorder(msrmt_params)
+    soae_recorder = SoaeRecorder(
+        msrmt_params,
+        subject=subject,
+        ear=ear
+    )
     soae_recorder.record()
     if save:
         soae_recorder.save_recording()

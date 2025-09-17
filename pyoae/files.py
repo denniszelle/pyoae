@@ -5,8 +5,11 @@ import os
 from typing import Any
 
 from pyoae import calib
+from pyoae import get_logger
 from pyoae.device.device_config import DeviceConfig
 from pyoae import protocols
+
+log = get_logger(__name__)
 
 def load_json_file(file_path: str) -> dict[str, Any]:
     """Loads the content of a json file."""
@@ -15,7 +18,7 @@ def load_json_file(file_path: str) -> dict[str, Any]:
         with open(file_path, 'r', encoding='utf-8') as input_file:
             output_dict = json.load(input_file)
     except FileNotFoundError:
-        print(f'Could not load {file_path}. File not found.')
+        log.error('Could not load %s. File not found.', file_path)
         output_dict = {}
 
     return output_dict
@@ -27,7 +30,8 @@ def load_device_config(file_path: str) -> None:
     if config_data:
         for key, entry in config_data.items():
             DeviceConfig.set(key, entry)
-    # TODO: log errors if configuration was not found or was invalid
+    else:
+        log.error('Failed to load device configuration from %s', file_path)
 
 
 def load_micro_calib(file_path: str) -> calib.MicroCalibData:
@@ -35,6 +39,9 @@ def load_micro_calib(file_path: str) -> calib.MicroCalibData:
     d = {}
     if file_path:
         d = load_json_file(file_path)
+    else:
+        log.error('Micro calibration %s not found.', file_path)
+        log.warning('Using empty microphone calibration instead.')
     micro_calib_data = calib.get_empty_micro_calib_data()
 
     if d:
@@ -50,6 +57,8 @@ def load_output_calib(file_path: str) -> calib.SpeakerCalibData:
     d = {}
     if file_path:
         d = load_json_file(file_path)
+    else:
+        log.error('Output calibration %s not found.', file_path)
     out_calib_data = calib.get_empty_speaker_calib_data()
 
     if d:
@@ -60,12 +69,17 @@ def load_output_calib(file_path: str) -> calib.SpeakerCalibData:
     return out_calib_data
 
 
-def load_soae_protocol(file_path: str | None = None) -> protocols.SoaeMsrmtParams:
+def load_soae_protocol(
+    file_path: str | None = None
+) -> protocols.SoaeMsrmtParams:
     """Loads the SOAE measurement parameters or returns default."""
     msrmt_params = protocols.get_default_soae_msrmt_params()
     d = {}
     if file_path:
         d = load_json_file(file_path)
+    else:
+        log.error('SOAE protocol %s not found.', file_path)
+        log.warning('Using default SOAE protocol instead.')
 
     if d:
         for key in msrmt_params:
@@ -75,13 +89,17 @@ def load_soae_protocol(file_path: str | None = None) -> protocols.SoaeMsrmtParam
     return msrmt_params
 
 
-def load_dpoae_protocol(file_path: str) -> list[protocols.DpoaeMsrmtParams]:
+def load_dpoae_protocol(
+    file_path: str
+) -> list[protocols.DpoaeMsrmtParams]:
     """Loads a DPOAE measurement protocol."""
-    # TODO: check content of protocol
     if file_path:
         d = load_json_file(file_path)
+        # TODO: check content of protocol
         if 'msrmts' in d:
             return d['msrmts']
+    else:
+        log.error('Failed to load DPOAE protocol from %s', file_path)
     return []
 
 
@@ -89,11 +107,13 @@ def load_pulsed_dpoae_protocol(
     file_path: str
 ) -> list[protocols.PulseDpoaeMsrmtParams]:
     """Loads a Pulse-DPOAE measurement protocol."""
-    # TODO: check content of protocol
     if file_path:
         d = load_json_file(file_path)
+        # TODO: verify content of protocol
         if 'msrmts' in d:
             return d['msrmts']
+    else:
+        log.error('Failed to load pulsed DPOAE protocol from %s', file_path)
     return []
 
 
@@ -112,9 +132,6 @@ def save_output_calibration(
     try:
         with open(file_path, mode='w', encoding='utf-8') as output_file:
             json.dump(out_calib, output_file, indent="\t")
-            #json.dump(out_calib, output_file, indent="\t", cls=ExportDataNumpyEncoder)
-
+        log.info('Output calibration saved to %s.', file_name)
     except (FileNotFoundError, TypeError, ValueError) as e:
-        print(f'Error saving {file_path}.')
-        print(e)
-    print('Output calibration saved to {file_name}.')
+        log.error('Error saving to %s - %s.', file_path, e)

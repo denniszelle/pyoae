@@ -14,7 +14,7 @@ This script is intended to be used as an example and entry point for
 SOAE measurements.
 
 Run the following command from the project root directory to start:
-    python -m examples.live_soae_script
+    python -m record_soae
 
 Note:
     Sound device IDs or names should be known beforehand and can be obtained
@@ -25,6 +25,7 @@ Note:
 """
 
 import argparse
+import logging
 
 from pyoae import files
 from pyoae.device.device_config import DeviceConfig
@@ -33,6 +34,12 @@ from pyoae.soae import SoaeRecorder
 
 DEVICE_CONFIG_FILE = 'device_config.json'
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
+
+logger = logging.getLogger('SOAE Recorder')
 
 def main(
     protocol: str = '',
@@ -42,15 +49,20 @@ def main(
 ) -> None:
     """Main function executing an SOAE measurement."""
 
-    print('SOAE recorder started with following options:')
-    print(f'  Protocol: {protocol}')
-    print(f'  Subject ID: {subject} - ear: {ear}')
-    if save:
-        print('Recording will be saved in files.')
+    logger.info('SOAE recorder started with following options:')
 
-    print('Loading configuration.')
+    if protocol:
+        logger.info('  Protocol: %s', protocol)
+    if subject:
+        logger.info('  Subject ID: %s', subject)
+    if ear:
+        logger.info('  Ear: %s', ear)
+    if save:
+        logger.info('Recording will be saved.')
+
+    logger.info('Loading global configuration from %s.', DEVICE_CONFIG_FILE)
     files.load_device_config(DEVICE_CONFIG_FILE)
-    print(DeviceConfig())
+    logger.info('Device Configuration: %s', DeviceConfig())
 
     msrmt_params = files.load_soae_protocol(protocol)
     soae_recorder = SoaeRecorder(

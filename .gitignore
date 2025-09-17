@@ -201,7 +201,10 @@ Thumbs.db
 
 # Ignore measurement and calibration files
 /measurements/*
+/mic/*
+
+# Ignorer user's protocol files
+/protocols/*
 
 # Ignore notes file with command-line shortcuts
-
 start_commands.md

@@ -1,7 +1,7 @@
 {
-    "input_device": "Input",
-    "output_device": "Output",
-    "sample_rate": 48000.0,
+    "input_device": "Scarlett 2i2 USB",
+    "output_device": "Scarlett 2i2 USB",
+    "sample_rate": 96000.0,
     "device_buffer_size": 4096,
     "use_ramp": true,
     "ramp_duration": 5.0,

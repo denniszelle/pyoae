@@ -1,12 +1,11 @@
-"""
-This module provides functionality for managing microphone calibration data.
+"""Module providing functionality for managing calibration data.
 
 It enables amplitude correction of recorded signals by applying
 frequency-dependent scaling and phase-correction based on a stored calibration
 curve, supporting accurate pressure-level measurements in OAE recordings.
 
 Note:
-    This is a dummy module. Functionality will be added in future revisions.‚
+    Phase calibration will be added in future revisions of PyOAE.
 """
 
 from typing import TypedDict
@@ -239,8 +238,6 @@ class MicroTransferFunction:
         Args:
             f: frequency at which transfer function should be sampled
         """
-
-
         # TODO: check frequency boundaries
         # find frequency-bin index
         # (alternatively, we could store the frequency resolution

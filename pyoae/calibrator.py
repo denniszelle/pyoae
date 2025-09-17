@@ -5,7 +5,7 @@ This module is not intended to be run directly.
 
 from dataclasses import dataclass
 from datetime import datetime
-# import os
+from logging import Logger
 
 from matplotlib import pyplot as plt
 from matplotlib.animation import FuncAnimation
@@ -17,11 +17,15 @@ import numpy.typing as npt
 
 from pyoae import files
 from pyoae import generator
+from pyoae import get_logger
 from pyoae.calib import MicroTransferFunction, SpeakerCalibData
 from pyoae.device.device_config import DeviceConfig
 from pyoae.protocols import CalibMsrmtParams
 from pyoae.signals import Signal
 from pyoae.sync import HardwareData, RecordingData, SyncMsrmt, MsrmtState
+
+
+logger = get_logger(__name__)
 
 
 @dataclass
@@ -231,7 +235,7 @@ def get_channel_spectra(
     # TODO: make channel selection dynamic using properties
 
     block_size = int(0.5 * info.block_size)
-    print(f'Block size {block_size} for transfer function.')
+    logger.debug('Block size for transfer function: %d.', block_size)
 
     spectrum_ch01 = process_spectrum(
         recorded_signal[:block_size],
@@ -410,12 +414,17 @@ class OutputCalibRecorder:
     results: SpeakerCalibData | None
     """Calibration results for output channels."""
 
+    logger: Logger
+    """Class logger for debug, info, warning, and error messages."""
+
     def __init__(
         self,
         msrmt_params: CalibMsrmtParams,
-        mic_trans_fun: MicroTransferFunction | None = None
+        mic_trans_fun: MicroTransferFunction | None = None,
+        log: Logger | None = None
     ) -> None:
-        """Creates a DPOAE recorder for given measurement parameters."""
+        """Creates a simple multi-tone output calibrator."""
+        self.logger = log or get_logger()
         num_block_samples = int(
             msrmt_params['block_duration'] * DeviceConfig.sample_rate
         )
@@ -423,7 +432,9 @@ class OutputCalibRecorder:
             msrmt_params['num_channels'] * num_block_samples
         )
         block_duration = num_block_samples / DeviceConfig.sample_rate
-        recording_duration = num_total_recording_samples / DeviceConfig.sample_rate
+        recording_duration = (
+            num_total_recording_samples / DeviceConfig.sample_rate
+        )
 
         if mic_trans_fun:
             mic_trans_fun.num_samples = num_block_samples
@@ -431,8 +442,9 @@ class OutputCalibRecorder:
             mic_trans_fun.interpolate_transfer_fun()
 
         if block_duration != msrmt_params["block_duration"]:
-            print(
-                f'Block duration adjusted to {block_duration*1E3:.2f} ms'
+            self.logger.warning(
+                'Block duration adjusted to {%.2f} ms.',
+                block_duration * 1E3
             )
 
         self.signals = []
@@ -470,7 +482,7 @@ class OutputCalibRecorder:
 
     def record(self) -> None:
         """Starts the calibration."""
-        print("Starting calibration...")
+        self.logger.info("Starting output calibration...")
         # `start_msrmt` starts the application loop
         self.msrmt.start_msrmt(start_plot, self.update_info)
 

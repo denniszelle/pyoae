@@ -23,6 +23,7 @@ This module is not intended to be run directly.
 
 from dataclasses import dataclass
 from datetime import datetime
+from logging import Logger
 import os
 from typing import Literal
 
@@ -35,12 +36,14 @@ import numpy as np
 import numpy.typing as npt
 import scipy.signal
 
+from pyoae import get_logger
 from pyoae import helpers
 from pyoae.calib import MicroTransferFunction
 from pyoae.device.device_config import DeviceConfig
 from pyoae.protocols import SoaeMsrmtParams
 from pyoae.signals import PeriodicSignal
 from pyoae.sync import HardwareData, RecordingData, SyncMsrmt, MsrmtState
+
 
 @dataclass
 class SoaePlotInfo:
@@ -463,14 +466,18 @@ class SoaeRecorder:
     ear: str
     """Recording ear (left/right) to be used for the measurement file name."""
 
+    logger: Logger
+    """Class logger for debug, info, warning, and error messages."""
 
     def __init__(
         self,
         msrmt_params: SoaeMsrmtParams,
         subject: str = '',
-        ear: str = ''
+        ear: str = '',
+        log: Logger | None = None
     ) -> None:
         """Creates an SOAE recorder from measurement parameters."""
+        self.logger = log or get_logger()
         self.subject = subject
         self.ear = ear
         num_block_samples = int(
@@ -510,7 +517,7 @@ class SoaeRecorder:
 
     def record(self) -> None:
         """Starts the recording."""
-        print("Starting SOAE recording...")
+        self.logger.info("Starting SOAE recording...")
         self.msrmt.start_msrmt(start_plot, self.update_info)
 
         # Plot offline results after measurement
@@ -541,7 +548,7 @@ class SoaeRecorder:
             recorded_signal=recorded_signal,
             samplerate=DeviceConfig.sample_rate
         )
-        print(f"Saved to {save_path}")
+        self.logger.info("Measurement saved to %s.", save_path)
 
     def generate_output_signals(self, num_total_samples: int) -> None:
         """Generates the output signals for playback."""

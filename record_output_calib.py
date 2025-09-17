@@ -7,7 +7,7 @@ to calibrate two speakers of a DPOAE ear probe.
 
 Run the following command from the project root directory to start:
 
-    python3 -m record_output_calib --mic '2ROTIU6H_3C9CESK1W6.json' --save
+    python3 -m record_output_calib --mic 'mic_calib.json' --save
 
 
 Note:
@@ -19,6 +19,7 @@ Note:
 """
 
 import argparse
+import logging
 
 from pyoae import files
 from pyoae import protocols
@@ -29,32 +30,34 @@ from pyoae.calibrator import OutputCalibRecorder
 
 DEVICE_CONFIG_FILE = 'device_config.json'
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
+
+logger = logging.getLogger('Output Calibrator')
 
 def main(
     mic: str = '',
-    subject: str = '',
-    ear: str = '',
     save: bool = False
 ) -> None:
     """Main function executing a multi-tone measurement."""
 
-    print('Multi-tone output calibrator started with following options:')
-    print(f'  Subject ID: {subject} - ear: {ear}')
+    logger.info('Multi-tone output calibrator started.')
     if save:
-        print('Recording will be saved in files.')
+        logger.info('Calibration will be saved.')
 
-    print('Loading configuration.')
+    logger.info('Loading global configuration from %s.', DEVICE_CONFIG_FILE)
     files.load_device_config(DEVICE_CONFIG_FILE)
-    print(DeviceConfig())
+    logger.info('Device Configuration: %s', DeviceConfig())
 
     if mic:
-        print('Loading microphone calibration.')
+        logger.info('Loading microphone calibration from %s.', mic)
         mic_calib_data = files.load_micro_calib(mic)
         mic_trans_fun = MicroTransferFunction(
             mic_calib_data['abs_calibration'],
             mic_calib_data['transfer_function']
         )
-
     else:
         mic_trans_fun = None
 
@@ -69,7 +72,7 @@ def main(
         calib_recorder.save_recording()
         if calib_recorder.results is not None:
             calib_id = calib_recorder.results["date"]
-            print(f'Calibration saved with time stamp: {calib_id}.')
+            logger.info('Calibration saved with time stamp: %s.', calib_id)
 
 
 parser = argparse.ArgumentParser(description='PyOAE Multi-Tone Calibration')
@@ -78,18 +81,6 @@ parser.add_argument(
     default=argparse.SUPPRESS,
     type=str,
     help='Specify path to microphone calibration JSON file.'
-)
-parser.add_argument(
-    '--subject',
-    default=argparse.SUPPRESS,
-    type=str,
-    help='Specify subject ID, e.g. S001.'
-)
-parser.add_argument(
-    '--ear',
-    default=argparse.SUPPRESS,
-    type=str,
-    help='Specify the recording side, left/right, l/r.'
 )
 parser.add_argument(
     '--save',

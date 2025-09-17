@@ -22,6 +22,7 @@ This module is not intended to be run directly.
 
 from dataclasses import dataclass
 from datetime import datetime
+from logging import Logger
 import os
 
 from matplotlib import pyplot as plt
@@ -34,6 +35,7 @@ import numpy.typing as npt
 import scipy.signal
 
 from pyoae import generator
+from pyoae import get_logger
 from pyoae import helpers
 from pyoae.calib import MicroTransferFunction, OutputCalibration
 from pyoae.device.device_config import DeviceConfig
@@ -472,15 +474,20 @@ class PulseDpoaeRecorder:
     ear: str
     """Recording ear (left/right) to be used for the measurement file name."""
 
+    logger: Logger
+    """Class logger for debug, info, warning, and error messages."""
+
     def __init__(
         self,
         msrmt_params: PulseDpoaeMsrmtParams,
         mic_trans_fun: MicroTransferFunction | None = None,
         out_trans_fun: OutputCalibration | None = None,
         subject: str = '',
-        ear: str = ''
+        ear: str = '',
+        log: Logger | None = None
     ) -> None:
         """Creates a DPOAE recorder for given measurement parameters."""
+        self.logger = log or get_logger()
         self.subject = subject
         self.ear = ear
         num_block_samples = int(
@@ -498,8 +505,9 @@ class PulseDpoaeRecorder:
             mic_trans_fun.interpolate_transfer_fun()
 
         if block_duration != msrmt_params["block_duration"]:
-            print(
-                f'Block duration adjusted to {block_duration*1E3:.2f} ms'
+            self.logger.warning(
+                'Block duration adjusted to %.2f ms.',
+                block_duration * 1E3
             )
 
         self.stimulus = PulseDpoaeStimulus(
@@ -548,7 +556,7 @@ class PulseDpoaeRecorder:
 
     def record(self) -> None:
         """Starts the recording."""
-        print("Starting recording...")
+        self.logger.info("Starting recording...")
         # `start_msrmt` starts the application loop
         self.msrmt.start_msrmt(start_plot, self.update_info)
 
@@ -586,7 +594,7 @@ class PulseDpoaeRecorder:
             num_block_samples=self.update_info.block_size,
             recorded_sync=self.msrmt.live_msrmt_data.sync_recorded
         )
-        print(f"Saved measurement to {save_path}")
+        self.logger.info("Measurement saved to %s.", save_path)
 
     def generate_output_signals(
         self,

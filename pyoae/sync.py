@@ -3,6 +3,7 @@
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import auto, Enum
+from logging import Logger
 from typing import Any, Generic, Literal, Final, TypeVar
 
 import numpy as np
@@ -11,7 +12,9 @@ import scipy.signal
 import sounddevice as sd
 
 from pyoae import generator
+from pyoae import get_logger
 from pyoae.signals import Signal
+
 
 SYNC_DURATION: Final[float] = 0.5
 """Duration of the sync signal (with mute) in seconds.
@@ -217,12 +220,16 @@ class SyncMsrmt(Generic[SignalT]):
     monitoring_amp: npt.NDArray[np.float32]
     """Signal amplitude of monitoring channel during playback start."""
 
+    logger: Logger
+    """Class logger for debug, info, warning, and error messages."""
+
     def __init__(
         self,
         recording_data: RecordingData,
         hardware_data: HardwareData,
         output_signals: list[SignalT],
-        latency_type: Literal['low', 'high']='high'
+        latency_type: Literal['low', 'high']='high',
+        log: Logger | None = None
     ) -> None:
         """Initializes the object.
 
@@ -232,18 +239,24 @@ class SyncMsrmt(Generic[SignalT]):
         	output_signals: List of output signal objects or 1D output
               signal arrays
             latency_type: Latency type used('low' or 'high')
+            log: Logger instance used for logging.
         """
+        self.logger = log or get_logger()
         self.set_state(MsrmtState.SETUP)
         self.recording_data = recording_data
         self.hardware_data = hardware_data
 
         # compute duration of synchronization in multiples of block size
-        k = int(self.recording_data.fs * SYNC_DURATION) // recording_data.block_size
+        k = (
+            int(self.recording_data.fs * SYNC_DURATION)
+            // recording_data.block_size
+        )
         num_sync_samples = recording_data.block_size * k
         sync_duration = (num_sync_samples / recording_data.fs) * 1E3
-        print(
-            'Duration of sync-signal with mute: '
-            f'{num_sync_samples} ({sync_duration:.2f} ms)'
+        self.logger.debug(
+            'Duration of sync-signal with mute: %.2f ms (%d samples)',
+            sync_duration,
+            num_sync_samples
         )
 
         sync_output = np.zeros(
@@ -276,7 +289,7 @@ class SyncMsrmt(Generic[SignalT]):
     def set_state(self, state: MsrmtState) -> None:
         """Sets the currently active state of this measurement."""
         self.state = state
-        print(f"Measurement state set to {self.state}.")
+        self.logger.debug("Measurement state set to %s.", self.state)
 
     def start_msrmt(self, start_plot: Callable, info: Any) -> None:
         """Starts the measurement
@@ -305,21 +318,28 @@ class SyncMsrmt(Generic[SignalT]):
         lag = np.argmax(correlation) - num_acq_samples + 1
         latency_time = (lag/self.recording_data.fs) * 1E3
 
-        print(
-            f'Measured latency: {latency_time:.4f} ms ({lag} samples) '
-            f'({num_acq_samples} samples acquired)'
+        self.logger.info(
+            'Measured latency: %.4f ms (%d samples).',
+            latency_time,
+            lag
+        )
+        self.logger.info(
+            '%d samples acquired for latency determination.',
+            num_acq_samples
         )
         if not isinstance(lag, np.integer):
-            print(
-                'Warning: Cannot obtain latency.  '
-                f'Invalid type {type(lag)}.'
+            self.logger.error(
+                'Cannot obtain latency. Invalid type: %s.',
+                type(lag)
             )
             self.live_msrmt_data.latency_samples = 0
             return
 
         if lag < 0:
-            print('Warning: Cannot obtain latency. Negative value detected.')
-            print('Please check cable connections.')
+            self.logger.error(
+                'Cannot obtain latency. Negative value detected.'
+                'Please check cable connections.'
+            )
         self.live_msrmt_data.latency_samples = max(int(lag), 0)
 
     def get_recorded_signal(self) -> npt.NDArray[np.float32]:
@@ -447,7 +467,7 @@ class SyncMsrmt(Generic[SignalT]):
                 self.compute_latency()
                 if self.live_msrmt_data.latency_samples <= 0:
                     self.set_state(MsrmtState.CANCELED)
-                    print('Invalid latency - measurement canceled.')
+                    self.logger.error('Invalid latency - measurement canceled.')
                 else:
                     self.set_state(MsrmtState.STARTING)
                     self.live_msrmt_data.play_idx = 0
@@ -469,9 +489,10 @@ class SyncMsrmt(Generic[SignalT]):
                         # compare current maximum to average in previous blocks
                         signal_thresh = 1.5 * np.mean(self.monitoring_amp)
                         is_signal = max_monitor > signal_thresh
-                        print(
-                            f'Monitoring amp.: {max_monitor}, '
-                            f'threshold: {signal_thresh}'
+                        self.logger.debug(
+                            'Monitoring amp.: %.5f | threshold: %.5f',
+                            max_monitor,
+                            signal_thresh
                         )
                     else:
                         is_signal = False
@@ -481,14 +502,17 @@ class SyncMsrmt(Generic[SignalT]):
 
                     if is_signal and rec_end_idx < msrmt_start_idx:
                         msrmt_start_idx -= self.recording_data.block_size
-                        print(
-                            'Early signal detected: correcting '
-                            f'latency to: {msrmt_start_idx}'
+                        self.logger.warning(
+                            'Early signal detected! New start index: %d.'
+                            f': {msrmt_start_idx}'
                         )
 
                 if rec_start_idx <= msrmt_start_idx <= rec_end_idx:
                     # input frames contains beginning of measurement data
-                    print(f'Start compensating at {rec_start_idx}.')
+                    self.logger.debug(
+                        'Start measurement at sample index %d.',
+                        rec_start_idx
+                    )
                     num_remaining_frames = rec_end_idx - msrmt_start_idx
                     self.live_msrmt_data.recorded_signal[:num_remaining_frames] = (
                         input_data[frames - num_remaining_frames:, 0]
@@ -535,13 +559,12 @@ class SyncMsrmt(Generic[SignalT]):
                 self.hardware_data.output_device
             )
         ):
-            print('Begin stream')
+            self.logger.info('Beginning to stream.')
             start_plot(self, info)
             while self.state not in [
                 MsrmtState.FINISHING,
                 MsrmtState.FINISHED,
                 MsrmtState.CANCELED
             ]:
-                print(self.state)
                 sd.sleep(1000)
-            print('Closing stream')
+            self.logger.info('Closing stream.')

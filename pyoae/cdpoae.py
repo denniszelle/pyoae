@@ -22,6 +22,7 @@ This module is not intended to be run directly.
 
 from dataclasses import dataclass
 from datetime import datetime
+from logging import Logger
 import os
 
 from matplotlib import pyplot as plt
@@ -33,6 +34,7 @@ import numpy as np
 import numpy.typing as npt
 
 from pyoae import generator
+from pyoae import get_logger
 from pyoae import helpers
 from pyoae.calib import MicroTransferFunction, OutputCalibration
 from pyoae.device.device_config import DeviceConfig
@@ -156,7 +158,6 @@ def setup_plot(
     fft_frequencies = np.fft.rfftfreq(block_size, 1 / fs)
     fft_values = np.zeros(len(fft_frequencies))
     line_spec, = ax_spec.plot(fft_frequencies, fft_values)
-    print(f'Plotting spectral x-data with length: {len(fft_frequencies)}')
     ax_spec.set_xlim(frequency_range[0], frequency_range[1])
     ax_spec.set_ylim(-50, 100)
     ax_spec.set_title("Spectrum")
@@ -441,15 +442,20 @@ class DpoaeRecorder:
     ear: str
     """Recording ear (left/right) to be used for the measurement file name."""
 
+    logger: Logger
+    """Class logger for debug, info, warning, and error messages."""
+
     def __init__(
         self,
         msrmt_params: DpoaeMsrmtParams,
         mic_trans_fun: MicroTransferFunction | None = None,
         out_trans_fun: OutputCalibration | None = None,
         subject: str = '',
-        ear: str = ''
+        ear: str = '',
+        log: Logger | None = None
     ) -> None:
         """Creates a DPOAE recorder for given measurement parameters."""
+        self.logger = log or get_logger()
         self.subject = subject
         self.ear = ear
         num_block_samples = int(
@@ -467,8 +473,9 @@ class DpoaeRecorder:
             mic_trans_fun.interpolate_transfer_fun()
 
         if block_duration != msrmt_params["block_duration"]:
-            print(
-                f'Block duration adjusted to {block_duration*1E3:.2f} ms'
+            self.logger.warning(
+                'Block duration adjusted to %.2f ms',
+                block_duration * 1E3
             )
 
         self.stimulus = ContDpoaeStimulus(
@@ -522,7 +529,7 @@ class DpoaeRecorder:
 
     def record(self) -> None:
         """Starts the recording."""
-        print("Starting recording...")
+        self.logger.info("Starting recording...")
         # `start_msrmt` starts the application loop
         self.msrmt.start_msrmt(start_plot, self.update_info)
 
@@ -557,7 +564,7 @@ class DpoaeRecorder:
             samplerate=DeviceConfig.sample_rate,
             recorded_sync=self.msrmt.live_msrmt_data.sync_recorded
         )
-        print(f"Saved measurement to {save_path}")
+        self.logger.info("Saved measurement to %s.", save_path)
 
     def generate_output_signals(
         self,

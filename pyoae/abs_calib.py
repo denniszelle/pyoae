@@ -17,14 +17,13 @@ import os
 from matplotlib import pyplot as plt
 import numpy as np
 
-from pyoae.device.device_config import DeviceConfig
 from pyoae import soae
+from pyoae.device.device_config import DeviceConfig
 from pyoae.soae import SoaeRecorder, SoaeUpdateInfo
-
 from pyoae.sync import MsrmtState, SyncMsrmt
 
 
-def max_output_pressure(ref_in: float, ref_db_spl: float):
+def max_output_pressure(ref_in: float, ref_db_spl: float) -> float:
     """Computes the maximum output peak pressure from reference calibrator.
 
     Args:
@@ -84,7 +83,8 @@ class AbsCalibRecorder(SoaeRecorder):
 
     def record(self) -> None:
         """Starts the recording."""
-        print("Starting SOAE recording...")
+
+        self.logger.info("Starting absolute calibration...")
         self.msrmt.start_msrmt(soae.start_plot, self.update_info)
 
         # Plot offline results after measurement
@@ -112,4 +112,4 @@ class AbsCalibRecorder(SoaeRecorder):
             recorded_signal=recorded_signal,
             samplerate=DeviceConfig.sample_rate
         )
-        print(f"Saved to {save_path}")
+        self.logger.info("Calibration saved to %s.", save_path)

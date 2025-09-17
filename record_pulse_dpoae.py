@@ -9,7 +9,15 @@ DPOAE measurements.
 
 Run the following command from the project root directory to start:
 
-    python3 -m record_pulse_dpoae --mic '2ROTIU6H_3C9CESK1W6.json' --protocol 'protocols/pulse_dpoae_iofs.json' --calib '250913-160850' --subject 'S005' --ear 'right'  --save
+    python3 -m record_pulse_dpoae
+
+Command-line arguments:
+    --mic: microphone/input calibration, e.g., '2ROTIU6H_3C9CESK1W6.json'
+    --protocol: measurement protocol, e.g., 'protocols/pulse_dpoae_iofs.json'
+    --calib: time stamp of output calibration to be used, e.g., '250916-164234'
+    --subject: subject identifier, e.g., 'S999'
+    --ear: recording side, e.g., 'right'
+    --save: save recording in measurement file
 
 Note:
     Sound device IDs or names should be known beforehand and can be
@@ -20,6 +28,7 @@ Note:
 """
 
 import argparse
+import logging
 import os
 
 from pyoae import files
@@ -29,6 +38,14 @@ from pyoae.pdpoae import PulseDpoaeRecorder
 
 
 DEVICE_CONFIG_FILE = 'device_config.json'
+
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
+
+logger = logging.getLogger('pDPOAE Recorder')
 
 
 def main(
@@ -41,18 +58,22 @@ def main(
 ) -> None:
     """Main function executing a pulsed DPOAE measurement."""
 
-    print('Pulse DPOAE recorder started with following options:')
-    print(f'  Protocol: {protocol}')
-    print(f'  Subject ID: {subject} - ear: {ear}')
+    logger.info('Pulse-DPOAE recorder started with following options:')
+    if protocol:
+        logger.info('  Protocol: %s', protocol)
+    if subject:
+        logger.info('  Subject ID: %s', subject)
+    if ear:
+        logger.info('  Ear: %s', ear)
     if save:
-        print('Recording will be saved in files.')
+        logger.info('Recording will be saved.')
 
-    print('Loading configuration.')
+    logger.info('Loading global configuration from %s.', DEVICE_CONFIG_FILE)
     files.load_device_config(DEVICE_CONFIG_FILE)
-    print(DeviceConfig())
+    logger.info('Device Configuration: %s', DeviceConfig())
 
     if mic:
-        print('Loading microphone calibration.')
+        logger.info('Loading microphone calibration from %s.', mic)
         mic_calib_data = files.load_micro_calib(mic)
         mic_trans_fun = MicroTransferFunction(
             mic_calib_data['abs_calibration'],
@@ -62,7 +83,7 @@ def main(
         mic_trans_fun = None
 
     if calib:
-        print('Loading output calibration.')
+        logger.info('Loading output calibration with id %s.', calib)
         out_file_name = calib + '_out_calib.json'
         out_file_path = os.path.join(os.getcwd(), 'measurements', out_file_name)
         speaker_calib_data = files.load_output_calib(out_file_path)

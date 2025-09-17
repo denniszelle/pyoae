@@ -1,6 +1,7 @@
 """Functions to generate output signals."""
 
 from dataclasses import dataclass
+from logging import Logger
 from typing import Final
 
 import numpy as np
@@ -8,6 +9,7 @@ import numpy.typing as npt
 from scipy.signal import windows
 
 from pyoae import converter
+from pyoae import get_logger
 from pyoae.calib import OutputCalibration
 from pyoae.device.device_config import DeviceConfig
 from pyoae.protocols import DpoaeMsrmtParams, PulseDpoaeMsrmtParams, PulseStimulus
@@ -22,6 +24,9 @@ SYNC_AMPLITUDE: Final[float] = 0.2
 
 SYNC_FREQUENCY: Final[float] = 4000
 """Carrier frequency of the sync pulse in Hz."""
+
+
+logger = get_logger()
 
 
 def short_pulse_half_width(f2: float) -> float:
@@ -158,11 +163,9 @@ class ContDpoaeStimulus(DpoaeStimulus):
         else:
             self.f1 = correct_frequency(msrmt_params['f1'], block_duration)
 
-        print(
-            'Setting primary-tone frequencies: '
-            f'f1: {self.f1:.2f} Hz, f2: {self.f2:.2f} Hz, '
-            f'(f2/f1 = {self.f2/self.f1: .3f})'
-        )
+        logger.info('Setting primary-tone frequencies:')
+        logger.info('  f1: %.2f Hz | f2: %.2f Hz', self.f1, self.f2)
+        logger.info('  f2/f1 = %.3f', self.f2/self.f1)
 
     def generate_stimuli(
         self,
@@ -192,11 +195,9 @@ class ContDpoaeStimulus(DpoaeStimulus):
                 pressure2,
                 self.f2
             )
-            print(
-                'Setting output amplitudes for DPOAE acquisition: '
-                f'p1: {pressure1:.1f} muPa ({amplitude1:.5f} re FS).'
-                f'p2: {pressure2:.1f} muPa ({amplitude2:.5f} re FS).'
-            )
+            logger.info('Setting output amplitudes for DPOAE acquisition:')
+            logger.info('p1: %.1f muPa (%.6f re FS).', pressure1, amplitude1)
+            logger.info('p2: %.1f muPa (%.6f re FS).', pressure2, amplitude2)
 
         # Generate output signals
         samples = np.arange(num_block_samples, dtype=np.float32)
@@ -213,11 +214,14 @@ class PulseDpoaeStimulus(DpoaeStimulus):
 
     f2_pulse_mask: PulseStimulus | None = None
 
+    logger: Logger
+
     def calculate_frequencies(
         self,
         msrmt_params: PulseDpoaeMsrmtParams
     ) -> None:
         """Calculate primary-tone frequencies f1 and f2 for pulsed DPOAE acquisition."""
+        self.logger = get_logger()
         self.f2 = msrmt_params['f2']
         if msrmt_params['f1'] is None:
             if msrmt_params['f2f1_ratio'] is None:
@@ -228,11 +232,9 @@ class PulseDpoaeStimulus(DpoaeStimulus):
         else:
             self.f1 = msrmt_params['f1']
 
-        print(
-            'Setting primary-tone frequencies: '
-            f'f1: {self.f1:.2f} Hz, f2: {self.f2:.2f} Hz, '
-            f'(f2/f1 = {self.f2/self.f1: .3f})'
-        )
+        self.logger.info('Setting primary-tone frequencies:')
+        self.logger.info('  f1: %.2f Hz | f2: %.2f Hz', self.f1, self.f2)
+        self.logger.info('  f2/f1 = %.3f', self.f2/self.f1)
 
     def create_stimulus_mask(
         self,
@@ -254,8 +256,8 @@ class PulseDpoaeStimulus(DpoaeStimulus):
             f2_pulse,
             t_hw_sp
         )
-        # print(f'f1 pulse mask {self.f1_pulse_mask}')
-        # print(f'f2 pulse mask {self.f2_pulse_mask}')
+        self.logger.debug('f1 pulse mask: %s.', self.f1_pulse_mask)
+        self.logger.debug('f2 pulse mask: %s.', self.f2_pulse_mask)
 
     def generate_stimuli(
         self,
@@ -285,11 +287,9 @@ class PulseDpoaeStimulus(DpoaeStimulus):
                 pressure2,
                 self.f2
             )
-            print(
-                'Setting output amplitudes for DPOAE acquisition: '
-                f'p1: {pressure1:.1f} muPa ({amplitude1:.5f} re FS).'
-                f'p2: {pressure2:.1f} muPa ({amplitude2:.5f} re FS).'
-            )
+            logger.info('Setting output amplitudes for DPOAE acquisition:')
+            logger.info('p1: %.1f muPa (%.6f re FS).', pressure1, amplitude1)
+            logger.info('p2: %.1f muPa (%.6f re FS).', pressure2, amplitude2)
 
         if self.f1_pulse_mask is None or self.f2_pulse_mask is None:
             # TODO: Consider raising ValueError
@@ -359,11 +359,10 @@ def calculate_full_scale_amplitudes(
     amplitude2 = converter.db_to_lin(level2)
     amplitude1 = max(0.0, min(amplitude1, 1.0))
     amplitude2 = max(0.0, min(amplitude2, 1.0))
-    print(
-        'Setting output amplitudes for DPOAE acquisition: '
-        f'L1: {level1:.1f} dBFS ({amplitude1:.5f} re FS).'
-        f'L2: {level2:.1f} dBFS ({amplitude2:.5f} re FS).'
-    )
+    logger.info('Calculating digital full-scale amplitudes for output.')
+    logger.info('  L1: %.2f dBFS -> .6%f re FS.', level1, amplitude1)
+    logger.info('  L2: %.2f dBFS -> .6%f re FS.', level2, amplitude2)
+
     return (amplitude1, amplitude2)
 
 
@@ -374,11 +373,11 @@ def calculate_pressure_amplitudes(
     """Calculates peak pressure amplitudes from dB SPL levels."""
     amplitude1 = converter.db_spl_to_peak_mupa(level1)
     amplitude2 = converter.db_spl_to_peak_mupa(level2)
-    print(
-        'Setting output pressures for DPOAE acquisition: '
-        f'L1: {level1:.1f} dB SPL ({amplitude1:.5f} muPa).'
-        f'L2: {level2:.1f} dB SPL ({amplitude2:.5f} muPa).'
+    logger.info(
+        'Calculating peak output pressures from sound pressure levels:'
     )
+    logger.info('  L1: %.1f dB SPL -> %.2f muPa', level1, amplitude1)
+    logger.info('  L2: %.1f dB SPL -> %.2f muPa', level2, amplitude2)
     return (amplitude1, amplitude2)
 
 

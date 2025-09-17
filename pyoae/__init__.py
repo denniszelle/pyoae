@@ -13,3 +13,23 @@ Submodules:
      audio output/input
 
 """
+
+from __future__ import annotations
+import logging
+
+# Prevent "No handler could be found" warnings for library users.
+logging.getLogger(__name__).addHandler(logging.NullHandler())
+
+_PKG = __name__
+
+def get_logger(name: str | None = None) -> logging.Logger:
+    """Return a namespaced logger: 'pyoae' or 'pyoae.<name>'."""
+    return logging.getLogger(f"{_PKG}.{name}" if name else _PKG)
+
+def set_default_level(level: int) -> None:
+    """Lightweight helper for apps/tests.
+
+    Note:
+        Libraries should not call basicConfig.
+    """
+    logging.getLogger(_PKG).setLevel(level)

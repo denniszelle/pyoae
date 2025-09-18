@@ -85,13 +85,13 @@ class DeviceConfig:
     def __str__(self) -> str:
         """Returns device configuration as text."""
         return f'''
-            Device configuration: \n
-            Input: {self.input_device} \n
-            Output: {self.output_device} \n
-            Sample rate: {self.sample_rate} Hz \n
-            Device buffer size: {self.device_buffer_size} \n
-            Use ramp: {self.use_ramp} \n
-            Ramp duration: {self.ramp_duration} ms \n
-            Update interval: {self.update_interval} ms \n
-            Live display: {self.live_display_duration} ms \n
+            Device configuration:
+            Input: {self.input_device}
+            Output: {self.output_device}
+            Sample rate: {self.sample_rate} Hz
+            Device buffer size: {self.device_buffer_size}
+            Use ramp: {self.use_ramp}
+            Ramp duration: {self.ramp_duration} ms
+            Update interval: {self.update_interval} ms
+            Live display: {self.live_display_duration} ms
         '''

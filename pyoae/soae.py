@@ -45,6 +45,9 @@ from pyoae.signals import PeriodicSignal
 from pyoae.sync import HardwareData, RecordingData, SyncMsrmt, MsrmtState
 
 
+logger = get_logger()
+
+
 @dataclass
 class SoaePlotInfo:
     """Container with data for the measurement plot."""
@@ -137,13 +140,13 @@ def setup_plot(
     line_spec, = ax_spec.plot(fft_frequencies, fft_values)
     ax_spec.set_xlim(500, 20*1E3)
     ax_spec.set_xscale('log')
-    # ax_spec.set_xlim(500, fs/2)
-    ax_spec.set_ylim(-160, -60)
     ax_spec.set_title("Spectrum")
     ax_spec.set_xlabel("Frequency (Hz)")
     if is_calib_available:
         ax_spec.set_ylabel('Level (dB SPL)')
+        ax_spec.set_ylim(-50, 50)
     else:
+        ax_spec.set_ylim(-150, 0)
         ax_spec.set_ylabel("Level (dBFS)")
 
     return fig, ax_time, line_time, ax_spec, line_spec
@@ -184,20 +187,25 @@ def welch_artifact_rejection(
     step = window_samples - overlap_samples
     x_seg = np.lib.stride_tricks.sliding_window_view(
         x, window_shape=window_samples
-    )[::step]
-
-    win = scipy.signal.get_window(window, window_samples)
-    x_seg = x_seg * win
+    )[::step]  # (num_blocks, num_samples)
 
     if detrend:
         x_seg = scipy.signal.detrend(x_seg, type=detrend, axis=-1)
 
-    result = np.fft.rfft(x_seg, window_samples, axis=-1)
+    win = scipy.signal.get_window(window, window_samples)
+    x_seg = x_seg * win
+    x_fft = np.fft.rfft(x_seg, n=window_samples, axis=-1)
 
-    spectrum = np.abs(result)
-    spectrum /= win.sum()
-    spectrum *= 2
+    # Magnitude with coherent-gain correction
+    spectrum = np.abs(x_fft)
 
+    # One-sided amplitude scaling: double only non-DC/non-Nyquist bins
+    if window_samples % 2 == 0:
+        spectrum[..., 1:-1] *= 2.0
+    else:
+        spectrum[..., 1:] *= 2.0
+
+    spectrum /= win.sum()  # coherent gain
     frequencies = np.fft.rfftfreq(window_samples, 1/fs)
 
     # Obtain RMS values of spectrum
@@ -248,14 +256,13 @@ def process_spectrum(
         if np.max(spectrum) == 0:
             spectrum[:] = np.finfo(np.float32).eps
         if correction_tf is None:
-            spectrum = 20*np.log10(spectrum)
+            spectrum = 20 * np.log10(spectrum)
         else:
             spectrum /= correction_tf.amplitudes
-            spectrum = 20*np.log10(spectrum/20)
+            spectrum = 20 * np.log10(spectrum/20)
 
     else:
         spectrum = np.abs(np.fft.rfft(np.zeros(window_samples, np.float32)))
-
     return spectrum
 
 
@@ -343,19 +350,18 @@ def update_plot_data(
         recorded_signal[-n_samples_displayed:]
     )
 
-    info.plot_info.line_spec.set_ydata(spectrum)
-
     # Update y-axis limits.
     spec_min = min(spectrum[1:])
     spec_max = max(spectrum)
     padding = 15  # dB of padding on top and bottom
 
-    if (spec_min < info.plot_info.ax_spec.get_ylim()[0]
-        or spec_min > info.plot_info.ax_spec.get_ylim()[0] + 2*padding
-        or spec_max > info.plot_info.ax_spec.get_ylim()[1]
-        or spec_max < info.plot_info.ax_spec.get_ylim()[1] - 2*padding):
+    spec_min = min(spectrum[1:])
+    spec_max = max(spectrum)
+    padding = 15  # dB of padding on top and bottom
+    info.plot_info.ax_spec.set_ylim(spec_min - padding, spec_max + padding)
+    info.plot_info.line_spec.set_ydata(spectrum)
 
-        info.plot_info.ax_spec.set_ylim(spec_min - padding, spec_max + padding)
+    # if (spec_min < info.plot_info.ax_spec.get_ylim()[0]
 
     return info.plot_info.line_time, info.plot_info.line_spec
 
@@ -380,12 +386,12 @@ def update_msrmt(
 
     """
     del frame
-
     if sync_msrmt.state == MsrmtState.FINISHED:
         return info.plot_info.line_time, info.plot_info.line_spec
 
     if sync_msrmt.state == MsrmtState.FINISHING:
-        sync_msrmt.state = MsrmtState.FINISHED
+        sync_msrmt.set_state(MsrmtState.FINISHED)
+        logger.info('Recording complete. Please close window to continue.')
 
     recorded_signal, spectrum = get_results(sync_msrmt, info)
 
@@ -521,6 +527,9 @@ class SoaeRecorder:
         self.msrmt.start_msrmt(start_plot, self.update_info)
 
         # Plot offline results after measurement
+        self.logger.info(
+            'Showing offline results. Please close window to continue.'
+        )
         plot_offline(self.msrmt, self.update_info)
 
     def save_recording(self) -> None:
@@ -570,11 +579,15 @@ class SoaeRecorder:
         num_block_samples: int
     ) -> SoaePlotInfo:
         """Sets up live plot and measurement information."""
+
+        update_time = (num_block_samples / DeviceConfig.sample_rate) * 1E3
+
         fig, ax_time, line_time, ax_spec, line_spec = setup_plot(
             recording_duration,
             DeviceConfig.sample_rate,
             num_block_samples,
-            DeviceConfig.live_display_duration
+            update_time
+            #DeviceConfig.live_display_duration
         )
         return SoaePlotInfo(
             fig,
@@ -582,6 +595,8 @@ class SoaeRecorder:
             line_time,
             ax_spec,
             line_spec,
-            DeviceConfig.update_interval,
-            DeviceConfig.live_display_duration
+            update_time,
+            update_time
+            # DeviceConfig.update_interval,
+            # DeviceConfig.live_display_duration
         )

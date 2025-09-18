@@ -17,17 +17,20 @@ import os
 from matplotlib import pyplot as plt
 import numpy as np
 
+from pyoae import get_logger
 from pyoae import soae
 from pyoae.device.device_config import DeviceConfig
 from pyoae.soae import SoaeRecorder, SoaeUpdateInfo
 from pyoae.sync import MsrmtState, SyncMsrmt
 
+logger = get_logger()
 
-def max_output_pressure(ref_in: float, ref_db_spl: float) -> float:
-    """Computes the maximum output peak pressure from reference calibrator.
+
+def max_ref_pressure(ref_in: float, ref_db_spl: float = 94.0) -> float:
+    """Computes the maximum peak pressure from reference calibrator.
 
     Args:
-        ref_in: measured input level at reference frequency in dBFS
+        ref_in: measured input level at reference frequency in dBFS_RMS
         ref_db_spl: output level of reference calibrator in dB SPL
 
     Returns:
@@ -70,10 +73,25 @@ def plot_offline(sync_msrmt: SyncMsrmt, info: SoaeUpdateInfo) -> None:
 
     spec_min = min(spectrum[1:])
     spec_max = max(spectrum)
+    # convert dBFS to dBFS_RMS
+    spec_rms = spec_max - 20 * np.log10(np.sqrt(2))
+    max_input_pressure = max_ref_pressure(spec_rms)
+
     padding = 15  # dB of padding on top and bottom
     ax_spec.set_ylim(spec_min - padding, spec_max + padding)
     line_spec.set_ydata(spectrum)
-    plt.title(f'Maximum: {spec_max:.5}')
+
+    calib_result = (
+        f'Reference input: {spec_max:.2f} dBFS '
+        f'-> Input pressure at full scale: {max_input_pressure: .2f}.'
+    )
+    logger.info(calib_result)
+    if spec_max < -20:
+        logger.warning(
+            'Calibration result might be invalid! '
+            'Input level probably too low.'
+        )
+    plt.title(calib_result)
     plt.tight_layout()
     plt.show()
 
@@ -88,6 +106,9 @@ class AbsCalibRecorder(SoaeRecorder):
         self.msrmt.start_msrmt(soae.start_plot, self.update_info)
 
         # Plot offline results after measurement
+        self.logger.info(
+            'Showing offline results. Please close window to continue.'
+        )
         plot_offline(self.msrmt, self.update_info)
 
     def save_recording(self) -> None:

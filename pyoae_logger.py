@@ -26,6 +26,7 @@ class ColorFormatter(logging.Formatter):
 
 def setup_logging(level=logging.INFO) -> None:
     """Sets up the logger format."""
+    logging.getLogger("matplotlib").setLevel(logging.WARNING)
     handler = logging.StreamHandler()
     fmt = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
     handler.setFormatter(ColorFormatter(fmt))
@@ -35,7 +36,7 @@ def setup_logging(level=logging.INFO) -> None:
     root.addHandler(handler)
 
 
-def get_pyoae_logger(name: str = 'PyOAE') -> logging.Logger:
+def get_pyoae_logger(name: str = 'PyOAE', level=logging.INFO) -> logging.Logger:
     """Sets up and returns a logger instance for PyOAE recording scripts."""
-    setup_logging()
+    setup_logging( level=level)
     return logging.getLogger(name)

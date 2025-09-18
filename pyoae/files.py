@@ -2,6 +2,7 @@
 
 import json
 import os
+from pathlib import Path
 from typing import Any
 
 from pyoae import calib
@@ -11,7 +12,7 @@ from pyoae import protocols
 
 log = get_logger(__name__)
 
-def load_json_file(file_path: str) -> dict[str, Any]:
+def load_json_file(file_path: str | Path) -> dict[str, Any]:
     """Loads the content of a json file."""
 
     try:
@@ -34,7 +35,7 @@ def load_device_config(file_path: str) -> None:
         log.error('Failed to load device configuration from %s', file_path)
 
 
-def load_micro_calib(file_path: str) -> calib.MicroCalibData:
+def load_micro_calib(file_path: str | Path) -> calib.MicroCalibData:
     """Loads the microphone calibration data from JSON."""
     d = {}
     if file_path:
@@ -135,3 +136,15 @@ def save_output_calibration(
         log.info('Output calibration saved to %s.', file_name)
     except (FileNotFoundError, TypeError, ValueError) as e:
         log.error('Error saving to %s - %s.', file_path, e)
+
+
+def save_result_to_json(file_path: str | Path, data: dict) -> None:
+    """Saves processed data to JSON file for further processing."""
+    try:
+        with open(file_path, mode='w', encoding='utf-8') as output_file:
+            json.dump(data, output_file, indent="\t")
+
+    except (FileNotFoundError, TypeError, ValueError) as e:
+        print(f'Error saving {file_path}.')
+        print(e)
+    print('Results saved to {file_path}.')

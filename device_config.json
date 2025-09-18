@@ -5,6 +5,7 @@
     "device_buffer_size": 4096,
     "use_ramp": true,
     "ramp_duration": 5.0,
+    "max_digital_output": 0.5,
     "update_interval": 100.0,
     "live_display_duration": 100.0
 }

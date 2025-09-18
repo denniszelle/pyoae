@@ -35,14 +35,14 @@ def load_device_config(file_path: str) -> None:
         log.error('Failed to load device configuration from %s', file_path)
 
 
-def load_micro_calib(file_path: str | Path) -> calib.MicroCalibData:
+def load_micro_calib(file_path: str | Path) -> calib.MicroCalibData | None:
     """Loads the microphone calibration data from JSON."""
     d = {}
     if file_path:
         d = load_json_file(file_path)
     else:
         log.error('Micro calibration %s not found.', file_path)
-        log.warning('Using empty microphone calibration instead.')
+        return None
     micro_calib_data = calib.get_empty_micro_calib_data()
 
     if d:

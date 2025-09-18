@@ -142,10 +142,11 @@ class PulseDpoaeProcessor:
         self.dpoae_signal = np.empty(0, dtype=np.float64)
         if mic_path:
             mic_calib_data = files.load_micro_calib(mic_path)
-            self.mic_trans_fun = MicroTransferFunction(
-                mic_calib_data['abs_calibration'],
-                mic_calib_data['transfer_function']
-            )
+            if mic_calib_data is not None:
+                self.mic_trans_fun = MicroTransferFunction(
+                    mic_calib_data['abs_calibration'],
+                    mic_calib_data['transfer_function']
+                )
         else:
             self.mic_trans_fun = mic
 

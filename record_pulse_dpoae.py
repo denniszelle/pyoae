@@ -75,6 +75,9 @@ def main(
     if mic:
         logger.info('Loading microphone calibration from %s.', mic)
         mic_calib_data = files.load_micro_calib(mic)
+        if mic_calib_data is None:
+            logger.error('Stopping: Failed to load microphone calibration.')
+            return
         mic_trans_fun = MicroTransferFunction(
             mic_calib_data['abs_calibration'],
             mic_calib_data['transfer_function']

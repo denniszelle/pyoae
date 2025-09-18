@@ -40,7 +40,7 @@ def load_micro_calib(file_path: str | Path) -> calib.MicroCalibData | None:
     d = {}
     if file_path:
         d = load_json_file(file_path)
-    else:
+    if not d:
         log.error('Micro calibration %s not found.', file_path)
         return None
     micro_calib_data = calib.get_empty_micro_calib_data()
@@ -58,7 +58,8 @@ def load_output_calib(file_path: str) -> calib.SpeakerCalibData:
     d = {}
     if file_path:
         d = load_json_file(file_path)
-    else:
+
+    if not d:
         log.error('Output calibration %s not found.', file_path)
     out_calib_data = calib.get_empty_speaker_calib_data()
 

@@ -355,6 +355,35 @@ def calculate_full_scale_amplitudes(
     was not specified
     """
     level1 = level1 or level2
+
+    # check boundaries
+    if level1 > 0:
+        logger.warning(
+            'Value %.2f dBFS for output level 1 exceeds maximum of 0 dBFS.',
+            level1
+        )
+        # use an arbitrary save fallback value
+        level1 = -20.0
+        logger.warning(
+            'Using fallback output level %.2f dBFS instead.',
+            level1
+        )
+        logger.warning('Please check protocol and calibration files.')
+
+    if level2 > 0:
+        logger.warning(
+            'Value %.2f dBFS for output level 2 exceeds maximum of 0 dBFS.',
+            level2
+        )
+        # use an arbitrary save fallback value
+        level2 = -20.0
+        logger.warning(
+            'Using fallback output level %.2f dBFS instead.',
+            level2
+        )
+        logger.warning('Please check protocol and calibration files.')
+
+
     amplitude1 = converter.db_to_lin(level1)
     amplitude2 = converter.db_to_lin(level2)
     amplitude1 = max(0.0, min(amplitude1, 1.0))

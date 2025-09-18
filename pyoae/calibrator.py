@@ -98,7 +98,7 @@ def setup_plot(
     fig, ax = plt.subplots(1, 1, figsize=(10, 6))
 
     # Set up time plot
-    x_wave = np.arange(round(recording_duration*fs), dtype=np.float32) / fs * 1E3
+    x_wave = np.arange(round(recording_duration*fs), dtype=np.float32) / fs
     y_wave = np.zeros_like(x_wave)
     line_time, = ax.plot(
         x_wave,
@@ -107,7 +107,7 @@ def setup_plot(
     ax.set_ylim(-1, 1)
     ax.set_xlim(0, recording_duration)
     ax.set_title("Recorded Waveform")
-    ax.set_xlabel("Time (ms)")
+    ax.set_xlabel("Time (s)")
     ax.set_ylabel("Amplitude (full scale)")
 
     return fig, ax, line_time

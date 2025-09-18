@@ -378,8 +378,11 @@ class PulseDpoaeRecorder:
 
         # we utilize the `PulseDpoaeProcessor` which can handle
         # both raw data from files as well as from the recorder.
+        recorded_signal = self.msrmt.get_recorded_signal()
+        if not recorded_signal.size:
+            return
         recording: PulseDpoaeMsrmtData = {
-            'recorded_signal': self.msrmt.get_recorded_signal(),
+            'recorded_signal': recorded_signal,
             'samplerate': DeviceConfig.sample_rate,
             'f1': self.stimulus.f1,
             'f2': self.stimulus.f2,

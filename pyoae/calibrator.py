@@ -562,6 +562,17 @@ class OutputCalibRecorder:
         self.output_amplitude = msrmt_params["amplitude_per_line"]
         mt_signal *= self.output_amplitude
 
+        max_amplitude = np.max(mt_signal)
+        if max_amplitude > DeviceConfig.max_digital_output:
+            self.logger.warning(
+                'Maximum output %.2f limited to maximum %.2f re FS.',
+                max_amplitude,
+                DeviceConfig.max_digital_output
+            )
+            self.logger.warning(
+                'Output calibration results might be invalid.'
+            )
+
         # we always use rising and falling edges
         ramp_len = int(
             DeviceConfig.ramp_duration * 1E-3 * DeviceConfig.sample_rate

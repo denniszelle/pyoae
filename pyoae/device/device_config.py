@@ -49,6 +49,15 @@ class DeviceConfig:
     ramp_duration: ClassVar[float] = 5.0
     """Ramp duration in ms at begin/end of playback."""
 
+    max_digital_output: ClassVar[float] = 0.5
+    """Limit for the digital output amplitude re full scale.
+
+    If the peak amplitude of any output exceeds this limit,
+    a warning will be displayed and the output limited to
+    the maximum digital output amplitude specified by this
+    value.
+    """
+
     update_interval: ClassVar[float] = 100.
     """Interval in milliseconds for updating the plots."""
 

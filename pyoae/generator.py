@@ -199,6 +199,9 @@ class ContDpoaeStimulus(DpoaeStimulus):
             logger.info('p1: %.1f muPa (%.6f re FS).', pressure1, amplitude1)
             logger.info('p2: %.1f muPa (%.6f re FS).', pressure2, amplitude2)
 
+        # Verify output amplitudes
+        amplitude1 = check_output_limit(amplitude1)
+        amplitude2 = check_output_limit(amplitude2)
         # Generate output signals
         samples = np.arange(num_block_samples, dtype=np.float32)
         t = samples / DeviceConfig.sample_rate
@@ -294,6 +297,10 @@ class PulseDpoaeStimulus(DpoaeStimulus):
         if self.f1_pulse_mask is None or self.f2_pulse_mask is None:
             # TODO: Consider raising ValueError
             return (np.zeros(0, np.float32), np.zeros(0, np.float32))
+
+        # Verify output amplitudes
+        amplitude1 = check_output_limit(amplitude1)
+        amplitude2 = check_output_limit(amplitude2)
 
         # Phase shifts: f1 -> 90°, f2 -> 180°
         f1_stimuli = create_ptpv_signals(
@@ -408,6 +415,22 @@ def calculate_pressure_amplitudes(
     logger.info('  L1: %.1f dB SPL -> %.2f muPa', level1, amplitude1)
     logger.info('  L2: %.1f dB SPL -> %.2f muPa', level2, amplitude2)
     return (amplitude1, amplitude2)
+
+
+def check_output_limit(peak_amplitude: float) -> float:
+    """Verifies and limits the maximum digital output."""
+    if peak_amplitude > DeviceConfig.max_digital_output:
+        logger.warning(
+            'Output amplitude %.5f exceeds maximum of %.2f re FS.',
+            peak_amplitude,
+            DeviceConfig.max_digital_output
+        )
+        logger.warning(
+            'Output amplitude set to %.2f re FS.',
+            DeviceConfig.max_digital_output
+        )
+        return DeviceConfig.max_digital_output
+    return peak_amplitude
 
 
 def generate_sync(sample_rate: float) -> npt.NDArray[np.float32]:

@@ -19,23 +19,17 @@ Note:
 """
 
 import argparse
-import logging
 
 from pyoae import files
 from pyoae import protocols
 from pyoae.calib import MicroTransferFunction
 from pyoae.device.device_config import DeviceConfig
 from pyoae.calibrator import OutputCalibRecorder
-
+import pyoae_logger
 
 DEVICE_CONFIG_FILE = 'device_config.json'
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-)
-
-logger = logging.getLogger('Output Calibrator')
+logger = pyoae_logger.get_pyoae_logger('PyOAE Output Calibrator')
 
 def main(
     mic: str = '',

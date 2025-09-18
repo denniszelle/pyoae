@@ -18,24 +18,19 @@ Note:
 """
 
 import argparse
-import logging
 import os
 
 from pyoae import files
 from pyoae.calib import MicroTransferFunction, OutputCalibration
 from pyoae.device.device_config import DeviceConfig
 from pyoae.cdpoae import DpoaeRecorder
+import pyoae_logger
 
 
 DEVICE_CONFIG_FILE = 'device_config.json'
 
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-)
-
-logger = logging.getLogger('cDPOAE Recorder')
+logger = pyoae_logger.get_pyoae_logger('PyOAE cDPOAE Recorder')
 
 
 def main(

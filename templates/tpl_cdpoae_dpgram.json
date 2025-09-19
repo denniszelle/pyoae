@@ -12,79 +12,7 @@
         {
             "block_duration": 0.1,
             "num_averaging_blocks": 100,
-            "f2": 1100,
-            "f1": null,
-            "f2f1_ratio": 1.2,
-            "level2": 45,
-            "level1": null
-        },
-        {
-            "block_duration": 0.1,
-            "num_averaging_blocks": 100,
-            "f2": 1200,
-            "f1": null,
-            "f2f1_ratio": 1.2,
-            "level2": 45,
-            "level1": null
-        },
-        {
-            "block_duration": 0.1,
-            "num_averaging_blocks": 100,
-            "f2": 1300,
-            "f1": null,
-            "f2f1_ratio": 1.2,
-            "level2": 45,
-            "level1": null
-        },
-        {
-            "block_duration": 0.1,
-            "num_averaging_blocks": 100,
-            "f2": 1400,
-            "f1": null,
-            "f2f1_ratio": 1.2,
-            "level2": 45,
-            "level1": null
-        },
-        {
-            "block_duration": 0.1,
-            "num_averaging_blocks": 100,
             "f2": 1500,
-            "f1": null,
-            "f2f1_ratio": 1.2,
-            "level2": 45,
-            "level1": null
-        },
-        {
-            "block_duration": 0.1,
-            "num_averaging_blocks": 100,
-            "f2": 1600,
-            "f1": null,
-            "f2f1_ratio": 1.2,
-            "level2": 45,
-            "level1": null
-        },
-        {
-            "block_duration": 0.1,
-            "num_averaging_blocks": 100,
-            "f2": 1700,
-            "f1": null,
-            "f2f1_ratio": 1.2,
-            "level2": 45,
-            "level1": null
-        },
-        {
-            "block_duration": 0.1,
-            "num_averaging_blocks": 100,
-            "f2": 1800,
-            "f1": null,
-            "f2f1_ratio": 1.2,
-            "level2": 45,
-            "level1": null
-        },
-        {
-            "block_duration": 0.1,
-            "num_averaging_blocks": 100,
-            "f2": 1900,
             "f1": null,
             "f2f1_ratio": 1.2,
             "level2": 45,
@@ -102,88 +30,16 @@
         {
             "block_duration": 0.1,
             "num_averaging_blocks": 100,
-            "f2": 2100,
-            "f1": null,
-            "f2f1_ratio": 1.2,
-            "level2": 45,
-            "level1": null
-        },
-        {
-            "block_duration": 0.1,
-            "num_averaging_blocks": 100,
-            "f2": 2200,
-            "f1": null,
-            "f2f1_ratio": 1.2,
-            "level2": 45,
-            "level1": null
-        },
-        {
-            "block_duration": 0.1,
-            "num_averaging_blocks": 100,
-            "f2": 2300,
-            "f1": null,
-            "f2f1_ratio": 1.2,
-            "level2": 45,
-            "level1": null
-        },
-        {
-            "block_duration": 0.1,
-            "num_averaging_blocks": 100,
-            "f2": 2400,
-            "f1": null,
-            "f2f1_ratio": 1.2,
-            "level2": 45,
-            "level1": null
-        },
-        {
-            "block_duration": 0.1,
-            "num_averaging_blocks": 100,
-            "f2": 2500,
-            "f1": null,
-            "f2f1_ratio": 1.2,
-            "level2": 45,
-            "level1": null
-        },
-        {
-            "block_duration": 0.1,
-            "num_averaging_blocks": 100,
-            "f2": 2600,
-            "f1": null,
-            "f2f1_ratio": 1.2,
-            "level2": 45,
-            "level1": null
-        },
-        {
-            "block_duration": 0.1,
-            "num_averaging_blocks": 100,
-            "f2": 2700,
-            "f1": null,
-            "f2f1_ratio": 1.2,
-            "level2": 45,
-            "level1": null
-        },
-        {
-            "block_duration": 0.1,
-            "num_averaging_blocks": 100,
-            "f2": 2800,
-            "f1": null,
-            "f2f1_ratio": 1.2,
-            "level2": 45,
-            "level1": null
-        },
-        {
-            "block_duration": 0.1,
-            "num_averaging_blocks": 100,
-            "f2": 2900,
-            "f1": null,
-            "f2f1_ratio": 1.2,
-            "level2": 45,
-            "level1": null
-        },
-        {
-            "block_duration": 0.1,
-            "num_averaging_blocks": 100,
             "f2": 3000,
+            "f1": null,
+            "f2f1_ratio": 1.2,
+            "level2": 45,
+            "level1": null
+        },
+        {
+            "block_duration": 0.1,
+            "num_averaging_blocks": 100,
+            "f2": 4000,
             "f1": null,
             "f2f1_ratio": 1.2,
             "level2": 45,

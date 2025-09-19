@@ -95,7 +95,7 @@ python -m calibrate_sensitivity
 
 The script displays messages about the measurement settings and progress in the terminal. After the recording, the calibration result (assuming a reference tone of 1000 Hz at 94 dB SPL) is displayed in the terminal:
 
-```bash
+```text
 [INFO] pyoae: Recording complete. Please close window to continue.
 [INFO] pyoae: Closing stream.
 [INFO] pyoae: Showing offline results. Please close window to continue.
@@ -116,7 +116,7 @@ python3 -m record_output_calib --mic 'mic/2ROTIU6H_3C9CESK1W6.json' --save
 
 During the measurement, the recorded signal is shown in a figure window. After closing it, the script displays the recorded amplitude response for both channels. The calibration results are stored in the measurement folder in the project's root directory as a JSON file with a unique time stamp, as indicated by the INFO message in the terminal:
 
-```bash
+```text
 [INFO] pyoae.pyoae.calibrator: Recording complete. Please close window to continue.
 [INFO] pyoae: Closing stream.
 [INFO] pyoae: Showing offline results. Please close window to continue.
@@ -191,7 +191,7 @@ python3 -m record_soae --save
 
 If no protocol for the SOAE recording is specified, the script will use the default parameters as stated in the terminal:
 
-```bash
+```text
 [ERROR] pyoae.pyoae.files: SOAE protocol  not found.
 [WARNING] pyoae.pyoae.files: Using default SOAE protocol instead.
 [INFO] pyoae: Starting SOAE recording...

@@ -44,5 +44,7 @@ if __name__ == '__main__':
         search_string = sys.argv[1]
         if search_string.isdigit():
             print_info(int(search_string))
+        else:
+            print_info(search_string)
     else:
         print_info()

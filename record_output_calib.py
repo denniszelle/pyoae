@@ -7,7 +7,7 @@ to calibrate two speakers of a DPOAE ear probe.
 
 Run the following command from the project root directory to start:
 
-    python3 -m record_output_calib --mic 'mic_calib.json' --save
+    python3 -m record_output_calib --mic 'mic/mic_calib.json' --save
 
 
 Note:

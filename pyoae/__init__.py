@@ -4,14 +4,23 @@ This package comprises the following submodules that provide the
 backend for synchronous acquisition of otoacoustic emissions
 using `python-sounddevice` to access an audio device.
 
+Version: 0.2.1 (September 2025) - www.earlab.de
+
 Submodules:
 
-- `pyoae.calib`: Calibration module (currently a dummy module with no function)
-- `pyoae.cdpoae`: Module to record continuous DPOAE
-- `pyoae.soae`: Module to record SOAE (no stimulus)
-- `pyoae.sync`: Module with basic functions and classes for synchronized
-     audio output/input
-
+- `pyoae.abs_calib`: Module to perform absolute calibration of input sensitivity.
+- `pyoae.calib`: Module providing functionality for managing calibration data.
+- `pyoae.calibrator`: Module to calibrate output channels.
+- `pyoae.cdpoae`: Module to record continuous DPOAEs.
+- `pyoae.converter`: Module providing basic conversion functions.
+- `pyoae.files`: Module for file handling.
+- `pyoae.generator`: Module with functions and classes to create output stimuli.
+- `pyoae.helpers`: Module with miscellaneous helper functions.
+- `pyoae.pdpoae`: Module to record pulsed DPOAEs.
+- `pyoae.protocols`: Module handling measurement and configuration protocols.
+- `pyoae.signals: Module managing playback signals.
+- `pyoae.soae`: Module to record SOAE (without any stimulus).
+- `pyoae.sync`: Module providing synchronized audio output/input.
 """
 
 from __future__ import annotations

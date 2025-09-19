@@ -7,7 +7,8 @@ This script is intended as an example and a starting point for continuous
 DPOAE measurements.
 
 
-Run the following command from the project root directory to start:
+Run the following command from the project root directory with appropriate
+arguments to start (see README.md):
 
     python3 -m record_pulse_dpoae
 

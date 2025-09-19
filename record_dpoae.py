@@ -6,8 +6,18 @@ The recorded microphone signal is analyzed in real time, and live plots of
 the time signal and spectrum are displayed.
 
 
-Run the following command from the project root directory to start:
-    python -m record_dpoae
+Run the following command from the project root directory with appropriate
+arguments to start (see README.md):
+
+    python3 -m record_dpoae
+
+Command-line arguments:
+    --mic: microphone/input calibration, e.g., '2ROTIU6H_3C9CESK1W6.json'
+    --protocol: measurement protocol, e.g., 'protocols/pulse_dpoae_iofs.json'
+    --calib: time stamp of output calibration to be used, e.g., '250916-164234'
+    --subject: subject identifier, e.g., 'S999'
+    --ear: recording side, e.g., 'right'
+    --save: save recording in measurement file
 
 Note:
     Sound device IDs or names should be known beforehand and can be

@@ -1,4 +1,4 @@
-"""Classes to store and manage output signals."""
+"""Classes to store and manage playback signals."""
 
 import numpy as np
 import numpy.typing as npt

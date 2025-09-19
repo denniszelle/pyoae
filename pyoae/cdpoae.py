@@ -368,7 +368,8 @@ def update_msrmt(
         return info.plot_info.line_time, info.plot_info.line_spec
 
     if sync_msrmt.state == MsrmtState.FINISHING:
-        sync_msrmt.state = MsrmtState.FINISHED
+        sync_msrmt.set_state(MsrmtState.FINISHED)
+        logger.info('Recording complete. Please close window to continue.')
 
     recorded_signal, spectrum = get_results(sync_msrmt, info)
 
@@ -389,40 +390,6 @@ def start_plot(sync_msrmt: SyncMsrmt, info: DpoaeUpdateInfo) -> None:
     plt.show()
     if sync_msrmt.state not in [MsrmtState.FINISHING, MsrmtState.FINISHED]:
         sync_msrmt.state = MsrmtState.CANCELED
-
-
-def plot_offline(sync_msrmt: SyncMsrmt, info: DpoaeUpdateInfo) -> None:
-    """Plots the final results in a non-updating plot.
-
-    This function obtains the results from the measurement object, creates a
-    plot and shows the complete measurement as well as the spectral estimate.
-    """
-    if sync_msrmt.state != MsrmtState.FINISHED:
-        return
-
-    has_input_calib =  info.input_trans_fun is not None
-
-    recorded_signal, spectrum = get_results(sync_msrmt, info)
-    _, ax_time, line_time, ax_spec, line_spec = setup_plot(
-        sync_msrmt.recording_data.msrmt_duration,
-        sync_msrmt.recording_data.fs,
-        info.block_size,
-        (info.f1*0.6, info.f2*1.5),
-        info.plot_info.live_display_duration,
-        is_calib_available=has_input_calib
-    )
-    line_time.set_xdata(np.arange(len(recorded_signal))/info.fs)
-    line_time.set_ydata(recorded_signal)
-    ax_time.set_xlim(0, sync_msrmt.recording_data.msrmt_duration)
-    ax_time.set_xlabel("Recording Time (s)")
-
-    spec_min = min(spectrum[1:])
-    spec_max = max(spectrum)
-    padding = 15  # dB of padding on top and bottom
-    ax_spec.set_ylim(spec_min - padding, spec_max + padding)
-    line_spec.set_ydata(spectrum)
-    plt.tight_layout()
-    plt.show()
 
 
 class DpoaeRecorder:
@@ -559,8 +526,10 @@ class DpoaeRecorder:
 
         p = ContDpoaeProcessor(recording, self.update_info.input_trans_fun)
         p.process_msrmt()
+        self.logger.info(
+            'Showing offline results. Please close window to continue.'
+        )
         p.plot()
-        # plot_offline(self.msrmt, self.update_info)
 
     def save_recording(self) -> None:
         """Stores the measurement data in binary file."""

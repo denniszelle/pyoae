@@ -45,6 +45,9 @@ from pyoae.signals import PeriodicSignal
 from pyoae.sync import HardwareData, RecordingData, SyncMsrmt, MsrmtState
 
 
+logger = get_logger()
+
+
 @dataclass
 class PulseDpoaePlotInfo:
     """Container with data for the measurement plot."""
@@ -245,7 +248,8 @@ def update_msrmt(
         return [info.plot_info.line]
 
     if sync_msrmt.state == MsrmtState.FINISHING:
-        sync_msrmt.state = MsrmtState.FINISHED
+        sync_msrmt.set_state(MsrmtState.FINISHED)
+        logger.info('Recording complete. Please close window to continue.')
 
     return update_plot_data(sync_msrmt, info)
 
@@ -393,6 +397,9 @@ class PulseDpoaeRecorder:
         }
         p = PulseDpoaeProcessor(recording, self.update_info.input_trans_fun)
         p.process_msrmt()
+        self.logger.info(
+            'Showing offline results. Please close window to continue.'
+        )
         p.plot()
 
     def save_recording(self) -> None:

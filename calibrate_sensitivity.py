@@ -1,26 +1,20 @@
-"""Example script to record SOAEs (Spontaneous Otoacoustic Emissions).
+"""Script to perform an absolute calibration of the input channel.
 
-This script demonstrates how to acquire and visualize SOAE data in real-time.
-It uses a synchronized playback and recording setup. A live time-domain
-and frequency-domain plot is shown during the measurement.
-
-Key steps performed by this script:
-- Configures signal generators and buffer parameters
-- Sets up real-time plots for signal and spectrum display
-- Runs a synchronized measurement using input and output sound devices
-- Saves the recorded signal and sampling rate to a .npz file
-
-This script is intended to be used as an example and entry point for
-SOAE measurements.
+This script demonstrates how to calibrate the sensitivity of the input
+system. It uses a synchronized playback and recording setup. A live
+time-domain and frequency-domain plot is shown during the measurement.
+After the recording, the script shows the offline results with the
+maximum peak pressure that corresponds the a digital input amplitude
+of 1.0 re FS.
 
 Run the following command from the project root directory to start:
-    python -m record_soae
+    python -m calibrate_sensitivity
 
 Note:
     Sound device IDs or names should be known beforehand and can be obtained
       using the display_devices script.
 
-    Users should modify parameters defined in the `device_config` module
+    Users should modify parameters defined in the `device_config.json` file
       to match their specific hardware and experimental setup.
 """
 

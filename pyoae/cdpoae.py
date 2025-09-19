@@ -38,10 +38,14 @@ from pyoae import get_logger
 from pyoae import helpers
 from pyoae.calib import MicroTransferFunction, OutputCalibration
 from pyoae.device.device_config import DeviceConfig
+from pyoae.dsp.processing import ContDpoaeMsrmtData, ContDpoaeProcessor
 from pyoae.generator import ContDpoaeStimulus
 from pyoae.protocols import DpoaeMsrmtParams
 from pyoae.signals import PeriodicRampSignal
 from pyoae.sync import HardwareData, RecordingData, SyncMsrmt, MsrmtState
+
+
+logger = get_logger()
 
 
 @dataclass
@@ -173,7 +177,7 @@ def process_spectrum(
     recorded_signal: npt.NDArray[np.float32],
     block_size: int,
     correction_tf: MicroTransferFunction | None,
-    artifact_rejection_thr:float
+    artifact_rejection_thr: float
 ) -> npt.NDArray[np.float32]:
     """Processes recorded signal to obtain spectrum.
 
@@ -535,7 +539,28 @@ class DpoaeRecorder:
 
         # Plot all data and final result after user has
         # closed the live-measurement window.
-        plot_offline(self.msrmt, self.update_info)
+
+        # We utilize the `ContDpoaeProcessor`, which can handle
+        # both raw data from files as well as from the recorder.
+        recorded_signal = self.msrmt.get_recorded_signal()
+        if not recorded_signal.size:
+            return
+
+        recording: ContDpoaeMsrmtData = {
+            'recorded_signal': recorded_signal,
+            'samplerate': DeviceConfig.sample_rate,
+            'f1': self.stimulus.f1,
+            'f2': self.stimulus.f2,
+            'level1': self.stimulus.level1,
+            'level2': self.stimulus.level2,
+            'num_block_samples': self.update_info.block_size,
+            'recorded_sync': self.msrmt.live_msrmt_data.sync_recorded
+        }
+
+        p = ContDpoaeProcessor(recording, self.update_info.input_trans_fun)
+        p.process_msrmt()
+        p.plot()
+        # plot_offline(self.msrmt, self.update_info)
 
     def save_recording(self) -> None:
         """Stores the measurement data in binary file."""

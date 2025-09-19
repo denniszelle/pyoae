@@ -196,7 +196,7 @@ def update_plot_data(
     num_recorded_blocks = num_recorded_samples // info.block_size
 
     if num_recorded_blocks <= info.num_recorded_blocks:
-         return [info.plot_info.line]
+        return [info.plot_info.line]
 
     # x_data = np.arange(num_recorded_samples) / info.fs
     idx_start = (num_recorded_blocks - 1) * info.block_size
@@ -376,7 +376,7 @@ class PulseDpoaeRecorder:
         # Plot all data and final result after user has
         # closed the live-measurement window.
 
-        # we utilize the `PulseDpoaeProcessor` which can handle
+        # We utilize the `PulseDpoaeProcessor`, which can handle
         # both raw data from files as well as from the recorder.
         recorded_signal = self.msrmt.get_recorded_signal()
         if not recorded_signal.size:

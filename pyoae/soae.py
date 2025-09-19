@@ -580,6 +580,8 @@ class SoaeRecorder:
     ) -> SoaePlotInfo:
         """Sets up live plot and measurement information."""
 
+        # Update plot and calculations for every block
+        # Here, the block duration is typically 1 second.
         update_time = (num_block_samples / DeviceConfig.sample_rate) * 1E3
 
         fig, ax_time, line_time, ax_spec, line_spec = setup_plot(
@@ -587,7 +589,6 @@ class SoaeRecorder:
             DeviceConfig.sample_rate,
             num_block_samples,
             update_time
-            #DeviceConfig.live_display_duration
         )
         return SoaePlotInfo(
             fig,
@@ -597,6 +598,4 @@ class SoaeRecorder:
             line_spec,
             update_time,
             update_time
-            # DeviceConfig.update_interval,
-            # DeviceConfig.live_display_duration
         )

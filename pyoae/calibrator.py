@@ -316,7 +316,8 @@ def update_msrmt(
         return (info.plot_info.line_time, )
 
     if sync_msrmt.state == MsrmtState.FINISHING:
-        sync_msrmt.state = MsrmtState.FINISHED
+        sync_msrmt.set_state(MsrmtState.FINISHED)
+        logger.info('Recording complete. Please close window to continue.')
 
     recorded_signal = get_results(sync_msrmt)
 
@@ -494,6 +495,9 @@ class OutputCalibRecorder:
 
         # Plot all data and final result after user has
         # closed the live-measurement window.
+        self.logger.info(
+            'Showing offline results. Please close window to continue.'
+        )
         plot_offline(
             self.msrmt,
             self.update_info,

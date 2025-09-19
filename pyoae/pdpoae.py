@@ -416,8 +416,8 @@ class PulseDpoaeRecorder:
             time_stamp,
             helpers.sanitize_filename_part(self.subject),
             helpers.sanitize_filename_part(self.ear),
-            str(self.stimulus.f2),
-            str(self.stimulus.level2),
+            str(int(self.stimulus.f2)),
+            str(int(self.stimulus.level2)),
         ]
         file_name = "_".join(filter(None, parts))
         save_path = os.path.join(save_path, file_name)
@@ -433,7 +433,7 @@ class PulseDpoaeRecorder:
             recorded_sync=self.msrmt.live_msrmt_data.sync_recorded,
             average=avg
         )
-        self.logger.info("Measurement saved to %s.", save_path)
+        self.logger.info("Measurement saved to %s.npz", save_path)
 
     def generate_output_signals(
         self,

@@ -1,4 +1,4 @@
-"""Example script to record SOAEs (Spontaneous Otoacoustic Emissions).
+"""Script to record SOAEs (Spontaneous Otoacoustic Emissions).
 
 This script demonstrates how to acquire and visualize SOAE data in real-time.
 It uses a synchronized playback and recording setup. A live time-domain
@@ -20,7 +20,7 @@ Note:
     Sound device IDs or names should be known beforehand and can be obtained
       using the display_devices script.
 
-    Users should modify parameters defined in the `device_config` module
+    Users should modify parameters defined in the `device_config.json` file
       to match their specific hardware and experimental setup.
 """
 

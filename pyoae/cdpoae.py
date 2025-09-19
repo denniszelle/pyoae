@@ -540,17 +540,16 @@ class DpoaeRecorder:
         os.makedirs(save_path, exist_ok=True)
         cur_time = datetime.now()
         time_stamp = cur_time.strftime("%y%m%d-%H%M%S")
-        file_name = 'cdpoae_msrmt_'+ time_stamp
-        save_path = os.path.join(save_path, file_name)
         parts = [
             "cdpoae_msrmt",
             time_stamp,
             helpers.sanitize_filename_part(self.subject),
             helpers.sanitize_filename_part(self.ear),
-            str(self.stimulus.f2),
-            str(self.stimulus.level2),
+            str(int(self.stimulus.f2)),
+            str(int(self.stimulus.level2)),
         ]
         file_name = "_".join(filter(None, parts))
+        save_path = os.path.join(save_path, file_name)
         recorded_signal, spectrum = get_results(self.msrmt, self.update_info)
         np.savez(save_path,
             spectrum=spectrum,
@@ -558,7 +557,7 @@ class DpoaeRecorder:
             samplerate=DeviceConfig.sample_rate,
             recorded_sync=self.msrmt.live_msrmt_data.sync_recorded
         )
-        self.logger.info("Saved measurement to %s.", save_path)
+        self.logger.info("Saved measurement to %s.npz", save_path)
 
     def generate_output_signals(
         self,

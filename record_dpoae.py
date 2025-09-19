@@ -46,6 +46,9 @@ def main(
     logger.info('DPOAE recorder started with following options:')
     if protocol:
         logger.info('  Protocol: %s', protocol)
+    else:
+        logger.error('Please specify a measurement protocol.')
+        return
     if subject:
         logger.info('  Subject ID: %s', subject)
     if ear:
@@ -75,7 +78,10 @@ def main(
         out_file_name = calib + '_out_calib.json'
         out_file_path = os.path.join(os.getcwd(), 'measurements', out_file_name)
         speaker_calib_data = files.load_output_calib(out_file_path)
-        output_calib_fun = OutputCalibration(speaker_calib_data)
+        if speaker_calib_data['frequencies']:
+            output_calib_fun = OutputCalibration(speaker_calib_data)
+        else:
+            output_calib_fun = None
     else:
         output_calib_fun = None
 

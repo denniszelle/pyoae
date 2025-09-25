@@ -380,9 +380,9 @@ class PulseDpoaeProcessor:
         # rec_lim = axes[0].get_ylim()
         # axes[1].set_ylim(rec_lim)
         axes[0].set_title(
-            f'L1: {self.recording['level1']} dB SPL, '
-            f'L2: {self.recording['level2']} dB SPL, '
-            f'f2: {self.recording['f2']} Hz'
+            f'L1: {self.recording["level1"]} dB SPL, '
+            f'L2: {self.recording["level2"]} dB SPL, '
+            f'f2: {self.recording["f2"]} Hz'
         )
         axes[1].set_title(
             f'Accepted blocks: {self.averager.stats.num_accepted_blocks}'''
@@ -574,9 +574,9 @@ class ContDpoaeProcessor:
         # rec_lim = axes[0].get_ylim()
         # axes[1].set_ylim(rec_lim)
         axes[0].set_title(
-            f'L1: {self.recording['level1']} dB SPL, '
-            f'L2: {self.recording['level2']} dB SPL, '
-            f'f2: {self.recording['f2']} Hz'
+            f'L1: {self.recording["level1"]} dB SPL, '
+            f'L2: {self.recording["level2"]} dB SPL, '
+            f'f2: {self.recording["f2"]} Hz'
         )
         axes[1].set_title(
             f'Accepted blocks: {self.averager.stats.num_accepted_blocks}'''

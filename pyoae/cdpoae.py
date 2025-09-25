@@ -404,6 +404,9 @@ class DpoaeRecorder:
     update_info: DpoaeUpdateInfo
     """Instance to control DPOAE measurement updates."""
 
+    dpoae_processor: ContDpoaeProcessor | None = None
+    """Dpoae processor for offline post-processing"""
+
     msrmt: SyncMsrmt
     """Instance to perform a synchronized OAE measurement."""
 
@@ -524,12 +527,12 @@ class DpoaeRecorder:
             'recorded_sync': self.msrmt.live_msrmt_data.sync_recorded
         }
 
-        p = ContDpoaeProcessor(recording, self.update_info.input_trans_fun)
-        p.process_msrmt()
+        self.dpoae_processor = ContDpoaeProcessor(recording, self.update_info.input_trans_fun)
+        self.dpoae_processor.process_msrmt()
         self.logger.info(
             'Showing offline results. Please close window to continue.'
         )
-        p.plot()
+        self.dpoae_processor.plot()
 
     def save_recording(self) -> None:
         """Stores the measurement data in binary file."""
@@ -550,11 +553,23 @@ class DpoaeRecorder:
         ]
         file_name = "_".join(filter(None, parts))
         save_path = os.path.join(save_path, file_name)
-        recorded_signal, spectrum = get_results(self.msrmt, self.update_info)
+        recorded_signal, _ = get_results(self.msrmt, self.update_info)
+        if self.dpoae_processor is not None:
+            averaged = self.dpoae_processor.raw_averaged
+            spectrum = self.dpoae_processor.dpoae_spectrum
+        else:
+            averaged = np.array(0,np.float64)
+            spectrum = np.array(0,np.float64)
         np.savez(save_path,
+            average=averaged,
             spectrum=spectrum,
             recorded_signal=recorded_signal,
             samplerate=DeviceConfig.sample_rate,
+            f1=self.stimulus.f1,
+            f2=self.stimulus.f2,
+            level1=self.stimulus.level1,
+            level2=self.stimulus.level2,
+            num_block_samples = self.update_info.block_size,
             recorded_sync=self.msrmt.live_msrmt_data.sync_recorded
         )
         self.logger.info("Saved measurement to %s.npz", save_path)

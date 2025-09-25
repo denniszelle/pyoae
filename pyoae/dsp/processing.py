@@ -1,7 +1,9 @@
 """Python script to process and visualize a single recording."""
 
 from pathlib import Path
-from typing import TypedDict, cast, NotRequired
+import sys
+from typing import TypedDict, cast
+
 
 from matplotlib import pyplot as plt
 from matplotlib.axes import Axes
@@ -16,6 +18,12 @@ from pyoae import files
 from pyoae import generator
 from pyoae.calib import MicroTransferFunction
 from pyoae.dsp.opt_avg import OptAverage
+
+
+if sys.version_info >= (3,11):
+    from typing import NotRequired
+else:
+    from typing_extensions import NotRequired
 
 
 NUM_PTPV_SEGMENTS = 4

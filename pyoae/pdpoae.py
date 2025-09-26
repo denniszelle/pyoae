@@ -285,6 +285,9 @@ class PulseDpoaeRecorder:
     msrmt: SyncMsrmt
     """Instance to perform a synchronized OAE measurement."""
 
+    dpoae_processor: PulseDpoaeProcessor | None
+    """Dpoae processor for offline post-processing"""
+
     subject: str
     """Name/ID of the subject to be used for the measurement file name."""
 
@@ -370,6 +373,7 @@ class PulseDpoaeRecorder:
             hw_data,
             self.signals
         )
+        self.dpoae_processor = None
 
     def record(self) -> None:
         """Starts the recording."""
@@ -395,12 +399,14 @@ class PulseDpoaeRecorder:
             'num_block_samples': self.update_info.block_size,
             'recorded_sync': self.msrmt.live_msrmt_data.sync_recorded
         }
-        p = PulseDpoaeProcessor(recording, self.update_info.input_trans_fun)
-        p.process_msrmt()
+        self.dpoae_processor = PulseDpoaeProcessor(
+            recording, self.update_info.input_trans_fun
+        )
+        self.dpoae_processor.process_msrmt()
         self.logger.info(
             'Showing offline results. Please close window to continue.'
         )
-        p.plot()
+        self.dpoae_processor.plot()
 
     def save_recording(self) -> None:
         """Stores the measurement data in binary file."""
@@ -421,7 +427,11 @@ class PulseDpoaeRecorder:
         ]
         file_name = "_".join(filter(None, parts))
         save_path = os.path.join(save_path, file_name)
-        recorded_signal, avg = get_results(self.msrmt, self.update_info)
+        recorded_signal, _ = get_results(self.msrmt, self.update_info)
+        if self.dpoae_processor is not None:
+            avg = self.dpoae_processor.dpoae_signal
+        else:
+            avg = np.array(0,np.float64)
         np.savez(save_path,
             recorded_signal=recorded_signal,
             samplerate=DeviceConfig.sample_rate,

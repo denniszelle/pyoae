@@ -18,7 +18,7 @@ Submodules:
 - `pyoae.helpers`: Module with miscellaneous helper functions.
 - `pyoae.pdpoae`: Module to record pulsed DPOAEs.
 - `pyoae.protocols`: Module handling measurement and configuration protocols.
-- `pyoae.signals: Module managing playback signals.
+- `pyoae.signals`: Module managing playback signals.
 - `pyoae.soae`: Module to record SOAE (without any stimulus).
 - `pyoae.sync`: Module providing synchronized audio output/input.
 """

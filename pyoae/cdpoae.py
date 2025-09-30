@@ -404,7 +404,7 @@ class DpoaeRecorder:
     update_info: DpoaeUpdateInfo
     """Instance to control DPOAE measurement updates."""
 
-    dpoae_processor: ContDpoaeProcessor | None = None
+    dpoae_processor: ContDpoaeProcessor | None
     """Dpoae processor for offline post-processing"""
 
     msrmt: SyncMsrmt
@@ -500,6 +500,7 @@ class DpoaeRecorder:
             hw_data,
             self.signals
         )
+        self.dpoae_processor = None
 
     def record(self) -> None:
         """Starts the recording."""

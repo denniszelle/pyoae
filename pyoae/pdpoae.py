@@ -285,7 +285,7 @@ class PulseDpoaeRecorder:
     msrmt: SyncMsrmt
     """Instance to perform a synchronized OAE measurement."""
 
-    dpoae_processor: PulseDpoaeProcessor | None = None
+    dpoae_processor: PulseDpoaeProcessor | None
     """Dpoae processor for offline post-processing"""
 
     subject: str
@@ -373,6 +373,7 @@ class PulseDpoaeRecorder:
             hw_data,
             self.signals
         )
+        self.dpoae_processor = None
 
     def record(self) -> None:
         """Starts the recording."""

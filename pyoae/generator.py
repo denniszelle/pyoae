@@ -396,8 +396,8 @@ def calculate_full_scale_amplitudes(
     amplitude1 = max(0.0, min(amplitude1, 1.0))
     amplitude2 = max(0.0, min(amplitude2, 1.0))
     logger.info('Calculating digital full-scale amplitudes for output.')
-    logger.info('  L1: %.2f dBFS -> .6%f re FS.', level1, amplitude1)
-    logger.info('  L2: %.2f dBFS -> .6%f re FS.', level2, amplitude2)
+    logger.info('  L1: %.2f dBFS -> .%6f re FS.', level1, amplitude1)
+    logger.info('  L2: %.2f dBFS -> .%6f re FS.', level2, amplitude2)
 
     return (amplitude1, amplitude2)
 

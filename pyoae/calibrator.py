@@ -532,7 +532,7 @@ class OutputCalibRecorder:
             "date": time_stamp,
             "frequencies": self.mt_frequencies.tolist(),
             "max_out_ch01": calib_results[0].tolist(),
-            "max_out_ch02": calib_results[0].tolist(),
+            "max_out_ch02": calib_results[1].tolist(),
             "phase_ch01": np.zeros_like(self.mt_frequencies).tolist(),
             "phase_ch02": np.zeros_like(self.mt_frequencies).tolist(),
         }

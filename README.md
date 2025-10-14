@@ -28,12 +28,20 @@ pip install -r requirements.txt
 
 ### Dependencies
 
-| Package       | Version (tested) |
+<!-- | Package       | Version (tested) |
 | ------------- | ---------------- |
 | `sounddevice` | 0.5.1            |
 | `numpy`       | 2.2.5            |
 | `scipy`       | 1.15.2           |
-| `matplotlib`  | 3.10.1           |
+| `matplotlib`  | 3.10.1           | -->
+
+| Package               | Version (tested) | Notes                        |
+| --------------------- | ---------------- | ----------------------------- |
+| `sounddevice`         | 0.5.1            |                               |
+| `numpy`               | 2.2.5            |                               |
+| `scipy`               | 1.15.2           |                               |
+| `matplotlib`          | 3.10.1           |                               |
+| `typing_extensions`   | 4.15.0            | Only required for Python < 3.11 |
 
 ---
 

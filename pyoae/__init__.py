@@ -4,7 +4,7 @@ This package comprises the following submodules that provide the
 backend for synchronous acquisition of otoacoustic emissions
 using `python-sounddevice` to access an audio device.
 
-Version: 0.2.1 (September 2025) - www.earlab.de
+Version: 0.2.2 (October 2025) - www.earlab.de
 
 Submodules:
 

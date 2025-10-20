@@ -116,12 +116,16 @@ class OutputCalibration:
     sample_rate: float | None
     """Sample rate in Hz for which the transfer function was interpolated"""
 
+    date: str
+    """Time stamp of output calibration."""
+
     def __init__(
         self,
         calib_data: SpeakerCalibData,
         num_samples: int | None = None,
         sample_rate: float | None = None
     ) -> None:
+        self.date = calib_data['date']
         self.frequencies = np.array(calib_data['frequencies'], dtype=np.float32)
         amp_ch01 = np.array(calib_data['max_out_ch01'], dtype=np.float32)
         amp_ch02 = np.array(calib_data['max_out_ch02'], dtype=np.float32)

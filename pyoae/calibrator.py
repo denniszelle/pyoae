@@ -18,7 +18,11 @@ import numpy.typing as npt
 from pyoae import files
 from pyoae import generator
 from pyoae import get_logger
-from pyoae.calib import MicroTransferFunction, SpeakerCalibData
+from pyoae.calib import (
+    MicroTransferFunction,
+    OutputCalibration,
+    SpeakerCalibData
+)
 from pyoae.device.device_config import DeviceConfig
 from pyoae.protocols import CalibMsrmtParams
 from pyoae.signals import Signal
@@ -139,7 +143,6 @@ def setup_offline_plot(
     _, axes = plt.subplots(2, 1, figsize=(10, 6))
     axes: list[Axes]
 
-    # Set up time plot
     for i, ax in enumerate(axes):
         ax.set_xlim(frequency_range[0], frequency_range[1])
         ax.set_ylim(-50, 100)
@@ -389,6 +392,31 @@ def plot_offline(
         ax.plot(mt_frequencies, out_max_db_spl, 'r--')
         ax.set_ylim(spec_min - padding, spec_max + padding)
 
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_result_file(results: OutputCalibration) -> None:
+    """Plots output calibration from result file."""
+    _, ax = plt.subplots(1, 1, figsize=(10, 6))
+
+    ax.set_xlim(100, 20000)
+    ax.set_ylim(0, 120)
+    ax.set_xscale('log')
+    ax.set_title(f"Calibration {results.date} - Maximum Output Level")
+    ax.set_xlabel("Frequency (Hz)")
+    ax.set_ylabel('Level (dB SPL)')
+
+    line_styles = ['rx-', 'b.-']
+    for i in range(2):
+        p_out_max = results.amplitudes[i,:]
+        out_max_db_spl = 20*np.log10(p_out_max/(np.sqrt(2)*20))
+        y_min = 0
+        y_max = np.ceil(max(out_max_db_spl)/20)*20
+        ax.plot(results.frequencies, out_max_db_spl, line_styles[i])
+        ax.set_ylim(y_min, y_max)
+    ax.legend(['Ch. 0', 'Ch. 1'])
+    ax.grid(True, which='both')
     plt.tight_layout()
     plt.show()
 

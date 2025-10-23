@@ -250,6 +250,20 @@ In order to obtain a time-domain signal of the DPOAE response, PyOAE utilized Pr
 
 ---
 
+## Trouble Shooting
+
+The following points may help resolve common issues encountered during measurement.
+
+### Inconsistent Audio Recording:
+
+When short input misses or output artifacts occur, the following aspects can be considered:
+
+* **Background Activity**: Close unnecessary applications and background processes, such as cloud storage sync services, when measuring.
+* **Disable Battery Saving Mode**: Ensure your device is running in performance mode to prevent throttling.
+* **Latest Python Version**: Updating to the most current stable Python release may improve performance
+
+---
+
 ## Documentation
 
 For detailed information on the code, please refer to the [API online documentation](https://www.earlab.de/doc/pyoae/).

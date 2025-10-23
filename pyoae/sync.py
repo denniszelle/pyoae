@@ -29,7 +29,7 @@ SYNC_OUTPUT_CHANNEL: Final[int] = 0
 SYNC_INPUT_CHANNEL: Final[int] = 1
 """Input channel to record the sync signal."""
 
-NUM_INIT_RUNS: Final[int] = 3
+NUM_INIT_RUNS: Final[int] = 10
 """Number of initialization runs to clear device buffers.
 
 A measurement callback by the sound device is considered

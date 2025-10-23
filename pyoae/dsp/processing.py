@@ -294,7 +294,7 @@ class PulseDpoaeProcessor:
         self.raw_averaged *= win
 
         t_hw_sp = generator.short_pulse_half_width(self.recording['f2']) * 1E-3
-        bw = 0.5 * (1 / t_hw_sp)
+        bw = 1 / t_hw_sp
         df = int(0.5*bw)
 
         cutoff = fdp + np.array([-df, df],)

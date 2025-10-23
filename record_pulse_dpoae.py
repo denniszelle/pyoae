@@ -91,7 +91,8 @@ def main(
         if speaker_calib_data['frequencies']:
             output_calib_fun = OutputCalibration(speaker_calib_data)
         else:
-            output_calib_fun = None
+            logger.error('Stopping: Failed to load output calibration.')
+            return
     else:
         output_calib_fun = None
 

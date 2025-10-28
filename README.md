@@ -126,7 +126,7 @@ We recommend storing your custom microphone calibration files in the `mic` folde
 PyOAE offers a very simple output calibration via the script `record_output_calib.py`. For each output channel, a multi tone is presented to characterize the output-channel response (typically dominated by the speaker, the ear-canal anatomy, and the ear-probe fit). In the terminal, run the following command to start the output calibration with the ear probe inserted into the ear canal of the measurement subject (make sure to replace the microphone-calibration file with that matching your own setup):
 
 ```bash
-python3 -m record_output_calib --mic 'mic/2ROTIU6H_3C9CESK1W6.json' --save
+python3 -m record_output_calib --mic 'mic/mic.json' --save
 ```
 
 During the measurement, the recorded signal is shown in a figure window. After closing it, the script displays the recorded amplitude response for both channels. The calibration results are stored in the measurement folder in the project's root directory as a JSON file with a unique time stamp, as indicated by the INFO message in the terminal:
@@ -227,13 +227,13 @@ An SOAE recording made in an artificial ear or cavity can also help detect distu
 To stimulate the ear using two continuous primary tones and record a DPOAE, run the `record_dpoae` script. To run a protocol example given in the `templates` folder, use the following command in the terminal. Ensure that you alter the example to match your microphone file and the time stamp of the previously performed output calibration.
 
 ```bash
-python3 -m record_dpoae --mic 'mic/2ROTIU6H_3C9CESK1W6.json' --protocol 'templates/tpl_cdpoae.json' --calib '250919-100413'
+python3 -m record_dpoae --mic 'mic/mic.json' --protocol 'templates/tpl_cdpoae.json' --calib '250919-100413'
 ```
 
 Using the command line arguments `--save`, `--subject`, and `--ear`, you can save the measurement results using a subject identifier and a text describing the recording side. For example:
 
 ```bash
-python3 -m record_dpoae --mic 'mic/2ROTIU6H_3C9CESK1W6.json' --protocol 'templates/tpl_cdpoae.json' --calib '250919-100413' --subject 'S000' --ear 'right' --save
+python3 -m record_dpoae --mic 'mic/mic.json' --protocol 'templates/tpl_cdpoae.json' --calib '250919-100413' --subject 'S000' --ear 'right' --save
 ```
 
 **Please note that PyOAE currently does correct for the input and output channel phase characteristics.**
@@ -243,7 +243,7 @@ python3 -m record_dpoae --mic 'mic/2ROTIU6H_3C9CESK1W6.json' --protocol 'templat
 To stimulate the ear using two pulsed primary tones and record a pulsed DPOAE response in the time domain, run the `record_pulse_dpoae` script (with similar options as for continuous acquisition):
 
 ```bash
-python3 -m record_pulse_dpoae --mic 'mic/2ROTIU6H_3C9CESK1W6.json' --protocol 'templates/tpl_pdpoae.json' --calib '250919-100413' --subject 'S000' --ear 'right'  --save
+python3 -m record_pulse_dpoae --mic 'mic/mic.json' --protocol 'templates/tpl_pdpoae.json' --calib '250919-100413' --subject 'S000' --ear 'right'  --save
 ```
 
 In order to obtain a time-domain signal of the DPOAE response, PyOAE utilized Primary-Tone Phase Variation ([Whitehead et al. (1996)](https://doi.org/10.1121/1.416065)). Suitable phase shifts of the primary tones enable their cancellation during the averaging process while maintaining the distortion-product at the cubic difference frequency fdp = 2f1-f2.

@@ -24,23 +24,19 @@ pip install -r requirements.txt
 
 ### Python Version
 
-* Python ≥ 3.10
+We recommend the use of **Python 3.12** or higher.
 
 ### Dependencies
 
-<!-- | Package       | Version (tested) |
-| ------------- | ---------------- |
-| `sounddevice` | 0.5.1            |
-| `numpy`       | 2.2.5            |
-| `scipy`       | 1.15.2           |
-| `matplotlib`  | 3.10.1           | -->
+The following package versions work without known issues on Windows 10 using Python 3.14. We do not expect any issues with earlier Python versions of down to 3.12.
+
 
 | Package               | Version (tested) | Notes                        |
 | --------------------- | ---------------- | ----------------------------- |
-| `sounddevice`         | 0.5.1            |                               |
-| `numpy`               | 2.2.5            |                               |
-| `scipy`               | 1.15.2           |                               |
-| `matplotlib`          | 3.10.1           |                               |
+| `sounddevice`         | 0.5.3            |                               |
+| `numpy`               | 2.3.4            |                               |
+| `scipy`               | 1.16.2           |                               |
+| `matplotlib`          | 3.10.7           |                               |
 | `typing_extensions`   | 4.15.0            | Only required for Python < 3.11 |
 
 ---
@@ -60,19 +56,21 @@ Make sure to run the command from the project root directory (the parent folder 
 python3 -m pyoae.device.display_devices
 ```
 
-You can also filter the output by device name:
+You can also filter the output by device name (*highly recommended on Windows*):
 
 ```bash
-python3 -m pyoae.device.display_devices Scarlett
+python3 -m pyoae.device.display_devices Focusrite
 ```
 
 The output lists key properties such as the device name, number of input and output channels, and the sample rate. For devices that support multiple sample rates and bit depths, select the appropriate option in your audio system settings, for example, in Audio MIDI Setup (macOS), the operating system’s audio settings, or the control software for your audio interface (e.g., Focusrite Control).
+
+**NOTE**: The `display_devices` script often lists a large number of available devices because Windows treats each combination of channel count and sampling frequency as a separate device instance. In addition, even if only a single audio interface is connected, Windows typically shows separate instances for input and output channels, which need to be selected individually (see the next step below).
 
 ### 2. Configure the Audio Device
 
 Based on the results from the `display_devices` script, configure the audio interface to be used for recordings in the `device_config.json` file.
 
-For example, to select a Focusrite Scarlett 2i2 audio interface and set the sampling rate to 96 kHz, update the following attributes in `device_config.json`:
+For example, to select a Focusrite Scarlett 2i2 audio interface and set the sampling rate to 96 kHz on macOS, update the following attributes in `device_config.json`:
 
 ```json
     "input_device": "Scarlett 2i2 USB",
@@ -81,7 +79,16 @@ For example, to select a Focusrite Scarlett 2i2 audio interface and set the samp
     "device_buffer_size": 4096,
 ```
 
-**Please note that the device names may differ depending on your operating system and specific hardware.**
+On Windows, we recommend using the device index instead of the device name. To select a Focusrite Scarlett 2i2 audio interface with a sampling rate of 48 kHz, use the following configuration:
+
+```json
+    "input_device": 14,
+    "output_device": 12,
+    "sample_rate": 48000.0,
+    "device_buffer_size": 4096,
+```
+
+*Please note that the device names and indices may differ depending on your operating system and specific hardware.*
 
 For a sample rate of 96 kHz, we recommend using a buffer size for the audio device of 4096 frames. If you experience dropouts during playback or recording, increasing the buffer size often resolves the issue. A larger buffer is typically required for higher sampling rates (e.g., 8192 frames for 192 kHz).
 
@@ -247,20 +254,22 @@ In order to obtain a time-domain signal of the DPOAE response, PyOAE utilized Pr
 
 * **Sound Card Drivers**: PyOAE typically uses the sound card drivers provided by the operating system. If you encounter issues detecting your device or setting the sampling rate, we recommend installing the official drivers from the device manufacturer.
 * **Audio Configuration**: Ensure the correct input and output device identifiers are defined in the `device_config` module. Note that device indices may change when USB audio interfaces are connected or disconnected, so double-check your configuration if problems occur.
+* **System Sounds**: It is recommended to disable system sound notifications in your operating system. Additionally, set your computer’s default playback device (e.g., built-in speakers) for all other applications. Avoid using the audio interface assigned to PyOAE as the system’s default output device to prevent unwanted sounds from being played through the probe and interfering with the measurements.
 
 ---
 
-## Trouble Shooting
+## Troubleshooting
 
 The following points may help resolve common issues encountered during measurement.
 
-### Inconsistent Audio Recording:
+### Inconsistent Audio Playback or Recording
 
-When short input misses or output artifacts occur, the following aspects can be considered:
+If you experience dropouts during playback or recording, consider the following::
 
-* **Background Activity**: Close unnecessary applications and background processes, such as cloud storage sync services, when measuring.
-* **Disable Battery Saving Mode**: Ensure your device is running in performance mode to prevent throttling.
-* **Latest Python Version**: Updating to the most current stable Python release may improve performance
+* **Background Processes**: Close unnecessary applications and background services (e.g., cloud sync tools) while running measurements.
+* **System Notifications**: Disable or limit operating system notifications to prevent interruptions.
+* **Power Settings**: Ensure your computer is running in high-performance mode and that any battery-saving features are disabled to avoid CPU throttling.
+* **Python Version**: Update to the latest stable Python release. Performance improvements are especially noticeable when upgrading from Python 3.10 or older.
 
 ---
 

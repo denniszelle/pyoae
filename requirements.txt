@@ -2,8 +2,8 @@
 #
 # pip install -r requirements.txt
 #
-sounddevice == 0.5.1
-numpy == 2.2.5
-scipy == 1.15.2
-matplotlib == 3.10.1
+sounddevice
+numpy
+scipy
+matplotlib
 typing_extensions == 4.15.0; python_version <= "3.10"

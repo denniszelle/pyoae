@@ -4,12 +4,20 @@ This script shows the results of a conventional DPOAE
 recording using continuously presented primary tones.
 
 
-Run the following command from the project root directory to start:
+Run the following command from the project root directory to
+plot results from a single measurement:
 
     python3 -m show_dpoae --file 'cdpoae_msrmt_250915-172224.npz'
 
+Run the following command from the project root directory to
+plot all continuous DPOAE recordings in a specified directory:
+
+    python3 -m show_dpoae --d 'measurements'
+
 Command-line arguments:
-    --file: path to result file to be shown, e.g., 'cdpoae_msrmt_250915-172224.npz'
+    --file: path to result file to be shown,
+      e.g., 'cdpoae_msrmt_250915-172224.npz'
+    --d: path to directory with multiple result files to be shown
 
 """
 
@@ -22,12 +30,29 @@ import pyoae_logger
 
 logger = pyoae_logger.get_pyoae_logger('PyOAE DPOAE Results')
 
-def main(file: str = '') -> None:
+def main(file: str = '', d: str = '') -> None:
     """Main function visualizing a DPOAE spectrum."""
 
     logger.info('Display of results from continuous DPOAE recording.')
 
     cdpoae_result = None
+
+    if d:
+        logger.info('Loading DPOAE files from %s.', d)
+        # plot results from all cDPOAE measurement files in directory
+        cdpoae_paths = files.find_npz_files(d, prefix='cdpoae')
+        if cdpoae_paths:
+            for p in cdpoae_paths:
+                logger.info('Loading DPOAE results from  %s.', p)
+                cont_recording = files.load_cdpoae_recording(p)
+                if cont_recording is None:
+                    logger.error('Failed to load continuous DPOAE result.')
+                else:
+                    cdpoae_result = ContDpoaeResult(cont_recording)
+                    cdpoae_result.plot()
+        logger.info('All DPOAE files from  %s processed.', d)
+        return
+
     if file:
         logger.info('Loading DPOAE results from  %s.', file)
         cont_recording = files.load_cdpoae_recording(file)
@@ -47,6 +72,13 @@ parser.add_argument(
     default=argparse.SUPPRESS,
     type=str,
     help='Specify CDPOAE recording file.'
+)
+
+parser.add_argument(
+    '--d',
+    default=argparse.SUPPRESS,
+    type=str,
+    help='Specify directory with CDPOAE recording files.'
 )
 
 

@@ -429,8 +429,10 @@ class PulseDpoaeRecorder:
         save_path = os.path.join(save_path, file_name)
         recorded_signal, _ = get_results(self.msrmt, self.update_info)
         if self.dpoae_processor is not None:
+            raw_avg = self.dpoae_processor.raw_averaged
             avg = self.dpoae_processor.dpoae_signal
         else:
+            raw_avg = np.array(0,np.float64)
             avg = np.array(0,np.float64)
         np.savez(save_path,
             recorded_signal=recorded_signal,
@@ -441,7 +443,8 @@ class PulseDpoaeRecorder:
             level2=self.stimulus.level2,
             num_block_samples=self.update_info.block_size,
             recorded_sync=self.msrmt.live_msrmt_data.sync_recorded,
-            average=avg
+            average=avg,
+            raw_average=raw_avg
         )
         self.logger.info("Measurement saved to %s.npz", save_path)
 

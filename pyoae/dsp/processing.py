@@ -1,5 +1,6 @@
 """Python script to process and visualize a single recording."""
 
+from logging import Logger
 from pathlib import Path
 from typing import TypedDict, cast
 
@@ -13,6 +14,7 @@ import scipy.signal as sig
 
 from pyoae import files
 from pyoae import generator
+from pyoae import get_logger
 from pyoae.calib import MicroTransferFunction
 from pyoae.dsp.opt_avg import OptAverage
 
@@ -48,6 +50,26 @@ class PulseDpoaeRecording(TypedDict):
     average: npt.NDArray[np.float64] | None
     signal: npt.NDArray[np.float64] | None
 
+
+def _msrmt_to_cont_recording(
+    msrmt_data: DpoaeMsrmtData
+) -> ContDpoaeRecording:
+    """Creates a continuous DPOAE recording from measurement data."""
+    return {
+        'recording': msrmt_data,
+        'average': None,
+        'spectrum': None
+    }
+
+def _msrmt_to_pulse_recording(
+    msrmt_data: DpoaeMsrmtData
+) -> PulseDpoaeRecording:
+    """Creates a pulsed DPOAE recording dictionary from measurement data."""
+    return {
+        'recording': msrmt_data,
+        'average': None,
+        'signal': None
+    }
 
 def estimate_power(y: npt.NDArray[np.float32 | np.float64]) -> float:
     """Estimates the signal power as RMS for a given signal."""
@@ -157,6 +179,8 @@ def bp_pass_filter(
 class PulseDpoaeResult:
     """Instance to manage a DPOAE result from pulsed recording."""
 
+    log: Logger
+
     recording: DpoaeMsrmtData
 
     raw_averaged: npt.NDArray[np.float64]
@@ -164,6 +188,7 @@ class PulseDpoaeResult:
     dpoae_signal: npt.NDArray[np.float64]
 
     def __init__(self, pulsed_recording: PulseDpoaeRecording) -> None:
+        self.log = get_logger(__class__.__name__)
         self.recording = pulsed_recording['recording']
         if pulsed_recording['average'] is None:
             self.raw_averaged = np.empty(0, dtype=np.float64)
@@ -216,33 +241,26 @@ class PulseDpoaeResult:
         plt.show(block=block_loop)
 
 
-class PulseDpoaeProcessor:
+class PulseDpoaeProcessor(PulseDpoaeResult):
     """Instance to process a pulsed DPOAE recording."""
-
-    recording: DpoaeMsrmtData
 
     averager: OptAverage
 
     filtered_recording: npt.NDArray[np.float64]
 
-    raw_averaged: npt.NDArray[np.float64]
-
-    dpoae_signal: npt.NDArray[np.float64]
-
     mic_trans_fun: MicroTransferFunction | None
 
     def __init__(
         self,
-        recording: DpoaeMsrmtData,
+        msrmt_data: DpoaeMsrmtData,
         mic: MicroTransferFunction | None = None,
         mic_path: str | Path | None = None
     ) -> None:
         """Initialize processor and load recording."""
-        self.recording = recording
+        pulsed_recording = _msrmt_to_pulse_recording(msrmt_data)
+        super().__init__(pulsed_recording)
         self.averager = OptAverage()
         self.filtered_recording = np.empty(0, dtype=np.float64)
-        self.raw_averaged = np.empty(0, dtype=np.float64)
-        self.dpoae_signal = np.empty(0, dtype=np.float64)
         if mic_path:
             mic_calib_data = files.load_micro_calib(mic_path)
             if mic_calib_data is not None:
@@ -269,7 +287,9 @@ class PulseDpoaeProcessor:
         )
         fdp = 2 * self.recording['f1'] - self.recording['f2']
         if self.mic_trans_fun is None:
-            # TODO: log warning
+            self.log.warning(
+                'Microphone data missing. Falling back to unity conversion.'
+            )
             s = 1
         else:
             s = self.mic_trans_fun.get_sensitivity(fdp)
@@ -344,50 +364,16 @@ class PulseDpoaeProcessor:
 
         if len(self.averager.accepted_idx):
             avg = ensembles[self.averager.accepted_idx, :].mean(axis=0)
+            self.log.info(
+                'Optimized averaging: accepted blocks %d/%d.',
+                self.averager.stats.num_accepted_blocks,
+                self.averager.i_received
+            )
         else:
-            print('Optimized averaging failed.')
+            self.log.error('Optimized averaging failed.')
             avg = ensembles.mean(axis=0)
 
         return avg
-
-    def plot(self) -> None:
-        """Plots the data."""
-        if self.recording is None:
-            return
-
-        samplerate = self.recording['samplerate']
-        fig, axes = plt.subplots(3, 1, figsize=(10, 6))
-        axes: list[Axes]
-
-        # plot recording overview
-        t_rec = np.arange(len(self.filtered_recording)) / samplerate
-        axes[0].plot(t_rec, self.filtered_recording, linewidth=0.5)
-
-        t_avg = np.arange(self.recording['num_block_samples']) / samplerate * 1E3
-        axes[1].plot(t_avg, self.raw_averaged, linewidth=0.5)
-        axes[2].plot(t_avg, self.dpoae_signal, linewidth=0.5)
-
-        axes[0].set_xlim(0, t_rec[-1])
-        axes[1].set_xlim(0, t_avg[-1])
-        axes[2].set_xlim(0, t_avg[-1])
-        axes[0].set_xlabel("Recording Time (s)")
-        axes[1].set_ylabel('Amp. (full scale)')
-        axes[2].set_ylabel('p (muPa)')
-        axes[2].set_xlabel('t (ms)')
-
-        # rec_lim = axes[0].get_ylim()
-        # axes[1].set_ylim(rec_lim)
-        axes[0].set_title(
-            f'L1: {self.recording["level1"]} dB SPL, '
-            f'L2: {self.recording["level2"]} dB SPL, '
-            f'f2: {self.recording["f2"]} Hz'
-        )
-        axes[1].set_title(
-            f'Accepted blocks: {self.averager.stats.num_accepted_blocks}'''
-            f'/{self.averager.i_received}')
-
-        fig.tight_layout()
-        plt.show()
 
     def save_data(self, file_name: str) -> None:
         """Saves data to json."""
@@ -410,6 +396,8 @@ class PulseDpoaeProcessor:
 class ContDpoaeResult:
     """Instance to manage a DPOAE result from continuous recording."""
 
+    log: Logger
+
     recording: DpoaeMsrmtData
 
     raw_averaged: npt.NDArray[np.float64]
@@ -417,6 +405,7 @@ class ContDpoaeResult:
     dpoae_spectrum: npt.NDArray[np.float64]
 
     def __init__(self, cont_recording: ContDpoaeRecording) -> None:
+        self.log = get_logger(__class__.__name__)
         self.recording = cont_recording['recording']
         if cont_recording['average'] is None:
             self.raw_averaged = np.empty(0, dtype=np.float64)
@@ -478,33 +467,26 @@ class ContDpoaeResult:
         plt.show(block=block_loop)
 
 
-class ContDpoaeProcessor:
+class ContDpoaeProcessor(ContDpoaeResult):
     """Instance to process a continuous DPOAE recording."""
-
-    recording: DpoaeMsrmtData
 
     averager: OptAverage
 
     filtered_recording: npt.NDArray[np.float64]
 
-    raw_averaged: npt.NDArray[np.float64]
-
-    dpoae_spectrum: npt.NDArray[np.float64]
-
     mic_trans_fun: MicroTransferFunction | None
 
     def __init__(
         self,
-        recording: DpoaeMsrmtData,
+        msrmt_data: DpoaeMsrmtData,
         mic: MicroTransferFunction | None = None,
         mic_path: str | Path | None = None
     ) -> None:
         """Initialize processor and load recording."""
-        self.recording = recording
+        cont_recording = _msrmt_to_cont_recording(msrmt_data)
+        super().__init__(cont_recording)
         self.averager = OptAverage()
         self.filtered_recording = np.empty(0, dtype=np.float64)
-        self.raw_averaged = np.empty(0, dtype=np.float64)
-        self.dpoae_spectrum = np.empty(0, dtype=np.float64)
 
         if mic_path:
             mic_calib_data = files.load_micro_calib(mic_path)
@@ -594,60 +576,16 @@ class ContDpoaeProcessor:
 
         if len(self.averager.accepted_idx):
             avg = blocks[self.averager.accepted_idx, :].mean(axis=0)
+            self.log.info(
+                'Optimized averaging: accepted blocks %d/%d.',
+                self.averager.stats.num_accepted_blocks,
+                self.averager.i_received
+            )
         else:
-            print('Optimized averaging failed.')
+            self.log.error('Optimized averaging failed.')
             avg = blocks.mean(axis=0)
 
         return avg
-
-    def plot(self) -> None:
-        """Plots the data."""
-        if self.recording is None:
-            return
-
-        samplerate = self.recording['samplerate']
-        num_block_samples = self.recording['num_block_samples']
-        fig, axes = plt.subplots(3, 1, figsize=(10, 6))
-        axes: list[Axes]
-
-        # plot recording overview
-        t_rec = np.arange(len(self.filtered_recording)) / samplerate
-        # axes[0].plot(t_rec, self.recording['recorded_signal'], linewidth=0.5)
-        axes[0].plot(t_rec, self.filtered_recording, linewidth=0.5)
-        # axes[0].plot([0.1], [0], 'rx')
-
-        frequencies = np.fft.rfftfreq(num_block_samples, 1 / samplerate)
-        t_avg = np.arange(num_block_samples) / samplerate * 1E3
-        axes[1].plot(t_avg, self.raw_averaged, linewidth=0.5)
-        axes[2].plot(frequencies, self.dpoae_spectrum, linewidth=0.5)
-
-        fdp = 2 * self.recording['f1'] - self.recording['f2']
-
-        f_min = np.floor((fdp - 100) / 1000) * 1000
-        f_max = np.ceil((self.recording['f2'] + 100) / 1000) * 1000
-
-        axes[0].set_xlim(0, t_rec[-1])
-        axes[1].set_xlim(0, t_avg[-1])
-        axes[2].set_xlim(max(200, f_min), min(f_max, frequencies[-1]))
-        axes[0].set_xlabel("Recording Time (s)")
-        axes[1].set_ylabel('Amp. (full scale)')
-        axes[2].set_ylabel('L (dB SPL)')
-        axes[2].set_xlabel('f (Hz)')
-        # axes[2].set_xscale('log')
-
-        # rec_lim = axes[0].get_ylim()
-        # axes[1].set_ylim(rec_lim)
-        axes[0].set_title(
-            f'L1: {self.recording["level1"]} dB SPL, '
-            f'L2: {self.recording["level2"]} dB SPL, '
-            f'f2: {self.recording["f2"]} Hz'
-        )
-        axes[1].set_title(
-            f'Accepted blocks: {self.averager.stats.num_accepted_blocks}'''
-            f'/{self.averager.i_received}')
-
-        fig.tight_layout()
-        plt.show()
 
     def save_data(self, file_name: str) -> None:
         """Saves data to json."""

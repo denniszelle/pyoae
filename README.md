@@ -248,6 +248,56 @@ python3 -m record_pulse_dpoae --mic 'mic/mic.json' --protocol 'templates/tpl_pdp
 
 In order to obtain a time-domain signal of the DPOAE response, PyOAE utilized Primary-Tone Phase Variation ([Whitehead et al. (1996)](https://doi.org/10.1121/1.416065)). Suitable phase shifts of the primary tones enable their cancellation during the averaging process while maintaining the distortion-product at the cubic difference frequency fdp = 2f1-f2.
 
+## Processing and Visualization of Measurement Results
+
+### Overview
+
+PyOAE provides a simple DSP module to average, process, and analyze DPOAE recordings from continuous and pulsed stimulation, respectively. When finalizing a measurement, the DPOAE recorder utilizes classes and functions from the module `pyoae.dsp.processing` for averaging with artifact reduction, filtering, and visualization of the recorded measurement data.
+
+In order to display measurement results at a time point after the recording, PyOAE offers simple scripts to visualize an individual recording from a single measurement file as well as multiple measurements at once from recordings that are stored in the same directory.
+
+### Speaker Calibration Files
+
+To visualize the results from an output calibration, use the `show_output_calib` module with the file path of the calibration file of interest:
+
+```bash
+python3 -m show_output_calib --file 'measurements/251015-190856_out_calib.json'
+```
+
+### DPOAE From Continuous Stimulation
+
+To visualize the results from a single DPOAE recording acquired with continuous stimulation, use the `show_dpoae` module:
+
+```bash
+python3 -m show_dpoae --file 'measurements/cdpoae_msrmt_251021-141156_1500_60.npz'
+```
+
+If one wants to plot the results from all continuous recordings within a directory use
+
+```bash
+python3 -m show_dpoae --d 'measurements'
+```
+
+This shows the results for all continuous DPOAE recordings in the directory `measurements` one after another. Add the command-line argument `--a` in order to show the results in separate figures:
+
+```bash
+python3 -m show_dpoae --d 'measurements' --a
+```
+
+### Time-resolved DPOAE From Pulsed Stimulation
+
+Similarly to the visualization of continuous DPOAE, PyOAE offers a script to plot results from individual pulse-DPOAE recordings, e.g.,
+
+```bash
+python3 -m show_pulse_dpoae --file 'pdpoae_msrmt_251021-143047_2000_45.npz'
+```
+
+as well as multiple recordings from a directory:
+
+```bash
+python3 -m show_pulse_dpoae --d 'measurements'
+```
+
 ---
 
 ## Things to Consider

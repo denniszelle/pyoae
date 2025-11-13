@@ -38,7 +38,7 @@ from pyoae import get_logger
 from pyoae import helpers
 from pyoae.calib import MicroTransferFunction, OutputCalibration
 from pyoae.device.device_config import DeviceConfig
-from pyoae.dsp.processing import PulseDpoaeMsrmtData, PulseDpoaeProcessor
+from pyoae.dsp.processing import DpoaeMsrmtData, PulseDpoaeProcessor
 from pyoae.generator import PulseDpoaeStimulus
 from pyoae.protocols import PulseDpoaeMsrmtParams
 from pyoae.signals import PeriodicSignal
@@ -389,7 +389,7 @@ class PulseDpoaeRecorder:
         recorded_signal = self.msrmt.get_recorded_signal()
         if not recorded_signal.size:
             return
-        recording: PulseDpoaeMsrmtData = {
+        recording: DpoaeMsrmtData = {
             'recorded_signal': recorded_signal,
             'samplerate': DeviceConfig.sample_rate,
             'f1': self.stimulus.f1,

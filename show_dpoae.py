@@ -7,7 +7,7 @@ recording using continuously presented primary tones.
 Run the following command from the project root directory to
 plot results from a single measurement:
 
-    python3 -m show_dpoae --file 'cdpoae_msrmt_250915-172224.npz'
+    python3 -m show_dpoae --file 'cdpoae_msrmt_251021-141156_1500_60.npz'
 
 Run the following command from the project root directory to
 plot all continuous DPOAE recordings in a specified directory:

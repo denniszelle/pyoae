@@ -18,6 +18,7 @@ Command-line arguments:
     --file: path to result file to be shown,
       e.g., 'cdpoae_msrmt_250915-172224.npz'
     --d: path to directory with multiple result files to be shown
+    --a: show all figures simultaneously at the end of the processing
 
 """
 

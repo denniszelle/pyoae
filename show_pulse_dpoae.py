@@ -17,6 +17,7 @@ plot all pulsed DPOAE recordings in a specified directory:
 Command-line arguments:
     --file: path to result file to be shown,
     --d: path to directory with multiple result files to be shown
+    --a: show all figures simultaneously at the end of the processing
 
 """
 

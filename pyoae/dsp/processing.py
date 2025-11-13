@@ -405,7 +405,7 @@ class ContDpoaeResult:
         else:
             self.dpoae_spectrum = cont_recording['spectrum']
 
-    def plot(self) -> None:
+    def plot(self, block_loop: bool = True) -> None:
         """Plots the result data."""
         if self.recording is None:
             return
@@ -451,7 +451,7 @@ class ContDpoaeResult:
         )
         axes[1].set_title('DPOAE Spectrum')
         fig.tight_layout()
-        plt.show()
+        plt.show(block=block_loop)
 
 
 class ContDpoaeProcessor:

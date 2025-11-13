@@ -23,6 +23,8 @@ Command-line arguments:
 
 import argparse
 
+from matplotlib import pyplot as plt
+
 from pyoae import files
 from pyoae.dsp.processing import ContDpoaeResult
 import pyoae_logger
@@ -30,7 +32,7 @@ import pyoae_logger
 
 logger = pyoae_logger.get_pyoae_logger('PyOAE DPOAE Results')
 
-def main(file: str = '', d: str = '') -> None:
+def main(file: str = '', d: str = '', a: bool = False) -> None:
     """Main function visualizing a DPOAE spectrum."""
 
     logger.info('Display of results from continuous DPOAE recording.')
@@ -41,6 +43,7 @@ def main(file: str = '', d: str = '') -> None:
         logger.info('Loading DPOAE files from %s.', d)
         # plot results from all cDPOAE measurement files in directory
         cdpoae_paths = files.find_npz_files(d, prefix='cdpoae')
+        results = []
         if cdpoae_paths:
             for p in cdpoae_paths:
                 logger.info('Loading DPOAE results from  %s.', p)
@@ -49,7 +52,11 @@ def main(file: str = '', d: str = '') -> None:
                     logger.error('Failed to load continuous DPOAE result.')
                 else:
                     cdpoae_result = ContDpoaeResult(cont_recording)
-                    cdpoae_result.plot()
+                    cdpoae_result.plot(block_loop = not a)
+                    results.append(cdpoae_result)
+        if a:
+            # start matplotlib event loop to show all figures
+            plt.show()
         logger.info('All DPOAE files from  %s processed.', d)
         return
 
@@ -79,6 +86,13 @@ parser.add_argument(
     default=argparse.SUPPRESS,
     type=str,
     help='Specify directory with CDPOAE recording files.'
+)
+
+parser.add_argument(
+    '--a',
+    action=argparse.BooleanOptionalAction,
+    default=False,
+    help='Show all figures simultaneously (when plotting from directory).'
 )
 
 

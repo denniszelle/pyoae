@@ -16,6 +16,26 @@ from pyoae.dsp.processing import ContDpoaeRecording, DpoaeMsrmtData
 
 log = get_logger(__name__)
 
+
+def find_npz_files(directory: str, prefix: str = '') -> list[Path]:
+    """Returns all .npz-files in `directory` starting with `prefix`.
+
+    Args:
+        directory: str - Path to the directory to search for
+          measurement files.
+        prefix: str - Optional prefix to filter measurement files,
+          e.g., 'cdpoae', 'pdpoae'.
+
+    Returns:
+        list[Path]: sorted list of matching file paths.
+    """
+    dir_path = Path(directory)
+    return sorted(
+        p for p in dir_path.iterdir()
+        if p.is_file() and p.name.startswith(prefix) and p.suffix == '.npz'
+    )
+
+
 def load_json_file(file_path: str | Path) -> dict[str, Any]:
     """Loads the content of a json file."""
 
@@ -130,8 +150,6 @@ def load_cdpoae_recording(file_path: str | Path) -> ContDpoaeRecording | None:
     except FileNotFoundError as e:
         print(e)
         return None
-
-    print(data)
 
     recording: DpoaeMsrmtData = {
         'recorded_signal': data['recorded_signal'],

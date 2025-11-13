@@ -7,12 +7,12 @@ from recording(s) using short-pulsed primary tones.
 Run the following command from the project root directory to
 plot results from a single measurement:
 
-    python3 -m show_pdpoae --file 'pdpoae_msrmt_251021-143047_2000_45.npz'
+    python3 -m show_pulse_dpoae --file 'pdpoae_msrmt_251021-143047_2000_45.npz'
 
 Run the following command from the project root directory to
 plot all pulsed DPOAE recordings in a specified directory:
 
-    python3 -m show_pdpoae --d 'measurements'
+    python3 -m show_pulse_dpoae --d 'measurements'
 
 Command-line arguments:
     --file: path to result file to be shown,

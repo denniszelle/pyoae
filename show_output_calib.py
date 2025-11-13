@@ -1,7 +1,7 @@
 """Script to show calibration data of output channels.
 
-This script shows the results of a multi-tone calibration of output channels
-with respect to a given input calibration.
+This script shows the results of a multi-tone calibration
+of output channels with respect to a given input calibration.
 
 
 Run the following command from the project root directory to start:
@@ -9,7 +9,8 @@ Run the following command from the project root directory to start:
     python3 -m show_output_calib --file '251015-190856_out_calib.json'
 
 Command-line arguments:
-    --file: path to output-calibration file to be shown, e.g., '251015-190856_out_calib.json'
+    --file: path to output-calibration file to be shown,
+      e.g., '251015-190856_out_calib.json'
 
 """
 
@@ -21,10 +22,10 @@ from pyoae import calibrator
 import pyoae_logger
 
 
-logger = pyoae_logger.get_pyoae_logger('PyOAE Output Calibrator')
+logger = pyoae_logger.get_pyoae_logger('PyOAE Output Calibration Data')
 
 def main(file: str = '') -> None:
-    """Main function executing a multi-tone measurement."""
+    """Main function showing results from a multi-tone measurement."""
 
     logger.info('Display of multi-tone output calibration results.')
 
@@ -44,7 +45,7 @@ def main(file: str = '') -> None:
     calibrator.plot_result_file(output_calib_fun)
 
 
-parser = argparse.ArgumentParser(description='PyOAE Multi-Tone Calibration')
+parser = argparse.ArgumentParser(description='PyOAE Multi-Tone Calibration Results')
 parser.add_argument(
     '--file',
     default=argparse.SUPPRESS,

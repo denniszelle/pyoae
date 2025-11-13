@@ -44,9 +44,11 @@ class DpoaeMsrmtData(TypedDict):
     recorded_sync: npt.NDArray[np.float32]
 
 
-class ContDpoaeMsrmtData(DpoaeMsrmtData):
-    """Raw measurement data of a continuous DPOAE recording."""
-    spectrum: NotRequired[npt.NDArray[np.float64] | None]
+class ContDpoaeRecording(TypedDict):
+    """Structured contents from a DPOAE recording file."""
+    recording: DpoaeMsrmtData
+    average: npt.NDArray[np.float64] | None
+    spectrum: npt.NDArray[np.float64] | None
 
 
 class PulseDpoaeMsrmtData(DpoaeMsrmtData):
@@ -78,32 +80,6 @@ def load_pdpoae_recording(file_path: str | Path) -> PulseDpoaeMsrmtData | None:
         'num_block_samples': int(data['num_block_samples']),
         'recorded_sync': data['recorded_sync'],
         'average': avg
-    }
-
-
-def load_cdpoae_recording(file_path: str | Path) -> ContDpoaeMsrmtData | None:
-    """Loads measurement data of a cont. DPOAE recording from binary file."""
-    try:
-        data = np.load(file_path)
-    except FileNotFoundError as e:
-        print(e)
-        return None
-
-    if 'spectrum' in data:
-        y = data['spectrum']
-    else:
-        y = None
-
-    return {
-        'recorded_signal': data['recorded_signal'],
-        'samplerate': float(data['samplerate']),
-        'f1': float(data['f1']),
-        'f2': float(data['f2']),
-        'level1': float(data['level1']),
-        'level2': float(data['level2']),
-        'num_block_samples': int(data['num_block_samples']),
-        'recorded_sync': data['recorded_sync'],
-        'spectrum': y
     }
 
 
@@ -409,10 +385,79 @@ class PulseDpoaeProcessor:
         files.save_result_to_json(file_name + '.json', d)
 
 
+class ContDpoaeResult:
+    """Instance to manage a DPOAE result from continuous recording."""
+
+    recording: DpoaeMsrmtData | None
+
+    raw_averaged: npt.NDArray[np.float64]
+
+    dpoae_spectrum: npt.NDArray[np.float64]
+
+    def __init__(self, cont_recording: ContDpoaeRecording) -> None:
+        self.recording = cont_recording['recording']
+        if cont_recording['average'] is None:
+            self.raw_averaged = np.empty(0, dtype=np.float64)
+        else:
+            self.raw_averaged = cont_recording['average']
+        if cont_recording['spectrum'] is None:
+            self.dpoae_spectrum = np.empty(0, dtype=np.float64)
+        else:
+            self.dpoae_spectrum = cont_recording['spectrum']
+
+    def plot(self) -> None:
+        """Plots the result data."""
+        if self.recording is None:
+            return
+
+        samplerate = self.recording['samplerate']
+        num_block_samples = self.recording['num_block_samples']
+        num_recording_samples = len(self.recording['recorded_signal'])
+
+        fig, axes = plt.subplots(3, 1, figsize=(10, 6))
+        axes: list[Axes]
+
+        # plot recording overview
+        t_rec = np.arange(num_recording_samples) / samplerate
+        axes[0].plot(t_rec, self.recording['recorded_signal'], linewidth=0.5)
+        # axes[0].plot(t_rec, self.filtered_recording, linewidth=0.5)
+        # axes[0].plot([0.1], [0], 'rx')
+
+        frequencies = np.fft.rfftfreq(num_block_samples, 1 / samplerate)
+        t_avg = np.arange(num_block_samples) / samplerate * 1E3
+        axes[1].plot(t_avg, self.raw_averaged, linewidth=0.5)
+        axes[2].plot(frequencies, self.dpoae_spectrum, linewidth=0.5)
+
+        fdp = 2 * self.recording['f1'] - self.recording['f2']
+
+        f_min = np.floor((fdp - 100) / 1000) * 1000
+        f_max = np.ceil((self.recording['f2'] + 100) / 1000) * 1000
+
+        axes[0].set_xlim(0, t_rec[-1])
+        axes[1].set_xlim(0, t_avg[-1])
+        axes[2].set_xlim(max(200, f_min), min(f_max, frequencies[-1]))
+        axes[0].set_xlabel("Recording Time (s)")
+        axes[1].set_ylabel('Amp. (full scale)')
+        axes[2].set_ylabel('L (dB SPL)')
+        axes[2].set_xlabel('f (Hz)')
+        # axes[2].set_xscale('log')
+
+        # rec_lim = axes[0].get_ylim()
+        # axes[1].set_ylim(rec_lim)
+        axes[0].set_title(
+            f'L1: {self.recording["level1"]} dB SPL, '
+            f'L2: {self.recording["level2"]} dB SPL, '
+            f'f2: {self.recording["f2"]} Hz'
+        )
+        axes[1].set_title('DPOAE Spectrum')
+        fig.tight_layout()
+        plt.show()
+
+
 class ContDpoaeProcessor:
     """Instance to process a continuous DPOAE recording."""
 
-    recording: ContDpoaeMsrmtData | None
+    recording: DpoaeMsrmtData
 
     averager: OptAverage
 
@@ -426,22 +471,17 @@ class ContDpoaeProcessor:
 
     def __init__(
         self,
-        recording: ContDpoaeMsrmtData | None = None,
+        recording: DpoaeMsrmtData,
         mic: MicroTransferFunction | None = None,
-        file_path: str | Path | None = None,
         mic_path: str | Path | None = None
     ) -> None:
         """Initialize processor and load recording."""
-        if file_path:
-            self.recording = load_cdpoae_recording(file_path)
-        else:
-            self.recording = recording
-        if self.recording is None:
-            return
+        self.recording = recording
         self.averager = OptAverage()
         self.filtered_recording = np.empty(0, dtype=np.float64)
         self.raw_averaged = np.empty(0, dtype=np.float64)
         self.dpoae_spectrum = np.empty(0, dtype=np.float64)
+
         if mic_path:
             mic_calib_data = files.load_micro_calib(mic_path)
             if mic_calib_data is not None:

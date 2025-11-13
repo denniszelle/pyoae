@@ -5,10 +5,14 @@ import os
 from pathlib import Path
 from typing import Any
 
+import numpy as np
+
 from pyoae import calib
 from pyoae import get_logger
-from pyoae.device.device_config import DeviceConfig
 from pyoae import protocols
+from pyoae.device.device_config import DeviceConfig
+from pyoae.dsp.processing import ContDpoaeRecording, DpoaeMsrmtData
+
 
 log = get_logger(__name__)
 
@@ -117,6 +121,44 @@ def load_pulsed_dpoae_protocol(
     else:
         log.error('Failed to load pulsed DPOAE protocol from %s', file_path)
     return []
+
+
+def load_cdpoae_recording(file_path: str | Path) -> ContDpoaeRecording | None:
+    """Loads measurement data of a cont. DPOAE recording from binary file."""
+    try:
+        data = np.load(file_path)
+    except FileNotFoundError as e:
+        print(e)
+        return None
+
+    print(data)
+
+    recording: DpoaeMsrmtData = {
+        'recorded_signal': data['recorded_signal'],
+        'samplerate': float(data['samplerate']),
+        'f1': float(data['f1']),
+        'f2': float(data['f2']),
+        'level1': float(data['level1']),
+        'level2': float(data['level2']),
+        'num_block_samples': int(data['num_block_samples']),
+        'recorded_sync': data['recorded_sync'],
+    }
+
+    if 'average' in data:
+        average = data['average']
+    else:
+        average = None
+
+    if 'spectrum' in data:
+        spectrum = data['spectrum']
+    else:
+        spectrum = None
+
+    return {
+        'recording': recording,
+        'average': average,
+        'spectrum': spectrum
+    }
 
 
 def save_output_calibration(

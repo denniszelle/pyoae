@@ -236,7 +236,7 @@ Using the command line arguments `--save`, `--subject`, and `--ear`, you can sav
 python3 -m record_dpoae --mic 'mic/mic.json' --protocol 'templates/tpl_cdpoae.json' --calib '250919-100413' --subject 'S000' --ear 'right' --save
 ```
 
-**Please note that PyOAE currently does correct for the input and output channel phase characteristics.**
+**Please note that PyOAE currently does not correct for the input and output channel phase characteristics.**
 
 #### Pulsed Distortion-Product Otoacoustic Emissions (pDPOAEs)
 

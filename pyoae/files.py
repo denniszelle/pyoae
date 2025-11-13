@@ -11,7 +11,11 @@ from pyoae import calib
 from pyoae import get_logger
 from pyoae import protocols
 from pyoae.device.device_config import DeviceConfig
-from pyoae.dsp.processing import ContDpoaeRecording, DpoaeMsrmtData
+from pyoae.dsp.processing import (
+    ContDpoaeRecording,
+    DpoaeMsrmtData,
+    PulseDpoaeRecording
+)
 
 
 log = get_logger(__name__)
@@ -176,6 +180,43 @@ def load_cdpoae_recording(file_path: str | Path) -> ContDpoaeRecording | None:
         'recording': recording,
         'average': average,
         'spectrum': spectrum
+    }
+
+
+def load_pdpoae_recording(file_path: str | Path) -> PulseDpoaeRecording | None:
+    """Loads measurement data of a pulsed DPOAE recording from binary file."""
+    try:
+        data = np.load(file_path)
+    except FileNotFoundError as e:
+        print(e)
+        return None
+
+    recording: DpoaeMsrmtData = {
+        'recorded_signal': data['recorded_signal'],
+        'samplerate': float(data['samplerate']),
+        'f1': float(data['f1']),
+        'f2': float(data['f2']),
+        'level1': float(data['level1']),
+        'level2': float(data['level2']),
+        'num_block_samples': int(data['num_block_samples']),
+        'recorded_sync': data['recorded_sync'],
+    }
+
+    if 'raw_average' in data:
+        raw_avg = data['raw_average']
+    else:
+        raw_avg = None
+
+    if 'average' in data:
+        # for backwards compatibility
+        avg = data['average']
+    else:
+        avg = None
+
+    return {
+        'recording': recording,
+        'average': raw_avg,
+        'signal': avg
     }
 
 

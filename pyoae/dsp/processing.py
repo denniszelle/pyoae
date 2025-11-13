@@ -1,4 +1,4 @@
-"""Python script to process and visualize a single recording."""
+"""Module with classes and functions to process and visualize recordings."""
 
 from logging import Logger
 from pathlib import Path

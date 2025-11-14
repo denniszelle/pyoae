@@ -64,6 +64,9 @@ class PulseDpoaePlotInfo:
     update_interval: float
     """Interval to apply processing and plot update during measurement."""
 
+    non_interactive: bool
+    """Flag enabling/disabling non-interactive measurement mode."""
+
     msrmt_anim: MsrmtFuncAnimation | None = None
     """Animation instance for online display of measurement data."""
 
@@ -247,13 +250,16 @@ def update_msrmt(
     del frame
 
     if sync_msrmt.state == MsrmtState.FINISHED:
-        if info.plot_info.msrmt_anim is not None:
+        if info.plot_info.msrmt_anim is not None and info.plot_info.non_interactive:
             info.plot_info.msrmt_anim.stop_animation()
         return [info.plot_info.line]
 
     if sync_msrmt.state == MsrmtState.FINISHING:
         sync_msrmt.set_state(MsrmtState.FINISHED)
-        logger.info('Recording complete. Please close window to continue.')
+        if info.plot_info.non_interactive:
+            logger.info('Recording complete.')
+        else:
+            logger.info('Recording complete. Please close window to continue.')
 
     return update_plot_data(sync_msrmt, info)
 
@@ -269,9 +275,12 @@ def start_plot(sync_msrmt: SyncMsrmt, info: DpoaeUpdateInfo) -> None:
         cache_frame_data=False
     )
     info.plot_info.msrmt_anim = anim
-    plt.tight_layout()
-    plt.show()
-    if sync_msrmt.state not in [MsrmtState.FINISHING, MsrmtState.FINISHED]:
+    info.plot_info.fig.tight_layout()
+    plt.show(block = not info.plot_info.non_interactive)
+    if (
+        not info.plot_info.non_interactive
+        and sync_msrmt.state is not MsrmtState.FINISHED
+    ):
         sync_msrmt.state = MsrmtState.CANCELED
 
 
@@ -309,6 +318,7 @@ class PulseDpoaeRecorder:
         out_trans_fun: OutputCalibration | None = None,
         subject: str = '',
         ear: str = '',
+        non_interactive: bool = False,
         log: Logger | None = None
     ) -> None:
         """Creates a DPOAE recorder for given measurement parameters."""
@@ -350,7 +360,7 @@ class PulseDpoaeRecorder:
             out_calib=out_trans_fun
         )
         # has_input_calib = mic_trans_fun is not None
-        dpoae_info = self.setup_info(num_block_samples)
+        dpoae_info = self.setup_info(num_block_samples, non_interactive)
         ARTIFACT_REJ_RATIO = 1.8  # TODO: replace
         self.update_info = DpoaeUpdateInfo(
             dpoae_info,
@@ -408,10 +418,11 @@ class PulseDpoaeRecorder:
             recording, self.update_info.input_trans_fun
         )
         self.dpoae_processor.process_msrmt()
-        self.logger.info(
-            'Showing offline results. Please close window to continue.'
-        )
-        self.dpoae_processor.plot()
+        if not self.update_info.plot_info.non_interactive:
+            self.logger.info(
+                'Showing offline results. Please close window to continue.'
+            )
+            self.dpoae_processor.plot()
 
     def save_recording(self) -> None:
         """Stores the measurement data in binary file."""
@@ -486,6 +497,7 @@ class PulseDpoaeRecorder:
     def setup_info(
         self,
         block_size: int,
+        non_interactive: bool,
     ) -> PulseDpoaePlotInfo:
         """Sets up live plot and measurement information."""
         fig, axes, lines = setup_plot(
@@ -496,6 +508,6 @@ class PulseDpoaeRecorder:
             fig,
             axes,
             lines,
-            #DeviceConfig.update_interval * 4  # NUM_PTPV
-            (block_size / DeviceConfig.sample_rate) * 1E3
+            (block_size / DeviceConfig.sample_rate) * 1E3,
+            non_interactive=non_interactive
         )

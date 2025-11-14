@@ -399,6 +399,11 @@ def start_plot(sync_msrmt: SyncMsrmt, info: DpoaeUpdateInfo) -> None:
     info.plot_info.msrmt_anim = anim
     info.plot_info.fig.tight_layout()
     plt.show(block = not info.plot_info.non_interactive)
+    if (
+        not info.plot_info.non_interactive
+        and sync_msrmt.state is not MsrmtState.FINISHED
+    ):
+        sync_msrmt.state = MsrmtState.CANCELED
 
 
 class DpoaeRecorder:

@@ -562,10 +562,18 @@ class SyncMsrmt(Generic[SignalT]):
                 self.hardware_data.output_device
             )
         ):
-            self.logger.info('Beginning to stream: %s.', self.state)
+            self.logger.info('Beginning to stream.')
             start_plot(self, info)
             while info.plot_info.non_interactive and not info.plot_info.msrmt_anim.done:
                 # keep figure for non-interactive mode
-                plt.pause(0.2)
+                if plt.get_fignums():
+                    plt.pause(0.2)
+                else:
+                    self.set_state(MsrmtState.CANCELED)
+                    break
+
             self.logger.info('Closing stream.')
-        self.logger.info('Stream closed.')
+        if self.state is not MsrmtState.FINISHED:
+            self.logger.warning('Stream closed with %s.', self.state)
+        else:
+            self.logger.info('Stream closed.')

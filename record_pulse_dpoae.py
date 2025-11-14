@@ -19,6 +19,7 @@ Command-line arguments:
     --subject: subject identifier, e.g., 'S999'
     --ear: recording side, e.g., 'right'
     --save: save recording in measurement file
+    --non-interactive: run the full measurement sequence without user interaction.
 
 Note:
     Sound device IDs or names should be known beforehand and can be
@@ -49,7 +50,8 @@ def main(
     calib: str = '',
     subject: str = '',
     ear: str = '',
-    save: bool = False
+    save: bool = False,
+    non_interactive: bool = False
 ) -> None:
     """Main function executing a pulsed DPOAE measurement."""
 
@@ -104,7 +106,8 @@ def main(
             mic_trans_fun,
             out_trans_fun=output_calib_fun,
             subject=subject,
-            ear=ear
+            ear=ear,
+            non_interactive=non_interactive
         )
         dpoae_recorder.record()
         if save:
@@ -147,6 +150,15 @@ parser.add_argument(
     action=argparse.BooleanOptionalAction,
     default=False,
     help='Save measurement results and data to files.'
+)
+parser.add_argument(
+    '--non-interactive',
+    action=argparse.BooleanOptionalAction,
+    default=False,
+    help= (
+        'Run the full measurement sequence without user interaction. '
+        'Figures are closed automatically after each measurement.'
+    )
 )
 
 

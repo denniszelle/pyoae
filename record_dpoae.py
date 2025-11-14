@@ -18,6 +18,7 @@ Command-line arguments:
     --subject: subject identifier, e.g., 'S999'
     --ear: recording side, e.g., 'right'
     --save: save recording in measurement file
+    --non-interactive: run the full measurement sequence without user interaction.
 
 Note:
     Sound device IDs or names should be known beforehand and can be

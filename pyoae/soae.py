@@ -28,7 +28,6 @@ import os
 from typing import Literal
 
 from matplotlib import pyplot as plt
-from matplotlib.animation import FuncAnimation
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
@@ -38,6 +37,7 @@ import scipy.signal
 
 from pyoae import get_logger
 from pyoae import helpers
+from pyoae.anim import MsrmtFuncAnimation
 from pyoae.calib import MicroTransferFunction
 from pyoae.device.device_config import DeviceConfig
 from pyoae.protocols import SoaeMsrmtParams
@@ -72,6 +72,9 @@ class SoaePlotInfo:
 
     live_display_duration: float
     """Duration to display time domain plot in ms."""
+
+    msrmt_anim: MsrmtFuncAnimation | None = None
+    """Animation instance for online display of measurement data."""
 
 
 @dataclass
@@ -387,6 +390,8 @@ def update_msrmt(
     """
     del frame
     if sync_msrmt.state == MsrmtState.FINISHED:
+        if info.plot_info.msrmt_anim is not None:
+            info.plot_info.msrmt_anim.stop_animation()
         return info.plot_info.line_time, info.plot_info.line_spec
 
     if sync_msrmt.state == MsrmtState.FINISHING:
@@ -400,7 +405,7 @@ def update_msrmt(
 
 def start_plot(sync_msrmt: SyncMsrmt, info: SoaeUpdateInfo) -> None:
     """Start the live plot."""
-    _ = FuncAnimation(
+    anim = MsrmtFuncAnimation(
         info.plot_info.fig,
         update_msrmt,
         fargs=(sync_msrmt, info,),
@@ -408,7 +413,7 @@ def start_plot(sync_msrmt: SyncMsrmt, info: SoaeUpdateInfo) -> None:
         blit=True,
         cache_frame_data=False
     )
-
+    info.plot_info.msrmt_anim = anim
     plt.tight_layout()
     plt.show()
     if sync_msrmt.state is not MsrmtState.FINISHED:

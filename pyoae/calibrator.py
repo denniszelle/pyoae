@@ -8,7 +8,6 @@ from datetime import datetime
 from logging import Logger
 
 from matplotlib import pyplot as plt
-from matplotlib.animation import FuncAnimation
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
@@ -18,6 +17,7 @@ import numpy.typing as npt
 from pyoae import files
 from pyoae import generator
 from pyoae import get_logger
+from pyoae.anim import MsrmtFuncAnimation
 from pyoae.calib import (
     MicroTransferFunction,
     OutputCalibration,
@@ -50,6 +50,9 @@ class PlotInfo:
 
     live_display_duration: float
     """Duration to display time domain plot in ms."""
+
+    msrmt_anim: MsrmtFuncAnimation | None = None
+    """Animation instance for online display of measurement data."""
 
 
 @dataclass
@@ -309,13 +312,14 @@ def update_msrmt(
         - **line_time**: Line object with the time-domain data of the signal
     Notes:
         A tuple is returned with at least one line object to be compatible
-          with `FuncAnimation`.
+          with `MsrmtFuncAnimation`.
     """
 
     del frame
 
     if sync_msrmt.state == MsrmtState.FINISHED:
-        # plt.close(info.fig)
+        if info.plot_info.msrmt_anim is not None:
+            info.plot_info.msrmt_anim.stop_animation()
         return (info.plot_info.line_time, )
 
     if sync_msrmt.state == MsrmtState.FINISHING:
@@ -329,7 +333,7 @@ def update_msrmt(
 
 def start_plot(sync_msrmt: SyncMsrmt, info: UpdateInfo) -> None:
     """Executes the measurement plot that is regularly updated."""
-    _ = FuncAnimation(
+    anim = MsrmtFuncAnimation(
         info.plot_info.fig,
         update_msrmt,
         fargs=(sync_msrmt, info,),
@@ -337,6 +341,7 @@ def start_plot(sync_msrmt: SyncMsrmt, info: UpdateInfo) -> None:
         blit=False,
         cache_frame_data=False
     )
+    info.plot_info.msrmt_anim = anim
     plt.tight_layout()
     plt.show()
     if sync_msrmt.state not in [MsrmtState.FINISHING, MsrmtState.FINISHED]:

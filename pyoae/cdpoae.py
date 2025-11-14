@@ -26,7 +26,6 @@ from logging import Logger
 import os
 
 from matplotlib import pyplot as plt
-from matplotlib.animation import FuncAnimation
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
@@ -36,6 +35,7 @@ import numpy.typing as npt
 from pyoae import generator
 from pyoae import get_logger
 from pyoae import helpers
+from pyoae.anim import MsrmtFuncAnimation
 from pyoae.calib import MicroTransferFunction, OutputCalibration
 from pyoae.device.device_config import DeviceConfig
 from pyoae.dsp.processing import ContDpoaeProcessor, DpoaeMsrmtData
@@ -72,6 +72,12 @@ class DpoaePlotInfo:
 
     live_display_duration: float
     """Duration to display time domain plot in ms."""
+
+    non_interactive: bool
+    """Flag enabling/disabling non-interactive measurement mode."""
+
+    msrmt_anim: MsrmtFuncAnimation | None = None
+    """Animation instance for online display of measurement data."""
 
 
 @dataclass
@@ -364,12 +370,16 @@ def update_msrmt(
     del frame
 
     if sync_msrmt.state == MsrmtState.FINISHED:
-        # plt.close(info.fig)
+        if info.plot_info.msrmt_anim is not None and info.plot_info.non_interactive:
+            info.plot_info.msrmt_anim.stop_animation()
         return info.plot_info.line_time, info.plot_info.line_spec
 
     if sync_msrmt.state == MsrmtState.FINISHING:
         sync_msrmt.set_state(MsrmtState.FINISHED)
-        logger.info('Recording complete. Please close window to continue.')
+        if info.plot_info.non_interactive:
+            logger.info('Recording complete.')
+        else:
+            logger.info('Recording complete. Please close window to continue.')
 
     recorded_signal, spectrum = get_results(sync_msrmt, info)
 
@@ -378,7 +388,7 @@ def update_msrmt(
 
 def start_plot(sync_msrmt: SyncMsrmt, info: DpoaeUpdateInfo) -> None:
     """Executes the measurement plot that is regularly updated."""
-    _ = FuncAnimation(
+    anim = MsrmtFuncAnimation(
         info.plot_info.fig,
         update_msrmt,
         fargs=(sync_msrmt, info,),
@@ -386,10 +396,9 @@ def start_plot(sync_msrmt: SyncMsrmt, info: DpoaeUpdateInfo) -> None:
         blit=False,
         cache_frame_data=False
     )
-    plt.tight_layout()
-    plt.show()
-    if sync_msrmt.state not in [MsrmtState.FINISHING, MsrmtState.FINISHED]:
-        sync_msrmt.state = MsrmtState.CANCELED
+    info.plot_info.msrmt_anim = anim
+    info.plot_info.fig.tight_layout()
+    plt.show(block = not info.plot_info.non_interactive)
 
 
 class DpoaeRecorder:
@@ -426,6 +435,7 @@ class DpoaeRecorder:
         out_trans_fun: OutputCalibration | None = None,
         subject: str = '',
         ear: str = '',
+        non_interactive: bool = False,
         log: Logger | None = None
     ) -> None:
         """Creates a DPOAE recorder for given measurement parameters."""
@@ -470,6 +480,7 @@ class DpoaeRecorder:
         dpoae_info = self.setup_info(
             recording_duration,
             num_block_samples,
+            non_interactive,
             is_calib_available=has_input_calib
         )
         ARTIFACT_REJ_RATIO = 1.8  # TODO: replace
@@ -533,10 +544,11 @@ class DpoaeRecorder:
             mic=self.update_info.input_trans_fun
         )
         self.dpoae_processor.process_msrmt()
-        self.logger.info(
-            'Showing offline results. Please close window to continue.'
-        )
-        self.dpoae_processor.plot()
+        if not self.update_info.plot_info.non_interactive:
+            self.logger.info(
+                'Showing offline results. Please close window to continue.'
+            )
+            self.dpoae_processor.plot()
 
     def save_recording(self) -> None:
         """Stores the measurement data in binary file."""
@@ -623,6 +635,7 @@ class DpoaeRecorder:
         self,
         recording_duration: float,
         num_block_samples: int,
+        non_interactive: bool,
         is_calib_available: bool = False,
     ) -> DpoaePlotInfo:
         """Sets up live plot and measurement information."""
@@ -641,5 +654,6 @@ class DpoaeRecorder:
             ax_spec,
             line_spec,
             DeviceConfig.update_interval,
-            DeviceConfig.live_display_duration
+            DeviceConfig.live_display_duration,
+            non_interactive=non_interactive
         )

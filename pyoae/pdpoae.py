@@ -26,7 +26,6 @@ from logging import Logger
 import os
 
 from matplotlib import pyplot as plt
-from matplotlib.animation import FuncAnimation
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
@@ -36,6 +35,7 @@ import numpy.typing as npt
 from pyoae import generator
 from pyoae import get_logger
 from pyoae import helpers
+from pyoae.anim import MsrmtFuncAnimation
 from pyoae.calib import MicroTransferFunction, OutputCalibration
 from pyoae.device.device_config import DeviceConfig
 from pyoae.dsp.processing import DpoaeMsrmtData, PulseDpoaeProcessor
@@ -63,6 +63,9 @@ class PulseDpoaePlotInfo:
 
     update_interval: float
     """Interval to apply processing and plot update during measurement."""
+
+    msrmt_anim: MsrmtFuncAnimation | None = None
+    """Animation instance for online display of measurement data."""
 
 
 @dataclass
@@ -244,7 +247,8 @@ def update_msrmt(
     del frame
 
     if sync_msrmt.state == MsrmtState.FINISHED:
-        # plt.close(info.fig)
+        if info.plot_info.msrmt_anim is not None:
+            info.plot_info.msrmt_anim.stop_animation()
         return [info.plot_info.line]
 
     if sync_msrmt.state == MsrmtState.FINISHING:
@@ -256,7 +260,7 @@ def update_msrmt(
 
 def start_plot(sync_msrmt: SyncMsrmt, info: DpoaeUpdateInfo) -> None:
     """Executes the measurement plot that is regularly updated."""
-    _ = FuncAnimation(
+    anim = MsrmtFuncAnimation(
         info.plot_info.fig,
         update_msrmt,
         fargs=(sync_msrmt, info,),
@@ -264,6 +268,7 @@ def start_plot(sync_msrmt: SyncMsrmt, info: DpoaeUpdateInfo) -> None:
         blit=False,
         cache_frame_data=False
     )
+    info.plot_info.msrmt_anim = anim
     plt.tight_layout()
     plt.show()
     if sync_msrmt.state not in [MsrmtState.FINISHING, MsrmtState.FINISHED]:

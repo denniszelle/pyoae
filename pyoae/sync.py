@@ -6,6 +6,7 @@ from enum import auto, Enum
 from logging import Logger
 from typing import Any, Generic, Literal, Final, TypeVar
 
+import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
 import scipy.signal
@@ -538,6 +539,8 @@ class SyncMsrmt(Generic[SignalT]):
                         rec_start_idx:rec_end_idx] = input_data[:frames, 0]
 
                 self.live_msrmt_data.record_idx = rec_end_idx
+            case MsrmtState.FINISHED:
+                raise sd.CallbackStop
 
         # Update play_idx
         self.live_msrmt_data.play_idx += frames
@@ -559,12 +562,10 @@ class SyncMsrmt(Generic[SignalT]):
                 self.hardware_data.output_device
             )
         ):
-            self.logger.info('Beginning to stream.')
+            self.logger.info('Beginning to stream: %s.', self.state)
             start_plot(self, info)
-            while self.state not in [
-                MsrmtState.FINISHING,
-                MsrmtState.FINISHED,
-                MsrmtState.CANCELED
-            ]:
-                sd.sleep(1000)
+            while info.plot_info.non_interactive and not info.plot_info.msrmt_anim.done:
+                # keep figure for non-interactive mode
+                plt.pause(0.2)
             self.logger.info('Closing stream.')
+        self.logger.info('Stream closed.')

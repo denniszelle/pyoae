@@ -64,6 +64,17 @@ class DeviceConfig:
     live_display_duration: ClassVar[float] = 100.
     """Duration that will be displayed in the live-time plot in milliseconds."""
 
+    artifact_rejection_threshold: ClassVar[float] = 1.8
+    """Threshold for simple artifact rejection.
+
+    Relative threshold for the RMS value at which blocks are
+    excluded from averaging. Blocks are excluded if their
+    RMS exceeds
+
+          artifact_rejection_threshold * median_rms
+
+    """
+
     @classmethod
     def set(cls, key, value) -> None:
         """Set a configuration attribute."""
@@ -94,4 +105,5 @@ class DeviceConfig:
             Ramp duration: {self.ramp_duration} ms
             Update interval: {self.update_interval} ms
             Live display: {self.live_display_duration} ms
+            Artifact rejection threshold: {self.artifact_rejection_threshold}
         '''

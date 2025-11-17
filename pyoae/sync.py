@@ -14,6 +14,9 @@ import sounddevice as sd
 
 from pyoae import generator
 from pyoae import get_logger
+from pyoae.anim import MsrmtFuncAnimation
+from pyoae.msrmt_context import MsrmtContext
+from pyoae.plot_context import PlotContext
 from pyoae.signals import Signal
 
 
@@ -292,17 +295,6 @@ class SyncMsrmt(Generic[SignalT]):
         self.state = state
         self.logger.debug("Measurement state set to %s.", self.state)
 
-    def start_msrmt(self, start_plot: Callable, info: Any) -> None:
-        """Starts the measurement
-
-        Args:
-            start_plot: Function that is called with this object as argument
-              when the stream has been started
-            info: Info contained in an object that store information for the
-              update routine.
-        """
-        self.run_stream(start_plot, info)
-
     def compute_latency(self) -> None:
         """Computes the stream latency from sync measurement."""
         self.live_msrmt_data.sync_recorded /= np.max(
@@ -545,8 +537,43 @@ class SyncMsrmt(Generic[SignalT]):
         # Update play_idx
         self.live_msrmt_data.play_idx += frames
 
-    def run_stream(self, start_plot: Callable, info: Any) -> None:
-        """Run the measurement stream."""
+    def start_plot(
+        self,
+        update_msrmt: Callable,
+        msrmt_ctx: MsrmtContext,
+        plot_ctx: PlotContext
+    ) -> None:
+        """Executes the measurement plot that is regularly updated."""
+        anim = MsrmtFuncAnimation(
+            plot_ctx.fig,
+            update_msrmt,
+            fargs=(self, msrmt_ctx, plot_ctx),
+            interval=plot_ctx.update_interval,
+            blit=False,
+            cache_frame_data=False
+        )
+        msrmt_ctx.msrmt_anim = anim
+        plot_ctx.fig.tight_layout()
+        plt.show(block = not msrmt_ctx.non_interactive)
+        if (
+            not msrmt_ctx.non_interactive
+            and self.state is not MsrmtState.FINISHED
+        ):
+            self.set_state(MsrmtState.CANCELED)
+
+    def start_msrmt(
+        self,
+        update_msrmt: Callable,
+        msrmt_ctx: MsrmtContext,
+        plot_ctx: PlotContext
+    ) -> None:
+        """Starts the measurement
+
+        Args:
+            update_msrmt: Function that is called with every stream callback
+            msrmt_ctx: Parameters and instances to control the measurement.
+            plot_ctx: Parameters and instances to control plots.
+        """
         with sd.Stream(
             samplerate=self.recording_data.fs,
             blocksize=self.recording_data.block_size,
@@ -563,8 +590,12 @@ class SyncMsrmt(Generic[SignalT]):
             )
         ):
             self.logger.info('Beginning to stream.')
-            start_plot(self, info)
-            while info.plot_info.non_interactive and not info.plot_info.msrmt_anim.done:
+            self.start_plot(update_msrmt, msrmt_ctx, plot_ctx)
+            while (
+                msrmt_ctx.non_interactive
+                and msrmt_ctx.msrmt_anim is not None
+                and not msrmt_ctx.msrmt_anim.done
+            ):
                 # keep figure for non-interactive mode
                 if plt.get_fignums():
                     plt.pause(0.2)

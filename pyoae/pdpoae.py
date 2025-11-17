@@ -20,7 +20,6 @@ Typical usage:
 This module is not intended to be run directly.
 """
 
-from dataclasses import dataclass
 from datetime import datetime
 from logging import Logger
 import os
@@ -35,74 +34,18 @@ import numpy.typing as npt
 from pyoae import generator
 from pyoae import get_logger
 from pyoae import helpers
-from pyoae.anim import MsrmtFuncAnimation
 from pyoae.calib import MicroTransferFunction, OutputCalibration
 from pyoae.device.device_config import DeviceConfig
 from pyoae.dsp.processing import DpoaeMsrmtData, PulseDpoaeProcessor
 from pyoae.generator import PulseDpoaeStimulus
+from pyoae.plot_context import PlotContext
+from pyoae.msrmt_context import DpoaeMsrmtContext
 from pyoae.protocols import PulseDpoaeMsrmtParams
 from pyoae.signals import PeriodicSignal
 from pyoae.sync import HardwareData, RecordingData, SyncMsrmt, MsrmtState
 
 
 logger = get_logger()
-
-
-@dataclass
-class PulseDpoaePlotInfo:
-    """Container with data for the measurement plot."""
-
-    fig: Figure
-    """Figure corresponding to the plot window."""
-
-    axes: Axes
-    """Axes object of the online measurement plot."""
-
-    line: Line2D
-    """Line object for the online measurement plot."""
-
-    update_interval: float
-    """Interval to apply processing and plot update during measurement."""
-
-    non_interactive: bool
-    """Flag enabling/disabling non-interactive measurement mode."""
-
-    msrmt_anim: MsrmtFuncAnimation | None = None
-    """Animation instance for online display of measurement data."""
-
-
-@dataclass
-class DpoaeUpdateInfo:
-    """Container with data for continuous DPOAE measurement updates."""
-
-    plot_info: PulseDpoaePlotInfo
-    """Storage for the measurement plot."""
-
-    fs: float
-    """Sampling frequency in Hz."""
-
-    block_size: int
-    """Number of samples in each block."""
-
-    num_recorded_blocks: int
-    """Number of recorded blocks."""
-
-    artifact_rejection_thr: float
-    """Threshold for simple artifact rejection.
-
-    Reject blocks with a root-mean-square (RMS) value
-    exceeding ARTIFACT_REJECTION_THR * median_rms.
-    """
-
-    input_trans_fun: MicroTransferFunction | None = None
-    """Handle to microphone transfer function.
-
-    A microphone transfer function is used to correct the
-    recorded signal from the microphone characteristics.
-
-    Note:
-        This is a dummy object for future implementation.
-    """
 
 
 def setup_plot(
@@ -147,7 +90,7 @@ def setup_plot(
 
 def get_results(
     sync_msrmt: SyncMsrmt,
-    info: DpoaeUpdateInfo
+    msrmt_ctx: DpoaeMsrmtContext
 ) -> tuple[npt.NDArray[np.float32], npt.NDArray[np.float32]]:
     """Processes data and returns plot results.
 
@@ -157,7 +100,7 @@ def get_results(
     Args:
         sync_msrmt: Measurement object that handles the synchronized
           measurement.
-        info: Info object containing meta infos about the measurement.
+        msrmt_ctx: Parameters and instances to control the measurement.
 
     Returns:
         tuple[recorded_signal, spectrum]
@@ -167,8 +110,8 @@ def get_results(
     """
 
     # Only update while or after main measurement
-    avg = np.zeros(info.block_size, np.float32)
-    recorded_signal = np.zeros(info.block_size, np.float32)
+    avg = np.zeros(msrmt_ctx.block_size, np.float32)
+    recorded_signal = np.zeros(msrmt_ctx.block_size, np.float32)
     if sync_msrmt.state in [
         MsrmtState.RECORDING,
         MsrmtState.END_RECORDING,
@@ -185,7 +128,8 @@ def get_results(
 
 def update_plot_data(
     sync_msrmt: SyncMsrmt,
-    info: DpoaeUpdateInfo
+    msrmt_ctx: DpoaeMsrmtContext,
+    plot_ctx: PlotContext
 ) -> list[Line2D]:
     """Updates the plot data.
 
@@ -194,7 +138,8 @@ def update_plot_data(
     Args:
         sync_msrmt: Measurement object that handles the synchronized
           measurement.
-        info: Info object containing meta infos about the measurement.
+        msrmt_ctx: Parameters and instances to control the measurement.
+        plot_ctx: Parameters and instances to control plots.
 
     Returns:
         list[line]
@@ -202,19 +147,19 @@ def update_plot_data(
     """
     recorded_signal = sync_msrmt.get_recorded_signal()
     num_recorded_samples = len(recorded_signal)
-    num_recorded_blocks = num_recorded_samples // info.block_size
+    num_recorded_blocks = num_recorded_samples // msrmt_ctx.block_size
 
-    if num_recorded_blocks <= info.num_recorded_blocks:
-        return [info.plot_info.line]
+    if num_recorded_blocks <= msrmt_ctx.num_recorded_blocks:
+        return [plot_ctx.line]
 
     # x_data = np.arange(num_recorded_samples) / info.fs
-    idx_start = (num_recorded_blocks - 1) * info.block_size
-    idx_stop = idx_start + info.block_size
+    idx_start = (num_recorded_blocks - 1) * msrmt_ctx.block_size
+    idx_stop = idx_start + msrmt_ctx.block_size
     cur_block = recorded_signal[idx_start:idx_stop]
-    info.plot_info.line.set_ydata(
+    plot_ctx.line.set_ydata(
         cur_block
     )
-    info.num_recorded_blocks = num_recorded_blocks
+    msrmt_ctx.num_recorded_blocks = num_recorded_blocks
     # Update y-axis limits on demand.
     padding = 0.05 # padding on top and bottom
     rec_min = min(cur_block) - padding
@@ -222,24 +167,26 @@ def update_plot_data(
     rec_min = np.floor(rec_min / 0.05) * 0.05
     rec_max = np.ceil(rec_max / 0.05) * 0.05
 
-    rec_y_lim = info.plot_info.axes.get_ylim()
+    rec_y_lim = plot_ctx.axes.get_ylim()
     if rec_min != rec_y_lim[0] or rec_max != rec_y_lim[1]:
-        info.plot_info.axes.set_ylim(rec_min, rec_max)
+        plot_ctx.axes.set_ylim(rec_min, rec_max)
     # info.plot_info.axes.set_xlim(x_data[0], x_data[1] + (1/info.fs) * 1E3)
-    return [info.plot_info.line]
+    return [plot_ctx.line]
 
 
 def update_msrmt(
     frame,
     sync_msrmt: SyncMsrmt,
-    info: DpoaeUpdateInfo
+    msrmt_ctx: DpoaeMsrmtContext,
+    plot_ctx: PlotContext
 ) -> list[Line2D]:
     """Processes results from data and update the plots.
 
     Args:
         sync_msrmt: Measurement object that handles the synchronized
           measurement.
-        info: Info object containing meta infos and plot objects
+        msrmt_ctx: Parameters and instances to control the measurement.
+        plot_ctx: Parameters and instances to control plots.
 
     Returns:
         list[Line2D]
@@ -250,38 +197,18 @@ def update_msrmt(
     del frame
 
     if sync_msrmt.state == MsrmtState.FINISHED:
-        if info.plot_info.msrmt_anim is not None and info.plot_info.non_interactive:
-            info.plot_info.msrmt_anim.stop_animation()
-        return [info.plot_info.line]
+        if msrmt_ctx.msrmt_anim is not None and msrmt_ctx.non_interactive:
+            msrmt_ctx.msrmt_anim.stop_animation()
+        return [plot_ctx.line]
 
     if sync_msrmt.state == MsrmtState.FINISHING:
         sync_msrmt.set_state(MsrmtState.FINISHED)
-        if info.plot_info.non_interactive:
+        if msrmt_ctx.non_interactive:
             logger.info('Recording complete.')
         else:
             logger.info('Recording complete. Please close window to continue.')
 
-    return update_plot_data(sync_msrmt, info)
-
-
-def start_plot(sync_msrmt: SyncMsrmt, info: DpoaeUpdateInfo) -> None:
-    """Executes the measurement plot that is regularly updated."""
-    anim = MsrmtFuncAnimation(
-        info.plot_info.fig,
-        update_msrmt,
-        fargs=(sync_msrmt, info,),
-        interval=info.plot_info.update_interval,
-        blit=False,
-        cache_frame_data=False
-    )
-    info.plot_info.msrmt_anim = anim
-    info.plot_info.fig.tight_layout()
-    plt.show(block = not info.plot_info.non_interactive)
-    if (
-        not info.plot_info.non_interactive
-        and sync_msrmt.state is not MsrmtState.FINISHED
-    ):
-        sync_msrmt.state = MsrmtState.CANCELED
+    return update_plot_data(sync_msrmt, msrmt_ctx, plot_ctx)
 
 
 class PulseDpoaeRecorder:
@@ -293,8 +220,11 @@ class PulseDpoaeRecorder:
     signals: list[PeriodicSignal]
     """List of output signals for each channel."""
 
-    update_info: DpoaeUpdateInfo
-    """Instance to control DPOAE measurement updates."""
+    plot_ctx: PlotContext
+    """Instance to plot context for SOAE visualization."""
+
+    msrmt_ctx: DpoaeMsrmtContext
+    """Instance to context to control SOAE measurement updates."""
 
     msrmt: SyncMsrmt
     """Instance to perform a synchronized OAE measurement."""
@@ -345,6 +275,7 @@ class PulseDpoaeRecorder:
                 block_duration * 1E3
             )
 
+        # stimulus will be set during `generate_output_signals``
         self.stimulus = PulseDpoaeStimulus(
             f1=0.0,
             f2=0.0,
@@ -360,15 +291,17 @@ class PulseDpoaeRecorder:
             out_calib=out_trans_fun
         )
         # has_input_calib = mic_trans_fun is not None
-        dpoae_info = self.setup_info(num_block_samples, non_interactive)
-        ARTIFACT_REJ_RATIO = 1.8  # TODO: replace
-        self.update_info = DpoaeUpdateInfo(
-            dpoae_info,
-            DeviceConfig.sample_rate,
-            num_block_samples,
-            num_recorded_blocks=0,
-            artifact_rejection_thr=ARTIFACT_REJ_RATIO,
-            input_trans_fun=mic_trans_fun
+        self.plot_ctx = self.setup_plot_context(num_block_samples)
+        self.msrmt_ctx = DpoaeMsrmtContext(
+            fs=DeviceConfig.sample_rate,
+            block_size=num_block_samples,
+            input_trans_fun=mic_trans_fun,
+            artifact_rejection_thr=DeviceConfig.artifact_rejection_threshold,
+            non_interactive=non_interactive,
+            msrmt_anim=None,
+            f1=self.stimulus.f1,
+            f2=self.stimulus.f2,
+            num_recorded_blocks=0
         )
         rec_data = RecordingData(
             DeviceConfig.sample_rate,
@@ -394,7 +327,7 @@ class PulseDpoaeRecorder:
         """Starts the recording."""
         self.logger.info("Starting recording...")
         # `start_msrmt` starts the application loop
-        self.msrmt.start_msrmt(start_plot, self.update_info)
+        self.msrmt.start_msrmt(update_msrmt, self.msrmt_ctx, self.plot_ctx)
 
         # Plot all data and final result after user has
         # closed the live-measurement window.
@@ -411,14 +344,14 @@ class PulseDpoaeRecorder:
             'f2': self.stimulus.f2,
             'level1': self.stimulus.level1,
             'level2': self.stimulus.level2,
-            'num_block_samples': self.update_info.block_size,
+            'num_block_samples': self.msrmt_ctx.block_size,
             'recorded_sync': self.msrmt.live_msrmt_data.sync_recorded
         }
         self.dpoae_processor = PulseDpoaeProcessor(
-            recording, self.update_info.input_trans_fun
+            recording, self.msrmt_ctx.input_trans_fun
         )
         self.dpoae_processor.process_msrmt()
-        if not self.update_info.plot_info.non_interactive:
+        if not self.msrmt_ctx.non_interactive:
             self.logger.info(
                 'Showing offline results. Please close window to continue.'
             )
@@ -443,7 +376,7 @@ class PulseDpoaeRecorder:
         ]
         file_name = "_".join(filter(None, parts))
         save_path = os.path.join(save_path, file_name)
-        recorded_signal, _ = get_results(self.msrmt, self.update_info)
+        recorded_signal, _ = get_results(self.msrmt, self.msrmt_ctx)
         if self.dpoae_processor is not None:
             raw_avg = self.dpoae_processor.raw_averaged
             avg = self.dpoae_processor.dpoae_signal
@@ -457,7 +390,7 @@ class PulseDpoaeRecorder:
             f2=self.stimulus.f2,
             level1=self.stimulus.level1,
             level2=self.stimulus.level2,
-            num_block_samples=self.update_info.block_size,
+            num_block_samples=self.msrmt_ctx.block_size,
             recorded_sync=self.msrmt.live_msrmt_data.sync_recorded,
             average=avg,
             raw_average=raw_avg
@@ -494,20 +427,20 @@ class PulseDpoaeRecorder:
         self.signals.append(signal1)
         self.signals.append(signal2)
 
-    def setup_info(
+    def setup_plot_context(
         self,
-        block_size: int,
-        non_interactive: bool,
-    ) -> PulseDpoaePlotInfo:
+        block_size: int
+    ) -> PlotContext:
         """Sets up live plot and measurement information."""
-        fig, axes, lines = setup_plot(
+        fig, axes, line = setup_plot(
             block_size,
             DeviceConfig.sample_rate
         )
-        return PulseDpoaePlotInfo(
-            fig,
-            axes,
-            lines,
-            (block_size / DeviceConfig.sample_rate) * 1E3,
-            non_interactive=non_interactive
+        update_interval = (block_size / DeviceConfig.sample_rate) * 1E3
+        return PlotContext(
+            fig=fig,
+            axes=axes,
+            line=line,
+            update_interval=update_interval,
+            live_display_duration=update_interval
         )

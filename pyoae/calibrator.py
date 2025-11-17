@@ -3,7 +3,6 @@
 This module is not intended to be run directly.
 """
 
-from dataclasses import dataclass
 from datetime import datetime
 from logging import Logger
 
@@ -17,66 +16,20 @@ import numpy.typing as npt
 from pyoae import files
 from pyoae import generator
 from pyoae import get_logger
-from pyoae.anim import MsrmtFuncAnimation
 from pyoae.calib import (
     MicroTransferFunction,
     OutputCalibration,
     SpeakerCalibData
 )
 from pyoae.device.device_config import DeviceConfig
+from pyoae.msrmt_context import MsrmtContext
+from pyoae.plot_context import PlotContext
 from pyoae.protocols import CalibMsrmtParams
 from pyoae.signals import Signal
 from pyoae.sync import HardwareData, RecordingData, SyncMsrmt, MsrmtState
 
 
 logger = get_logger(__name__)
-
-
-@dataclass
-class PlotInfo:
-    """Container with data for the measurement plot."""
-
-    fig: Figure
-    """Figure corresponding to the plot window."""
-
-    ax_time: Axes
-    """Axis object of the time plot."""
-
-    line_time: Line2D
-    """Line object for the time plot."""
-
-    update_interval: float
-    """Interval to apply processing and plot update during measurement."""
-
-    live_display_duration: float
-    """Duration to display time domain plot in ms."""
-
-    msrmt_anim: MsrmtFuncAnimation | None = None
-    """Animation instance for online display of measurement data."""
-
-
-@dataclass
-class UpdateInfo:
-    """Container with data for calibration measurement updates."""
-
-    plot_info: PlotInfo
-    """Storage for the measurement plot."""
-
-    fs: float
-    """Sampling frequency in Hz."""
-
-    block_size: int
-    """Number of samples in each block."""
-
-    input_trans_fun: MicroTransferFunction | None = None
-    """Handle to microphone transfer function.
-
-    A microphone transfer function is used to correct the
-    recorded signal from the microphone characteristics.
-
-    Note:
-        This is a dummy object for future implementation.
-    """
 
 
 def setup_plot(
@@ -196,7 +149,6 @@ def get_results(sync_msrmt: SyncMsrmt) -> npt.NDArray[np.float32]:
     Args:
         sync_msrmt: Measurement object that handles the synchronized
           measurement.
-        info: Info object containing meta infos about the measurement.
 
     Returns:
         tuple[recorded_signal, spectrum]
@@ -220,14 +172,14 @@ def get_results(sync_msrmt: SyncMsrmt) -> npt.NDArray[np.float32]:
 
 def get_channel_spectra(
     sync_msrmt: SyncMsrmt,
-    info: UpdateInfo
+    msrmt_ctx: MsrmtContext
 ) -> list[npt.NDArray[np.float32]]:
     """Processes data and returns spectra per output channels.
 
     Args:
         sync_msrmt: Measurement object that handles the synchronized
           measurement.
-        info: Info object containing meta infos about the measurement.
+        msrmt_ctx: Parameters and instances to control the measurement.
 
     Returns:
         list[spectrum_ch01, spectrum_ch02, ...]
@@ -240,23 +192,24 @@ def get_channel_spectra(
 
     # TODO: make channel selection dynamic using properties
 
-    block_size = int(0.5 * info.block_size)
+    block_size = int(0.5 * msrmt_ctx.block_size)
     logger.debug('Block size for transfer function: %d.', block_size)
 
     spectrum_ch01 = process_spectrum(
         recorded_signal[:block_size],
-        info.input_trans_fun,
+        msrmt_ctx.input_trans_fun,
     )
     spectrum_ch02 = process_spectrum(
         recorded_signal[block_size:],
-        info.input_trans_fun
+        msrmt_ctx.input_trans_fun
     )
     return [spectrum_ch01, spectrum_ch02]
 
 
 def update_plot_data(
     recorded_signal: npt.NDArray[np.float32],
-    info: UpdateInfo
+    msrmt_ctx: MsrmtContext,
+    plot_ctx: PlotContext
 ) -> Line2D:
     """Updates the plot data.
 
@@ -265,7 +218,8 @@ def update_plot_data(
     Args:
         recorded_signal: Float array containing the raw signal.
         spectrum: Float array containing the spectral estimate.
-        info: Info object containing meta infos and plot objects
+        msrmt_ctx: Parameters and instances to control the measurement.
+        plot_ctx: Parameters and instances to control plots.
 
     Returns:
         tuple[line_time, line_spec]
@@ -275,36 +229,38 @@ def update_plot_data(
     """
 
     n_samples_displayed = int(
-        info.plot_info.live_display_duration * 1E-3 * info.fs
+        plot_ctx.live_display_duration * 1E-3 * msrmt_ctx.fs
     )
 
     num_recorded_samples = len(recorded_signal)
 
     if num_recorded_samples < n_samples_displayed:
-        return info.plot_info.line_time
+        return plot_ctx.line
 
     #x_data = -np.flipud(np.arange(n_samples_displayed) / info.fs * 1E3)
-    x_data = np.arange(num_recorded_samples) / info.fs
+    x_data = np.arange(num_recorded_samples) / msrmt_ctx.fs
 
-    info.plot_info.line_time.set_data(
+    plot_ctx.line.set_data(
         x_data,
         recorded_signal
     )
 
-    return info.plot_info.line_time
+    return plot_ctx.line
 
 
 def update_msrmt(
     frame,
     sync_msrmt: SyncMsrmt,
-    info: UpdateInfo
+    msrmt_ctx: MsrmtContext,
+    plot_ctx: PlotContext
 ) -> tuple[Line2D,]:
     """Processes results from data and update the plots.
 
     Args:
         sync_msrmt: Measurement object that handles the synchronized
           measurement.
-        info: Info object containing meta infos and plot objects
+        msrmt_ctx: Parameters and instances to control the measurement.
+        plot_ctx: Parameters and instances to control plots.
 
     Returns:
         tuple[line_time, ]
@@ -318,39 +274,25 @@ def update_msrmt(
     del frame
 
     if sync_msrmt.state == MsrmtState.FINISHED:
-        if info.plot_info.msrmt_anim is not None:
-            info.plot_info.msrmt_anim.stop_animation()
-        return (info.plot_info.line_time, )
+        if msrmt_ctx.msrmt_anim is not None and msrmt_ctx.non_interactive:
+            msrmt_ctx.msrmt_anim.stop_animation()
+        return (plot_ctx.line, )
 
     if sync_msrmt.state == MsrmtState.FINISHING:
         sync_msrmt.set_state(MsrmtState.FINISHED)
-        logger.info('Recording complete. Please close window to continue.')
+        if msrmt_ctx.non_interactive:
+            logger.info('Recording complete.')
+        else:
+            logger.info('Recording complete. Please close window to continue.')
 
     recorded_signal = get_results(sync_msrmt)
 
-    return (update_plot_data(recorded_signal, info), )
-
-
-def start_plot(sync_msrmt: SyncMsrmt, info: UpdateInfo) -> None:
-    """Executes the measurement plot that is regularly updated."""
-    anim = MsrmtFuncAnimation(
-        info.plot_info.fig,
-        update_msrmt,
-        fargs=(sync_msrmt, info,),
-        interval=info.plot_info.update_interval,
-        blit=False,
-        cache_frame_data=False
-    )
-    info.plot_info.msrmt_anim = anim
-    plt.tight_layout()
-    plt.show()
-    if sync_msrmt.state not in [MsrmtState.FINISHING, MsrmtState.FINISHED]:
-        sync_msrmt.state = MsrmtState.CANCELED
+    return (update_plot_data(recorded_signal, msrmt_ctx, plot_ctx), )
 
 
 def plot_offline(
     sync_msrmt: SyncMsrmt,
-    info: UpdateInfo,
+    msrmt_ctx: MsrmtContext,
     mt_frequencies: npt.NDArray[np.float32],
     output_amplitude: float
 ) -> None:
@@ -362,14 +304,14 @@ def plot_offline(
     if sync_msrmt.state != MsrmtState.FINISHED:
         return
 
-    has_input_calib =  info.input_trans_fun is not None
+    has_input_calib =  msrmt_ctx.input_trans_fun is not None
     axes = setup_offline_plot((100, 20000), has_input_calib)
 
-    ch_spectra = get_channel_spectra(sync_msrmt, info)
+    ch_spectra = get_channel_spectra(sync_msrmt, msrmt_ctx)
 
     # plot channel spectra
     num_bins = len(ch_spectra[0])
-    df = DeviceConfig.sample_rate / (0.5*info.block_size)
+    df = DeviceConfig.sample_rate / (0.5*msrmt_ctx.block_size)
     f = np.arange(num_bins, dtype=np.float32) * df
 
     # find frequency indices to sample transfer function
@@ -439,8 +381,11 @@ class OutputCalibRecorder:
     signals: list[Signal]
     """List of output signals for each channel."""
 
-    update_info: UpdateInfo
-    """Instance to control measurement updates."""
+    plot_ctx: PlotContext
+    """Instance to plot context for measurement visualization."""
+
+    msrmt_ctx: MsrmtContext
+    """Instance to perform a synchronized OAE measurement."""
 
     msrmt: SyncMsrmt
     """Instance to perform a synchronized measurement."""
@@ -487,12 +432,14 @@ class OutputCalibRecorder:
             num_block_samples,
             num_total_recording_samples
         )
-        msrmt_info = self.setup_info(recording_duration)
-        self.update_info = UpdateInfo(
-            msrmt_info,
-            DeviceConfig.sample_rate,
-            num_total_recording_samples,
-            input_trans_fun=mic_trans_fun
+        self.plot_ctx = self.setup_plot_context(recording_duration)
+        self.msrmt_ctx = MsrmtContext(
+            fs=DeviceConfig.sample_rate,
+            block_size=num_total_recording_samples,
+            input_trans_fun=mic_trans_fun,
+            artifact_rejection_thr=-1.0,  # not used
+            non_interactive=False,
+            msrmt_anim=None
         )
         rec_data = RecordingData(
             DeviceConfig.sample_rate,
@@ -518,7 +465,7 @@ class OutputCalibRecorder:
         """Starts the calibration."""
         self.logger.info("Starting output calibration...")
         # `start_msrmt` starts the application loop
-        self.msrmt.start_msrmt(start_plot, self.update_info)
+        self.msrmt.start_msrmt(update_msrmt, self.msrmt_ctx, self.plot_ctx)
 
         # Compute calibration results
         self.compute_calib_results()
@@ -526,27 +473,28 @@ class OutputCalibRecorder:
         if self.results is None:
             return
 
-        # Plot all data and final result after user has
-        # closed the live-measurement window.
-        self.logger.info(
-            'Showing offline results. Please close window to continue.'
-        )
-        plot_offline(
-            self.msrmt,
-            self.update_info,
-            self.mt_frequencies,
-            self.output_amplitude
-        )
+        if not self.msrmt_ctx.non_interactive:
+            # Plot all data and final result after user has
+            # closed the live-measurement window.
+            self.logger.info(
+                'Showing offline results. Please close window to continue.'
+            )
+            plot_offline(
+                self.msrmt,
+                self.msrmt_ctx,
+                self.mt_frequencies,
+                self.output_amplitude
+            )
 
     def compute_calib_results(self) -> None:
         """Computes the output-channel transfer functions."""
         if self.msrmt.state != MsrmtState.FINISHED:
             return
 
-        ch_spectra = get_channel_spectra(self.msrmt, self.update_info)
+        ch_spectra = get_channel_spectra(self.msrmt, self.msrmt_ctx)
 
         # plot channel spectra
-        df = DeviceConfig.sample_rate / (0.5*self.update_info.block_size)
+        df = DeviceConfig.sample_rate / (0.5*self.msrmt_ctx.block_size)
 
         # find frequency indices to sample transfer function
         mt_bin_idx = np.round((self.mt_frequencies/df)).astype(np.int_)
@@ -631,19 +579,19 @@ class OutputCalibRecorder:
         self.signals.append(signal1)
         self.signals.append(signal2)
 
-    def setup_info(
+    def setup_plot_context(
         self,
         recording_duration: float
-    ) -> PlotInfo:
+    ) -> PlotContext:
         """Sets up live plot and measurement information."""
         fig, ax_time, line_time = setup_plot(
             recording_duration,
             DeviceConfig.sample_rate
         )
-        return PlotInfo(
-            fig,
-            ax_time,
-            line_time,
-            DeviceConfig.update_interval,
-            DeviceConfig.live_display_duration
+        return PlotContext(
+            fig=fig,
+            axes=ax_time,
+            line=line_time,
+            update_interval=DeviceConfig.update_interval,
+            live_display_duration=DeviceConfig.live_display_duration
         )

@@ -1,6 +1,22 @@
 """Classes and functions to manage measurement protocols."""
 
-from typing import TypedDict
+from typing import (
+    Any,
+    TypedDict,
+    Final
+)
+
+
+OUTPUT_CALIB_KEYS: Final[list[str]] = [
+    'block_duration',
+    'num_averaging_blocks',
+    'f_start',
+    'f_stop',
+    'lines_per_octave',
+    'amplitude_per_line',
+    'num_channels'
+]
+"""Necessary keys for output calibration"""
 
 
 class MsrmtParams(TypedDict):
@@ -74,5 +90,26 @@ def get_default_calib_msrmt_params() -> CalibMsrmtParams:
         'lines_per_octave': 9.1,
         'amplitude_per_line': 0.004,
         'num_channels': 2
+    }
+    return d
+
+
+def get_custom_calib_msrmt_params(
+    calib_params: dict[str, Any]
+) -> CalibMsrmtParams | None:
+    """Returns file-loaded parameters for output calibration."""
+
+    for key_i in OUTPUT_CALIB_KEYS:
+        if key_i not in calib_params.keys():
+            return None
+
+    d: CalibMsrmtParams = {
+        'block_duration': calib_params['block_duration'],
+        'num_averaging_blocks': calib_params['num_averaging_blocks'],
+        'f_start': calib_params['f_start'],
+        'f_stop': calib_params['f_stop'],
+        'lines_per_octave': calib_params['lines_per_octave'],
+        'amplitude_per_line': calib_params['amplitude_per_line'],
+        'num_channels': calib_params['num_channels']
     }
     return d

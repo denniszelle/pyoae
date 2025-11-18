@@ -33,7 +33,8 @@ logger = pyoae_logger.get_pyoae_logger('PyOAE Output Calibrator')
 
 def main(
     mic: str = '',
-    save: bool = False
+    save: bool = False,
+    protocol: str = ''
 ) -> None:
     """Main function executing a multi-tone measurement."""
 
@@ -58,8 +59,16 @@ def main(
     else:
         mic_trans_fun = None
 
-    #dpoae_protocol = files.load_dpoae_protocol(protocol)
-    msrmt_params = protocols.get_default_calib_msrmt_params()
+    if protocol:
+        logger.info('Loading speaker calibration protocol from %s.', protocol)
+        prtcl_data = files.load_json_file(protocol)
+        msrmt_params = protocols.get_custom_calib_msrmt_params(prtcl_data)
+        if msrmt_params is None:
+            logger.error('Stopping: Output calibration protocol is invalid.')
+            return
+    else:
+        msrmt_params = protocols.get_default_calib_msrmt_params()
+
     calib_recorder = OutputCalibRecorder(
         msrmt_params,
         mic_trans_fun=mic_trans_fun
@@ -78,6 +87,12 @@ parser.add_argument(
     default=argparse.SUPPRESS,
     type=str,
     help='Specify path to microphone calibration JSON file.'
+)
+parser.add_argument(
+    '--protocol',
+    default=argparse.SUPPRESS,
+    type=str,
+    help='Specify path to output calibration protocol JSON file.'
 )
 parser.add_argument(
     '--save',

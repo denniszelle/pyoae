@@ -1,0 +1,9 @@
+{
+    "block_duration": 1.0,
+    "num_averaging_blocks": 1,
+    "f_start": 200.0,
+    "f_stop": 20000.0,
+    "lines_per_octave": 9.1,
+    "amplitude_per_line": 0.004,
+    "num_channels": 2
+}

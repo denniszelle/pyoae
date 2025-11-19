@@ -11,7 +11,7 @@ from pyoae import calib
 from pyoae import get_logger
 from pyoae import protocols
 from pyoae.device.device_config import DeviceConfig
-from pyoae.dsp.processing import (
+from pyoae.dsp.containers import (
     ContDpoaeRecording,
     DpoaeMsrmtData,
     PulseDpoaeRecording

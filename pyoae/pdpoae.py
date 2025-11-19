@@ -36,7 +36,8 @@ from pyoae import get_logger
 from pyoae import helpers
 from pyoae.calib import MicroTransferFunction, OutputCalibration
 from pyoae.device.device_config import DeviceConfig
-from pyoae.dsp.processing import DpoaeMsrmtData, PulseDpoaeProcessor
+from pyoae.dsp.containers import DpoaeMsrmtData
+from pyoae.dsp.processing import PulseDpoaeProcessor
 from pyoae.generator import PulseDpoaeStimulus
 from pyoae.plot_context import PlotContext
 from pyoae.msrmt_context import DpoaeMsrmtContext

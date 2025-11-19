@@ -16,6 +16,11 @@ from pyoae import files
 from pyoae import generator
 from pyoae import get_logger
 from pyoae.calib import MicroTransferFunction
+from pyoae.dsp.containers import (
+    DpoaeMsrmtData,
+    ContDpoaeRecording,
+    PulseDpoaeRecording
+)
 from pyoae.dsp.opt_avg import OptAverage
 
 
@@ -23,32 +28,6 @@ NUM_PTPV_SEGMENTS = 4
 HP_ORDER = 1201
 BP_ORDER = 1201
 RAMP_DURATION = 2
-
-
-class DpoaeMsrmtData(TypedDict):
-    """A general container for raw DPOAE measurement data."""
-    recorded_signal: npt.NDArray[np.float32]
-    samplerate: float
-    f1: float
-    f2: float
-    level1: float
-    level2: float
-    num_block_samples: int
-    recorded_sync: npt.NDArray[np.float32]
-
-
-class ContDpoaeRecording(TypedDict):
-    """Structured content from a DPOAE recording file."""
-    recording: DpoaeMsrmtData
-    average: npt.NDArray[np.float64] | None
-    spectrum: npt.NDArray[np.float64] | None
-
-
-class PulseDpoaeRecording(TypedDict):
-    """Structured content from a pulsed DPOAE recording file."""
-    recording: DpoaeMsrmtData
-    average: npt.NDArray[np.float64] | None
-    signal: npt.NDArray[np.float64] | None
 
 
 def _msrmt_to_cont_recording(

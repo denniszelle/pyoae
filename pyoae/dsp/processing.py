@@ -2,7 +2,7 @@
 
 from logging import Logger
 from pathlib import Path
-from typing import TypedDict, cast
+from typing import cast
 
 from matplotlib import pyplot as plt
 from matplotlib.axes import Axes
@@ -137,6 +137,24 @@ def high_pass_filter(
     return y_f[D:D + y.shape[0]]
 
 
+def low_pass_filter(
+    y: npt.NDArray[np.float32] | npt.NDArray[np.float64],
+    num_taps: int,
+    samplerate: float,
+    cutoff_hz: float = 200.0,
+) -> npt.NDArray[np.float64]:
+    """FIR low-pass with causal phase; same length as input."""
+    if num_taps % 2 == 0:
+        # HP linear-phase FIRs should use odd taps for Type-I symmetry
+        num_taps += 1
+    b = sig.firwin(num_taps, cutoff_hz, pass_zero="lowpass", fs=samplerate)  # type: ignore
+
+    D = (num_taps - 1) // 2  # group delay
+    y_ext = np.pad(y.astype(np.float64, copy=False), (0, D), mode="edge")
+    y_f = cast(np.ndarray, sig.lfilter(b, 1.0, y_ext))
+    return y_f[D:D + y.shape[0]]
+
+
 def bp_pass_filter(
     y: npt.NDArray[np.float64],
     num_taps: int,
@@ -199,9 +217,13 @@ class PulseDpoaeResult:
         if self.dpoae_signal.size:
             axes[2].plot(t_avg, self.dpoae_signal, linewidth=0.5)
 
+        y_lim = np.ceil(np.max(np.abs(self.dpoae_signal))/50)*50
+        y_lim = max(y_lim, 50)
+
         axes[0].set_xlim(0, t_rec[-1])
         axes[1].set_xlim(0, t_avg[-1])
         axes[2].set_xlim(0, t_avg[-1])
+        axes[2].set_ylim(-y_lim, y_lim)
         axes[0].set_xlabel("Recording Time (s)")
         axes[1].set_ylabel('Amp. (full scale)')
         axes[2].set_ylabel('p (muPa)')
@@ -212,10 +234,14 @@ class PulseDpoaeResult:
         axes[0].set_title(
             f'L1: {self.recording["level1"]} dB SPL, '
             f'L2: {self.recording["level2"]} dB SPL, '
-            f'f2: {self.recording["f2"]} Hz'
+            f'f2: {self.recording["f2"]} Hz, '
+            f'f2/f1: {self.recording["f2"]/self.recording["f1"]}'
         )
         axes[1].set_title('Raw Average')
-        axes[2].set_title('Filtered Average - DPOAE Signal')
+        dpoae_max = np.max(self.dpoae_signal)
+        axes[2].set_title(
+            f'Filtered Average - DPOAE Signal (Max: {dpoae_max:.2f})'
+        )
         fig.tight_layout()
         plt.show(block=block_loop)
 
@@ -291,7 +317,7 @@ class PulseDpoaeProcessor(PulseDpoaeResult):
         self.raw_averaged *= win
 
         t_hw_sp = generator.short_pulse_half_width(self.recording['f2']) * 1E-3
-        bw = 1 / t_hw_sp
+        bw = 2 / t_hw_sp
         df = int(0.5*bw)
 
         cutoff = fdp + np.array([-df, df],)

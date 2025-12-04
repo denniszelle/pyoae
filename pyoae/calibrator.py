@@ -96,19 +96,20 @@ def setup_offline_plot(
         - **line_spec**: Line object with the spectral data of the signal
     """
 
-    _, axes = plt.subplots(2, 1, figsize=(10, 6))
+    _, axes = plt.subplots(3, 1, figsize=(10, 6), sharex='all')
     axes: list[Axes]
 
     for i, ax in enumerate(axes):
         ax.set_xlim(frequency_range[0], frequency_range[1])
         ax.set_ylim(-50, 100)
         ax.set_xscale('log')
-        ax.set_title(f"Spectrum of Channel {i}")
-        ax.set_xlabel("Frequency (Hz)")
+        ax.set_title(f"Spectrum of Channel {i+1}")
         if is_calib_available:
             ax.set_ylabel('Level (dB SPL)')
         else:
             ax.set_ylabel("Level (dBFS)")
+    axes[-1].set_title('Channel Comparison')
+    axes[-1].set_xlabel("Frequency (Hz)")
     return axes
 
 
@@ -305,7 +306,10 @@ def plot_offline(
         return
 
     has_input_calib =  msrmt_ctx.input_trans_fun is not None
-    axes = setup_offline_plot((100, 20000), has_input_calib)
+    f_min = np.floor((mt_frequencies.min() - 20) / 20) * 20
+    f_max = np.ceil((mt_frequencies.max() + 500)/ 1000) * 1000
+    f_min = max(20, f_min)
+    axes = setup_offline_plot((f_min, f_max), has_input_calib)
 
     ch_spectra = get_channel_spectra(sync_msrmt, msrmt_ctx)
 
@@ -322,7 +326,12 @@ def plot_offline(
     output_overhead = 20*np.log10(1/output_amplitude)
 
     padding = 15  # dB of padding on top and bottom
-    for i, ax in enumerate(axes):
+    ax_cmp = axes[2]  # comparison plot
+    line_vecs = ['b-', 'r-']
+    ax_cmp_min = 80
+    ax_cmp_max = 120
+    for i in range(2):
+        ax = axes[i]
         out_db_spl = ch_spectra[i][mt_bin_idx]
 
         p_out_peak = np.sqrt(2) * 20 * 10**(out_db_spl/20)
@@ -333,11 +342,18 @@ def plot_offline(
         spec_min = min(ch_spectra[i])
         spec_max = max(ch_spectra[i] + output_overhead)
 
-        ax.plot(f, ch_spectra[i])
-        ax.plot(mt_frequencies, out_db_spl, 'rx')
-        ax.plot(mt_frequencies, out_db_spl + output_overhead, 'bo-')
-        ax.plot(mt_frequencies, out_max_db_spl, 'r--')
+        ax.plot(f, ch_spectra[i], linewidth=0.5, color='k')
+        ax.plot(mt_frequencies, out_db_spl, 'ro', markersize=2)
+        ax.plot(mt_frequencies, out_max_db_spl, line_vecs[i])
+        ax.plot(mt_frequencies, out_db_spl + output_overhead, 'ko', markersize=3, markerfacecolor='w')
+        ax_cmp.plot(mt_frequencies, out_max_db_spl, line_vecs[i])
         ax.set_ylim(spec_min - padding, spec_max + padding)
+        ax_cmp.grid(True, which='both')
+        out_lower_bnd = np.floor(out_max_db_spl.min()/20)*20
+        out_upper_bnd = np.ceil(out_max_db_spl.max()/20)*20
+        ax_cmp_min = min(ax_cmp_min, out_lower_bnd)
+        ax_cmp_max = max(ax_cmp_max, out_upper_bnd)
+        ax_cmp.set_ylim(ax_cmp_min, ax_cmp_max)
 
     plt.tight_layout()
     plt.show()
@@ -347,14 +363,18 @@ def plot_result_file(results: OutputCalibration) -> None:
     """Plots output calibration from result file."""
     _, ax = plt.subplots(1, 1, figsize=(10, 6))
 
-    ax.set_xlim(100, 20000)
+    f_min = np.floor((results.frequencies.min() - 20) / 20) * 20
+    f_max = np.ceil((results.frequencies.max() + 500)/ 1000) * 1000
+    f_min = max(20, f_min)
+
+    ax.set_xlim(f_min, f_max)
     ax.set_ylim(0, 120)
     ax.set_xscale('log')
     ax.set_title(f"Calibration {results.date} - Maximum Output Level")
     ax.set_xlabel("Frequency (Hz)")
     ax.set_ylabel('Level (dB SPL)')
 
-    line_styles = ['rx-', 'b.-']
+    line_styles = ['b.-', 'rx-']
     for i in range(2):
         p_out_max = results.amplitudes[i,:]
         out_max_db_spl = 20*np.log10(p_out_max/(np.sqrt(2)*20))

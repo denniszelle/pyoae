@@ -27,6 +27,12 @@ Will be adjusted to a correspond to a number of samples
 that is a multiple of the device's buffer size.
 """
 
+SYNC_MIN_SNR: Final[float] = 30.0
+"""Minimum SNR for the recorded sync signal.
+
+Values below that threshold will raise a warning.
+"""
+
 SYNC_OUTPUT_CHANNEL: Final[int] = 0
 """Output channel of the sync signal."""
 
@@ -297,9 +303,30 @@ class SyncMsrmt(Generic[SignalT]):
 
     def compute_latency(self) -> None:
         """Computes the stream latency from sync measurement."""
-        self.live_msrmt_data.sync_recorded /= np.max(
-            np.abs(self.live_msrmt_data.sync_recorded)
+
+        # Perform some basic sanity checks
+        sync_max_pos = np.argmax(np.abs(self.live_msrmt_data.sync_recorded))
+        sync_max = self.live_msrmt_data.sync_recorded[sync_max_pos]
+
+        k = max(500, sync_max_pos-100)
+        noise = np.sqrt(
+            np.mean(np.square(self.live_msrmt_data.sync_recorded[:k]))
         )
+        # Very simple SNR estimator
+        snr = 20 * np.log10((sync_max/np.sqrt(2))/noise)
+        if snr < SYNC_MIN_SNR:
+            self.logger.warning(
+                'SNR of SYNC pulse below typical values: %.2f dB',
+                snr
+            )
+            self.logger.warning(
+                'Synchronization might be invalid. '
+                'Measurement results can be corrupted.'
+            )
+        else:
+            self.logger.info('SNR of SYNC pulse: %.2f dB', snr)
+
+        self.live_msrmt_data.sync_recorded /= sync_max
         self.live_msrmt_data.sync_output /= np.max(
             np.abs(self.live_msrmt_data.sync_output)
         )

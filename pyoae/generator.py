@@ -25,6 +25,23 @@ SYNC_AMPLITUDE: Final[float] = 0.2
 SYNC_FREQUENCY: Final[float] = 4000
 """Carrier frequency of the sync pulse in Hz."""
 
+NUM_PTPV_SEGMENTS = 4
+"""Number of segments for a full PTPV ensemble."""
+
+PRIMARY1_PTPV_SHIFT = np.pi / (NUM_PTPV_SEGMENTS / 2)
+"""Phase shift of low-frequency primary.
+
+Phase shifts for default of 4 segments:
+  f1 -> 90°, f2 -> 180°
+"""
+
+PRIMARY2_PTPV_SHIFT = np.pi / (NUM_PTPV_SEGMENTS / 4)
+"""Phase shift of high-frequency primary.
+
+For default number of 4 segments, f2 short pulses have
+a 180° phase shift.
+"""
+
 
 logger = get_logger()
 
@@ -35,7 +52,7 @@ def short_pulse_half_width(f2: float) -> float:
     Returns:
         half-width in ms.
     """
-    return 13071.3/f2
+    return max(13071.3/f2, 13071.3/4000)
 
 
 def create_pulse_mask(
@@ -302,22 +319,21 @@ class PulseDpoaeStimulus(DpoaeStimulus):
         amplitude1 = check_output_limit(amplitude1)
         amplitude2 = check_output_limit(amplitude2)
 
-        # Phase shifts: f1 -> 90°, f2 -> 180°
         f1_stimuli = create_ptpv_signals(
             self.f1_pulse_mask,
             self.f1,
             amplitude1,
-            np.pi / 2,
-            num_block_samples
+            PRIMARY1_PTPV_SHIFT,
+            num_block_samples,
+            num_segments=NUM_PTPV_SEGMENTS
         )
-        # For default number of 4 segments, f2 short pulses have
-        # a 180° phase shift.
         f2_stimuli = create_ptpv_signals(
             self.f2_pulse_mask,
             self.f2,
             amplitude2,
-            np.pi,
-            num_block_samples
+            PRIMARY2_PTPV_SHIFT,
+            num_block_samples,
+            num_segments=NUM_PTPV_SEGMENTS
         )
 
         # concatenate PTPV segments to create the stimulus signals
@@ -346,7 +362,9 @@ def calculate_pt1_level(msrmt_params: DpoaeMsrmtParams) -> float:
     if msrmt_params['level1'] is None:
         # as first approximation, use Kummer et al. 1998
         # TODO: add other rules
-        level1 = 0.4 * msrmt_params['level2'] + 39
+        #level1 = 0.4 * msrmt_params['level2'] + 39
+        # Kempa et al. 2025
+        level1 = 0.5 * msrmt_params['level2'] + 35
     else:
         level1 = msrmt_params['level1']
     return level1

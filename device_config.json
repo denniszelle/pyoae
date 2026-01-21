@@ -7,6 +7,5 @@
     "ramp_duration": 5.0,
     "max_digital_output": 0.5,
     "update_interval": 100.0,
-    "live_display_duration": 100.0,
-    "artifact_rejection_threshold": 1.8
+    "live_display_duration": 10.0
 }

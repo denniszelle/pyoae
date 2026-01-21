@@ -2,7 +2,7 @@
 
 from logging import Logger
 from pathlib import Path
-from typing import TypedDict, cast
+from typing import cast
 
 from matplotlib import pyplot as plt
 from matplotlib.axes import Axes
@@ -24,10 +24,30 @@ from pyoae.dsp.containers import (
 from pyoae.dsp.opt_avg import OptAverage
 
 
-NUM_PTPV_SEGMENTS = 4
 HP_ORDER = 1201
+"""Order of the high-pass filter"""
 BP_ORDER = 1201
+"""Order of the band-pass filter"""
+
+REFERENCE_SAMPLING_RATE = 96000
+"""Reference sampling frequency for filter order."""
+
 RAMP_DURATION = 2
+"""Duration of the ramp applied to averaged signal in ms"""
+
+def scale_filter_order(order: int, fs: float):
+    """Scale filter order to sampling frequency"""
+
+    if order < 1:
+        raise ValueError("Filter order must be >= 1")
+
+    scaled_order = order * fs / REFERENCE_SAMPLING_RATE
+    new_order = int(round(scaled_order))
+
+    if (new_order - order) % 2 != 0:
+        new_order += 1 if new_order < scaled_order else -1
+
+    return max(1, new_order)
 
 
 def _msrmt_to_cont_recording(
@@ -142,6 +162,7 @@ def bp_pass_filter(
     num_taps: int,
     samplerate: float,
     cutoff_hz: npt.NDArray,
+    ramp_size: int = 0
 ) -> npt.NDArray[np.float64]:
     """FIR high-pass with causal phase; same length as input."""
     if num_taps % 2 == 0:
@@ -150,7 +171,23 @@ def bp_pass_filter(
     b = sig.firwin(num_taps, cutoff_hz, pass_zero="bandpass", fs=samplerate)  # type: ignore
 
     D = (num_taps - 1) // 2  # group delay
-    y_ext = np.pad(y.astype(np.float64, copy=False), (0, D), mode="edge")
+    if ramp_size > 0:
+        num_samples = len(y)
+        if 2 * ramp_size > num_samples:
+            raise ValueError(
+                "ramp_size is too large: 2 * ramp_size must be <= number of samples."
+            )
+        t = np.linspace(0.0, np.pi, ramp_size, endpoint=True)
+        rise = 0.5 - 0.5 * np.cos(t)
+        fall = rise[::-1]
+        window = np.ones(num_samples, dtype=float)
+        window[:ramp_size] *= rise
+        window[-ramp_size:] *= fall
+        y_w = y * window
+    else:
+        y_w = y
+
+    y_ext = np.pad(y_w.astype(np.float64, copy=False), (0, D), mode="edge")
     y_f = cast(np.ndarray, sig.lfilter(b, 1.0, y_ext))
     return y_f[D:D + y.shape[0]]
 
@@ -199,9 +236,13 @@ class PulseDpoaeResult:
         if self.dpoae_signal.size:
             axes[2].plot(t_avg, self.dpoae_signal, linewidth=0.5)
 
+        y_lim = np.ceil(np.max(np.abs(self.dpoae_signal))/50)*50
+        y_lim = max(y_lim, 50)
+
         axes[0].set_xlim(0, t_rec[-1])
         axes[1].set_xlim(0, t_avg[-1])
         axes[2].set_xlim(0, t_avg[-1])
+        axes[2].set_ylim(-y_lim, y_lim)
         axes[0].set_xlabel("Recording Time (s)")
         axes[1].set_ylabel('Amp. (full scale)')
         axes[2].set_ylabel('p (muPa)')
@@ -212,10 +253,14 @@ class PulseDpoaeResult:
         axes[0].set_title(
             f'L1: {self.recording["level1"]} dB SPL, '
             f'L2: {self.recording["level2"]} dB SPL, '
-            f'f2: {self.recording["f2"]} Hz'
+            f'f2: {self.recording["f2"]} Hz, '
+            f'f2/f1: {self.recording["f2"]/self.recording["f1"]}'
         )
         axes[1].set_title('Raw Average')
-        axes[2].set_title('Filtered Average - DPOAE Signal')
+        dpoae_max = np.max(self.dpoae_signal)
+        axes[2].set_title(
+            f'Filtered Average - DPOAE Signal (Max: {dpoae_max:.2f})'
+        )
         fig.tight_layout()
         plt.show(block=block_loop)
 
@@ -261,7 +306,7 @@ class PulseDpoaeProcessor(PulseDpoaeResult):
         # perform high-pass filtering
         self.filtered_recording = high_pass_filter(
             recorded_signal,
-            HP_ORDER,
+            scale_filter_order(HP_ORDER, samplerate),
             samplerate
         )
         fdp = 2 * self.recording['f1'] - self.recording['f2']
@@ -291,7 +336,7 @@ class PulseDpoaeProcessor(PulseDpoaeResult):
         self.raw_averaged *= win
 
         t_hw_sp = generator.short_pulse_half_width(self.recording['f2']) * 1E-3
-        bw = 1 / t_hw_sp
+        bw = 2 / t_hw_sp
         df = int(0.5*bw)
 
         cutoff = fdp + np.array([-df, df],)
@@ -323,12 +368,12 @@ class PulseDpoaeProcessor(PulseDpoaeResult):
         blocks = block_data.reshape(-1, block_size)
 
         # perform PTPV averaging
-        num_ensembles = int(total_blocks/NUM_PTPV_SEGMENTS)
+        num_ensembles = int(total_blocks / generator.NUM_PTPV_SEGMENTS)
         ensembles_size = (num_ensembles, block_size)
         ensembles = np.zeros(ensembles_size, dtype=np.float32)
         for i in range(num_ensembles):
-            idx_start = i * NUM_PTPV_SEGMENTS
-            idx_stop = (i + 1) * NUM_PTPV_SEGMENTS
+            idx_start = i * generator.NUM_PTPV_SEGMENTS
+            idx_stop = (i + 1) * generator.NUM_PTPV_SEGMENTS
             ensembles[i, :] = np.mean(blocks[idx_start:idx_stop], axis=0)
 
         ensemble_power = np.zeros(num_ensembles)
@@ -489,7 +534,7 @@ class ContDpoaeProcessor(ContDpoaeResult):
         # perform high-pass filtering
         self.filtered_recording = high_pass_filter(
             recorded_signal,
-            HP_ORDER,
+            scale_filter_order(HP_ORDER, samplerate),
             samplerate
         )
 

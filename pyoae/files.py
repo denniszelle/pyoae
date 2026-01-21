@@ -101,7 +101,7 @@ def load_output_calib(file_path: str) -> calib.SpeakerCalibData:
 
 def load_soae_protocol(
     file_path: str | None = None
-) -> protocols.SoaeMsrmtParams:
+) -> protocols.MsrmtParams:
     """Loads the SOAE measurement parameters or returns default."""
     msrmt_params = protocols.get_default_soae_msrmt_params()
     d = {}

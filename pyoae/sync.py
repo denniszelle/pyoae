@@ -1,12 +1,13 @@
 """Functions and classes for a synchronized measurement."""
 
-from collections.abc import Callable
 from dataclasses import dataclass
 from enum import auto, Enum
 from logging import Logger
+from multiprocessing import shared_memory
+import multiprocessing as mp
+from time import sleep
 from typing import Any, Generic, Literal, Final, TypeVar
 
-import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
 import scipy.signal
@@ -14,9 +15,7 @@ import sounddevice as sd
 
 from pyoae import generator
 from pyoae import get_logger
-from pyoae.anim import MsrmtFuncAnimation
-from pyoae.msrmt_context import MsrmtContext
-from pyoae.plot_context import PlotContext
+from pyoae.plotting import LivePlotProcess, MsrmtEvents
 from pyoae.signals import Signal
 
 
@@ -25,6 +24,12 @@ SYNC_DURATION: Final[float] = 0.5
 
 Will be adjusted to a correspond to a number of samples
 that is a multiple of the device's buffer size.
+"""
+
+SYNC_MIN_SNR: Final[float] = 30.0
+"""Minimum SNR for the recorded sync signal.
+
+Values below that threshold will raise a warning.
 """
 
 SYNC_OUTPUT_CHANNEL: Final[int] = 0
@@ -209,6 +214,12 @@ class SyncMsrmt(Generic[SignalT]):
     live_msrmt_data: LiveMsrmtData[SignalT]
     """Object containing variables and data for the live measurement."""
 
+    plot_process: LivePlotProcess
+    """Object that executes the plot process"""
+
+    msrmt_events: MsrmtEvents
+    """List of events used for interaction with plot process"""
+
     i_init_runs: int
     """Counter of initial measurement callbacks with mute signal.
 
@@ -232,6 +243,7 @@ class SyncMsrmt(Generic[SignalT]):
         recording_data: RecordingData,
         hardware_data: HardwareData,
         output_signals: list[SignalT],
+        block_duration: float,
         latency_type: Literal['low', 'high']='high',
         log: Logger | None = None
     ) -> None:
@@ -273,10 +285,20 @@ class SyncMsrmt(Generic[SignalT]):
         )
         sync_pulse = generator.generate_sync(self.recording_data.fs)
         sync_output[:len(sync_pulse)] = sync_pulse
-        recorded_signal = np.zeros(
-            self.recording_data.msrmt_samples,
-            dtype=np.float32
+
+        self.shm = shared_memory.SharedMemory(
+            create=True,
+            size=self.recording_data.msrmt_samples * np.float32().nbytes
         )
+        recorded_signal = np.ndarray(
+            (self.recording_data.msrmt_samples,),
+            dtype=np.float32,
+            buffer=self.shm.buf
+        )
+        self.record_idx_share = mp.Value('i', 0)
+        recorded_signal[:] = 0
+        self.block_duration = block_duration
+
         self.live_msrmt_data = LiveMsrmtData[SignalT](
             play_idx=0,
             record_idx=0,
@@ -289,6 +311,7 @@ class SyncMsrmt(Generic[SignalT]):
         )
         self.i_init_runs = 0
         self.monitoring_amp = np.empty(0, dtype=np.float32)
+        self.msrmt_events = MsrmtEvents(mp.Event(), mp.Event())
 
     def set_state(self, state: MsrmtState) -> None:
         """Sets the currently active state of this measurement."""
@@ -297,9 +320,45 @@ class SyncMsrmt(Generic[SignalT]):
 
     def compute_latency(self) -> None:
         """Computes the stream latency from sync measurement."""
-        self.live_msrmt_data.sync_recorded /= np.max(
-            np.abs(self.live_msrmt_data.sync_recorded)
+
+        # Perform some basic sanity checks
+        sync_max_pos = np.argmax(np.abs(self.live_msrmt_data.sync_recorded))
+        sync_max = np.abs(self.live_msrmt_data.sync_recorded[sync_max_pos])
+
+        k = max(500, sync_max_pos-100)
+
+        noise = np.sqrt(
+            np.mean(np.square(self.live_msrmt_data.sync_recorded[:k]))
         )
+        if noise == 0:
+            # pylint: disable=no-member
+            noise += np.finfo(np.float64).eps
+            # pylint: enable=no-member
+            self.logger.warning('Zero-noise detected.')
+
+        # Very simple SNR estimator
+        snr_ratio = (sync_max/np.sqrt(2))/noise
+        if snr_ratio > 0:
+            snr = 20 * np.log10(snr_ratio)
+        else:
+            self.logger.error(
+                'Invalid value for SNR computation: %.2f', snr_ratio
+            )
+            snr = 0
+
+        if snr < SYNC_MIN_SNR:
+            self.logger.warning(
+                'SNR of SYNC pulse below typical values: %.2f dB',
+                snr
+            )
+            self.logger.warning(
+                'Synchronization might be invalid. '
+                'Measurement results can be corrupted.'
+            )
+        else:
+            self.logger.info('SNR of SYNC pulse: %.2f dB', snr)
+
+        self.live_msrmt_data.sync_recorded /= sync_max
         self.live_msrmt_data.sync_output /= np.max(
             np.abs(self.live_msrmt_data.sync_output)
         )
@@ -342,7 +401,7 @@ class SyncMsrmt(Generic[SignalT]):
             Recorded signal with the length of already recorded data
 
         """
-        if self.state in [MsrmtState.RECORDING, MsrmtState.END_RECORDING] :
+        if self.state in [MsrmtState.RECORDING, MsrmtState.END_RECORDING]:
             return self.live_msrmt_data.recorded_signal[
                 :self.live_msrmt_data.record_idx
             ]
@@ -380,6 +439,12 @@ class SyncMsrmt(Generic[SignalT]):
         start_idx = self.live_msrmt_data.play_idx
         end_idx = start_idx + frames
 
+        rec_start_idx = self.live_msrmt_data.record_idx
+        rec_end_idx = rec_start_idx + frames
+
+        self.live_msrmt_data.record_idx += frames
+        self.live_msrmt_data.play_idx += frames
+
         # Set output data to device buffer depending on measurement state
         match self.state:
             case MsrmtState.SYNCING:
@@ -400,20 +465,23 @@ class SyncMsrmt(Generic[SignalT]):
 
             case MsrmtState.RECORDING | MsrmtState.STARTING:
                 # Convert each signal to output data
-                chunks = []
+                chunks = np.zeros(
+                    (frames, len(self.live_msrmt_data.output_signals)),
+                    dtype=np.float32
+                )
 
-                for signal_i in self.live_msrmt_data.output_signals:
-                    chunk_i = signal_i.get_data(
+                for i, signal_i in enumerate(
+                    self.live_msrmt_data.output_signals
+                ):
+                    is_finished = signal_i.get_data(
                         start_idx,
-                        end_idx
+                        end_idx,
+                        signal_buffer=chunks[:,i]
                     )
 
-                    if len(chunk_i) < frames:
-                        chunk_i = np.pad(chunk_i, (0, frames-len(chunk_i)))
+                    if is_finished:
                         self.set_state(MsrmtState.END_RECORDING)
-                    chunks.append(chunk_i)
-                stereo_chunk = np.column_stack(chunks)
-                output_data[:] = stereo_chunk.astype(np.float32)
+                output_data[:] = chunks
 
             case _:
                 # play mute signal during setup and when finished
@@ -422,8 +490,6 @@ class SyncMsrmt(Generic[SignalT]):
         # Handle the input data of the device buffer and the
         # control parameters of the measurement flow
 
-        rec_start_idx = self.live_msrmt_data.record_idx
-        rec_end_idx = rec_start_idx + frames
 
         match self.state:
             case MsrmtState.SETUP:
@@ -431,17 +497,17 @@ class SyncMsrmt(Generic[SignalT]):
                 # by playing and recording mute signal
                 self.i_init_runs += 1
                 if self.i_init_runs == NUM_INIT_RUNS:
-                    self.live_msrmt_data.play_idx = 0
                     frames = 0
+                    self.live_msrmt_data.play_idx = frames
                     self.live_msrmt_data.record_idx = 0
+
                     self.set_state(MsrmtState.SYNCING)
-                else:
-                    self.live_msrmt_data.record_idx += frames
             case MsrmtState.SYNCING:
                 if end_idx < len(self.live_msrmt_data.sync_recorded):
-                    self.live_msrmt_data.sync_recorded[rec_start_idx:rec_end_idx] = (
-                        input_data[:frames, SYNC_INPUT_CHANNEL]
-                    )
+                    self.live_msrmt_data.sync_recorded[
+                        rec_start_idx:rec_end_idx
+                    ] = input_data[:frames, SYNC_INPUT_CHANNEL]
+
                 else:
                     # End of sync recording reached
                     # Store remaining frames, compute latency,
@@ -460,12 +526,14 @@ class SyncMsrmt(Generic[SignalT]):
                 self.compute_latency()
                 if self.live_msrmt_data.latency_samples <= 0:
                     self.set_state(MsrmtState.CANCELED)
-                    self.logger.error('Invalid latency - measurement canceled.')
+                    self.logger.error(
+                        'Invalid latency - measurement canceled.'
+                    )
                 else:
                     self.set_state(MsrmtState.STARTING)
-                    self.live_msrmt_data.play_idx = 0
-                    self.live_msrmt_data.record_idx = 0
                     frames = 0
+                    self.live_msrmt_data.play_idx = frames
+                    self.live_msrmt_data.record_idx = 0
 
             case MsrmtState.STARTING:
                 # latency computation successful
@@ -507,13 +575,14 @@ class SyncMsrmt(Generic[SignalT]):
                         rec_start_idx
                     )
                     num_remaining_frames = rec_end_idx - msrmt_start_idx
-                    self.live_msrmt_data.recorded_signal[:num_remaining_frames] = (
-                        input_data[frames - num_remaining_frames:, 0]
-                    )
+
+                    self.live_msrmt_data.recorded_signal[
+                        :num_remaining_frames
+                    ] = input_data[frames - num_remaining_frames:, 0]
+
                     self.live_msrmt_data.record_idx = num_remaining_frames
+                    self.msrmt_events.enable_plot.set()
                     self.set_state(MsrmtState.RECORDING)
-                else:
-                    self.live_msrmt_data.record_idx += frames
 
             case MsrmtState.RECORDING | MsrmtState.END_RECORDING:
                 # In the recording, write the recorded data into the array;
@@ -521,7 +590,9 @@ class SyncMsrmt(Generic[SignalT]):
                 # this is the standard acquisition mode.
                 if rec_end_idx >= self.recording_data.msrmt_samples:
                     # we have reached the end of the measurement
-                    num_remaining_frames = self.recording_data.msrmt_samples - rec_start_idx
+                    num_remaining_frames = (
+                        self.recording_data.msrmt_samples - rec_start_idx
+                    )
                     self.live_msrmt_data.recorded_signal[
                         rec_start_idx:rec_start_idx+num_remaining_frames
                     ] = input_data[:num_remaining_frames, 0]
@@ -534,77 +605,83 @@ class SyncMsrmt(Generic[SignalT]):
             case MsrmtState.FINISHED:
                 raise sd.CallbackStop
 
-        # Update play_idx
-        self.live_msrmt_data.play_idx += frames
+        with self.record_idx_share.get_lock():
+            self.record_idx_share.value = self.live_msrmt_data.record_idx
 
-    def start_plot(
-        self,
-        update_msrmt: Callable,
-        msrmt_ctx: MsrmtContext,
-        plot_ctx: PlotContext
-    ) -> None:
-        """Executes the measurement plot that is regularly updated."""
-        anim = MsrmtFuncAnimation(
-            plot_ctx.fig,
-            update_msrmt,
-            fargs=(self, msrmt_ctx, plot_ctx),
-            interval=plot_ctx.update_interval,
-            blit=False,
-            cache_frame_data=False
-        )
-        msrmt_ctx.msrmt_anim = anim
-        plot_ctx.fig.tight_layout()
-        plt.show(block = not msrmt_ctx.non_interactive)
-        if (
-            not msrmt_ctx.non_interactive
-            and self.state is not MsrmtState.FINISHED
-        ):
-            self.set_state(MsrmtState.CANCELED)
+    def _finalize_measurement(self) -> None:
+        """Finalize measurement after recording is complete."""
+        self.logger.info("Finalizing measurement.")
+        self.set_state(MsrmtState.FINISHED)
 
-    def start_msrmt(
-        self,
-        update_msrmt: Callable,
-        msrmt_ctx: MsrmtContext,
-        plot_ctx: PlotContext
-    ) -> None:
-        """Starts the measurement
-
-        Args:
-            update_msrmt: Function that is called with every stream callback
-            msrmt_ctx: Parameters and instances to control the measurement.
-            plot_ctx: Parameters and instances to control plots.
-        """
-        with sd.Stream(
-            samplerate=self.recording_data.fs,
-            blocksize=self.recording_data.block_size,
-            channels=(
-                self.hardware_data.n_in_channels,
-                self.hardware_data.n_out_channels
-            ),
-            dtype='float32',
-            callback=self.msrmt_callback,
-            latency=self.live_msrmt_data.latency_type,
-            device = (
-                self.hardware_data.input_device,
-                self.hardware_data.output_device
-            )
-        ):
-            self.logger.info('Beginning to stream.')
-            self.start_plot(update_msrmt, msrmt_ctx, plot_ctx)
-            while (
-                msrmt_ctx.non_interactive
-                and msrmt_ctx.msrmt_anim is not None
-                and not msrmt_ctx.msrmt_anim.done
+    def run_stream(self):
+        """Run the audio stream."""
+        try:
+            with sd.Stream(
+                samplerate=self.recording_data.fs,
+                blocksize=self.recording_data.block_size,
+                channels=(
+                    self.hardware_data.n_in_channels,
+                    self.hardware_data.n_out_channels
+                ),
+                dtype='float32',
+                callback=self.msrmt_callback,
+                latency=self.live_msrmt_data.latency_type,
+                device=(
+                    self.hardware_data.input_device,
+                    self.hardware_data.output_device
+                )
             ):
-                # keep figure for non-interactive mode
-                if plt.get_fignums():
-                    plt.pause(0.2)
-                else:
-                    self.set_state(MsrmtState.CANCELED)
-                    break
+                self.logger.info('Beginning to stream.')
 
+                # Keep stream alive until measurement ends
+
+                while True:
+                    if self.state == MsrmtState.FINISHING:
+                        self._finalize_measurement()
+                        break
+
+                    if self.state in (
+                        MsrmtState.FINISHED,
+                        MsrmtState.CANCELED,
+                    ):
+                        break
+                    if self.msrmt_events.cancel_msrmt.is_set():
+                        self.set_state(MsrmtState.CANCELED)
+                        break
+
+                    sleep(0.01)
+
+
+        finally:
             self.logger.info('Closing stream.')
-        if self.state is not MsrmtState.FINISHED:
-            self.logger.warning('Stream closed with %s.', self.state)
-        else:
-            self.logger.info('Stream closed.')
+
+    def start_plot_process(self) -> None:
+        """Start plotting in a separate process"""
+        self.plot_process = LivePlotProcess(
+            self.shm.name,
+            self.record_idx_share,
+            self.recording_data.msrmt_samples,
+            self.recording_data.fs,
+            self.msrmt_events,
+            self.block_duration
+        )
+
+    def run_msrmt(self) -> None:
+        """Setup, run the measurement and close shared memories afterwards"""
+
+        self.start_plot_process()
+
+        self.run_stream()
+
+        if hasattr(self, 'plot_process'):
+            self.plot_process.stop()
+
+        if hasattr(
+            self, 'shm'
+        ):
+            recorded_copy = self.live_msrmt_data.recorded_signal[
+                :self.live_msrmt_data.record_idx
+            ].copy()
+            self.shm.close()
+            self.shm.unlink()
+            self.live_msrmt_data.recorded_signal = recorded_copy

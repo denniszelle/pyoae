@@ -8,9 +8,6 @@ and update the associated plots.
 
 from dataclasses import dataclass
 
-# from typing import Generic, TypeVar
-
-from pyoae.anim import MsrmtFuncAnimation
 from pyoae.calib import MicroTransferFunction
 
 
@@ -34,18 +31,8 @@ class MsrmtContext:
         This is a dummy object for future implementation.
     """
 
-    artifact_rejection_thr: float
-    """Threshold for simple artifact rejection.
-
-    Reject blocks with a root-mean-square (RMS) value
-    exceeding ARTIFACT_REJECTION_THR * median_rms.
-    """
-
     non_interactive: bool
     """Flag enabling/disabling non-interactive measurement mode."""
-
-    msrmt_anim: MsrmtFuncAnimation | None
-    """Animation instance for online display of measurement data."""
 
 
 @dataclass

@@ -56,11 +56,6 @@ class PulseDpoaeMsrmtParams(DpoaeMsrmtParams):
     f2_pulse: PulseStimulus
 
 
-class SoaeMsrmtParams(MsrmtParams):
-    """Measurement parameters for SOAE measurement."""
-    artifact_rejection_thresh: float
-
-
 class CalibMsrmtParams(MsrmtParams):
     """Measurement parameters for multi-tone measurements."""
     f_start: float
@@ -70,12 +65,11 @@ class CalibMsrmtParams(MsrmtParams):
     num_channels: int
 
 
-def get_default_soae_msrmt_params() -> SoaeMsrmtParams:
+def get_default_soae_msrmt_params() -> MsrmtParams:
     """Returns default SOAE measurement parameters."""
-    d: SoaeMsrmtParams = {
+    d: MsrmtParams = {
         'block_duration': 1.0,
-        'num_averaging_blocks': 15,
-        'artifact_rejection_thresh': 1.8
+        'num_averaging_blocks': 15
     }
     return d
 

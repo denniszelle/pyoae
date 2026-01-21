@@ -8,8 +8,6 @@ from logging import Logger
 
 from matplotlib import pyplot as plt
 from matplotlib.axes import Axes
-from matplotlib.figure import Figure
-from matplotlib.lines import Line2D
 import numpy as np
 import numpy.typing as npt
 
@@ -23,54 +21,12 @@ from pyoae.calib import (
 )
 from pyoae.device.device_config import DeviceConfig
 from pyoae.msrmt_context import MsrmtContext
-from pyoae.plot_context import PlotContext
 from pyoae.protocols import CalibMsrmtParams
 from pyoae.signals import Signal
 from pyoae.sync import HardwareData, RecordingData, SyncMsrmt, MsrmtState
 
 
 logger = get_logger(__name__)
-
-
-def setup_plot(
-    recording_duration: float,
-    fs: float
-) -> tuple[Figure, Axes, Line2D]:
-    """Sets up the plots.
-
-    Args:
-        recording_duration: Total duration of the recording in seconds
-        fs: Sampling frequency in Hz
-        block_size: Size of each measurement block that is repeated
-          periodically
-        live_display_duration: Time domain display duration in milliseconds
-        is_calib_available: Boolean whether a calibration is available to
-          display sound pressure or only show raw measurement data
-
-    Returns:
-        tuple[fig, line_time, line_spec]
-
-        - **fig**: Object containing the plots
-        - **line_time**: Line object with the time-domain data of the signal
-        - **line_spec**: Line object with the spectral data of the signal
-    """
-
-    fig, ax = plt.subplots(1, 1, figsize=(10, 6))
-
-    # Set up time plot
-    x_wave = np.arange(round(recording_duration*fs), dtype=np.float32) / fs
-    y_wave = np.zeros_like(x_wave)
-    line_time, = ax.plot(
-        x_wave,
-        y_wave
-    )
-    ax.set_ylim(-1, 1)
-    ax.set_xlim(0, recording_duration)
-    ax.set_title("Recorded Waveform")
-    ax.set_xlabel("Time (s)")
-    ax.set_ylabel("Amplitude (full scale)")
-
-    return fig, ax, line_time
 
 
 def setup_offline_plot(
@@ -96,19 +52,20 @@ def setup_offline_plot(
         - **line_spec**: Line object with the spectral data of the signal
     """
 
-    _, axes = plt.subplots(2, 1, figsize=(10, 6))
+    _, axes = plt.subplots(3, 1, figsize=(10, 6), sharex='all')
     axes: list[Axes]
 
     for i, ax in enumerate(axes):
         ax.set_xlim(frequency_range[0], frequency_range[1])
         ax.set_ylim(-50, 100)
         ax.set_xscale('log')
-        ax.set_title(f"Spectrum of Channel {i}")
-        ax.set_xlabel("Frequency (Hz)")
+        ax.set_title(f"Spectrum of Channel {i+1}")
         if is_calib_available:
             ax.set_ylabel('Level (dB SPL)')
         else:
             ax.set_ylabel("Level (dBFS)")
+    axes[-1].set_title('Channel Comparison')
+    axes[-1].set_xlabel("Frequency (Hz)")
     return axes
 
 
@@ -206,90 +163,6 @@ def get_channel_spectra(
     return [spectrum_ch01, spectrum_ch02]
 
 
-def update_plot_data(
-    recorded_signal: npt.NDArray[np.float32],
-    msrmt_ctx: MsrmtContext,
-    plot_ctx: PlotContext
-) -> Line2D:
-    """Updates the plot data.
-
-    Create and set the plot objects for the data.
-
-    Args:
-        recorded_signal: Float array containing the raw signal.
-        spectrum: Float array containing the spectral estimate.
-        msrmt_ctx: Parameters and instances to control the measurement.
-        plot_ctx: Parameters and instances to control plots.
-
-    Returns:
-        tuple[line_time, line_spec]
-
-        - **line_time**: Line object with the time-domain data of the signal
-        - **line_spec**: Line object with the spectral data of the signal
-    """
-
-    n_samples_displayed = int(
-        plot_ctx.live_display_duration * 1E-3 * msrmt_ctx.fs
-    )
-
-    num_recorded_samples = len(recorded_signal)
-
-    if num_recorded_samples < n_samples_displayed:
-        return plot_ctx.line
-
-    #x_data = -np.flipud(np.arange(n_samples_displayed) / info.fs * 1E3)
-    x_data = np.arange(num_recorded_samples) / msrmt_ctx.fs
-
-    plot_ctx.line.set_data(
-        x_data,
-        recorded_signal
-    )
-
-    return plot_ctx.line
-
-
-def update_msrmt(
-    frame,
-    sync_msrmt: SyncMsrmt,
-    msrmt_ctx: MsrmtContext,
-    plot_ctx: PlotContext
-) -> tuple[Line2D,]:
-    """Processes results from data and update the plots.
-
-    Args:
-        sync_msrmt: Measurement object that handles the synchronized
-          measurement.
-        msrmt_ctx: Parameters and instances to control the measurement.
-        plot_ctx: Parameters and instances to control plots.
-
-    Returns:
-        tuple[line_time, ]
-
-        - **line_time**: Line object with the time-domain data of the signal
-    Notes:
-        A tuple is returned with at least one line object to be compatible
-          with `MsrmtFuncAnimation`.
-    """
-
-    del frame
-
-    if sync_msrmt.state == MsrmtState.FINISHED:
-        if msrmt_ctx.msrmt_anim is not None and msrmt_ctx.non_interactive:
-            msrmt_ctx.msrmt_anim.stop_animation()
-        return (plot_ctx.line, )
-
-    if sync_msrmt.state == MsrmtState.FINISHING:
-        sync_msrmt.set_state(MsrmtState.FINISHED)
-        if msrmt_ctx.non_interactive:
-            logger.info('Recording complete.')
-        else:
-            logger.info('Recording complete. Please close window to continue.')
-
-    recorded_signal = get_results(sync_msrmt)
-
-    return (update_plot_data(recorded_signal, msrmt_ctx, plot_ctx), )
-
-
 def plot_offline(
     sync_msrmt: SyncMsrmt,
     msrmt_ctx: MsrmtContext,
@@ -305,7 +178,10 @@ def plot_offline(
         return
 
     has_input_calib =  msrmt_ctx.input_trans_fun is not None
-    axes = setup_offline_plot((100, 20000), has_input_calib)
+    f_min = np.floor((mt_frequencies.min() - 20) / 20) * 20
+    f_max = np.ceil((mt_frequencies.max() + 500)/ 1000) * 1000
+    f_min = max(20, f_min)
+    axes = setup_offline_plot((f_min, f_max), has_input_calib)
 
     ch_spectra = get_channel_spectra(sync_msrmt, msrmt_ctx)
 
@@ -322,7 +198,12 @@ def plot_offline(
     output_overhead = 20*np.log10(1/output_amplitude)
 
     padding = 15  # dB of padding on top and bottom
-    for i, ax in enumerate(axes):
+    ax_cmp = axes[2]  # comparison plot
+    line_vecs = ['b-', 'r-']
+    ax_cmp_min = 80
+    ax_cmp_max = 120
+    for i in range(2):
+        ax = axes[i]
         out_db_spl = ch_spectra[i][mt_bin_idx]
 
         p_out_peak = np.sqrt(2) * 20 * 10**(out_db_spl/20)
@@ -333,11 +214,18 @@ def plot_offline(
         spec_min = min(ch_spectra[i])
         spec_max = max(ch_spectra[i] + output_overhead)
 
-        ax.plot(f, ch_spectra[i])
-        ax.plot(mt_frequencies, out_db_spl, 'rx')
-        ax.plot(mt_frequencies, out_db_spl + output_overhead, 'bo-')
-        ax.plot(mt_frequencies, out_max_db_spl, 'r--')
+        ax.plot(f, ch_spectra[i], linewidth=0.5, color='k')
+        ax.plot(mt_frequencies, out_db_spl, 'ro', markersize=2)
+        ax.plot(mt_frequencies, out_max_db_spl, line_vecs[i])
+        ax.plot(mt_frequencies, out_db_spl + output_overhead, 'ko', markersize=3, markerfacecolor='w')
+        ax_cmp.plot(mt_frequencies, out_max_db_spl, line_vecs[i])
         ax.set_ylim(spec_min - padding, spec_max + padding)
+        ax_cmp.grid(True, which='both')
+        out_lower_bnd = np.floor(out_max_db_spl.min()/20)*20
+        out_upper_bnd = np.ceil(out_max_db_spl.max()/20)*20
+        ax_cmp_min = min(ax_cmp_min, out_lower_bnd)
+        ax_cmp_max = max(ax_cmp_max, out_upper_bnd)
+        ax_cmp.set_ylim(ax_cmp_min, ax_cmp_max)
 
     plt.tight_layout()
     plt.show()
@@ -347,14 +235,18 @@ def plot_result_file(results: OutputCalibration) -> None:
     """Plots output calibration from result file."""
     _, ax = plt.subplots(1, 1, figsize=(10, 6))
 
-    ax.set_xlim(100, 20000)
+    f_min = np.floor((results.frequencies.min() - 20) / 20) * 20
+    f_max = np.ceil((results.frequencies.max() + 500)/ 1000) * 1000
+    f_min = max(20, f_min)
+
+    ax.set_xlim(f_min, f_max)
     ax.set_ylim(0, 120)
     ax.set_xscale('log')
     ax.set_title(f"Calibration {results.date} - Maximum Output Level")
     ax.set_xlabel("Frequency (Hz)")
     ax.set_ylabel('Level (dB SPL)')
 
-    line_styles = ['rx-', 'b.-']
+    line_styles = ['b.-', 'rx-']
     for i in range(2):
         p_out_max = results.amplitudes[i,:]
         out_max_db_spl = 20*np.log10(p_out_max/(np.sqrt(2)*20))
@@ -380,9 +272,6 @@ class OutputCalibRecorder:
 
     signals: list[Signal]
     """List of output signals for each channel."""
-
-    plot_ctx: PlotContext
-    """Instance to plot context for measurement visualization."""
 
     msrmt_ctx: MsrmtContext
     """Instance to perform a synchronized OAE measurement."""
@@ -430,16 +319,12 @@ class OutputCalibRecorder:
         self.generate_output_signals(
             msrmt_params,
             num_block_samples,
-            num_total_recording_samples
         )
-        self.plot_ctx = self.setup_plot_context(recording_duration)
         self.msrmt_ctx = MsrmtContext(
             fs=DeviceConfig.sample_rate,
             block_size=num_total_recording_samples,
             input_trans_fun=mic_trans_fun,
-            artifact_rejection_thr=-1.0,  # not used
-            non_interactive=False,
-            msrmt_anim=None
+            non_interactive=False
         )
         rec_data = RecordingData(
             DeviceConfig.sample_rate,
@@ -457,15 +342,16 @@ class OutputCalibRecorder:
         self.msrmt = SyncMsrmt(
             rec_data,
             hw_data,
-            self.signals
+            self.signals,
+            block_duration
         )
         self.results = None
 
     def record(self) -> None:
         """Starts the calibration."""
         self.logger.info("Starting output calibration...")
-        # `start_msrmt` starts the application loop
-        self.msrmt.start_msrmt(update_msrmt, self.msrmt_ctx, self.plot_ctx)
+
+        self.msrmt.run_msrmt()
 
         # Compute calibration results
         self.compute_calib_results()
@@ -526,8 +412,7 @@ class OutputCalibRecorder:
     def generate_output_signals(
         self,
         msrmt_params: CalibMsrmtParams,
-        num_block_samples: int,
-        num_total_recording_samples: int,
+        num_block_samples: int
     ) -> None:
         """Generates the output signals for playback."""
         self.mt_frequencies = generator.compute_mt_frequencies(
@@ -573,25 +458,8 @@ class OutputCalibRecorder:
         stimulus1 = np.r_[mt_signal, np.zeros_like(mt_signal)]
         stimulus2 = np.r_[np.zeros_like(mt_signal), mt_signal]
 
-        signal1 = Signal(stimulus1, num_total_recording_samples)
-        signal2 = Signal(stimulus2, num_total_recording_samples)
+        signal1 = Signal(stimulus1)
+        signal2 = Signal(stimulus2)
 
         self.signals.append(signal1)
         self.signals.append(signal2)
-
-    def setup_plot_context(
-        self,
-        recording_duration: float
-    ) -> PlotContext:
-        """Sets up live plot and measurement information."""
-        fig, ax_time, line_time = setup_plot(
-            recording_duration,
-            DeviceConfig.sample_rate
-        )
-        return PlotContext(
-            fig=fig,
-            axes=ax_time,
-            line=line_time,
-            update_interval=DeviceConfig.update_interval,
-            live_display_duration=DeviceConfig.live_display_duration
-        )

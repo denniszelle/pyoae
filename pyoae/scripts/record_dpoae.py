@@ -1,16 +1,15 @@
-"""Script to record pulsed DPOAEs.
+"""Script to record continuous DPOAEs.
 
-This script performs a real-time acquisition of pulsed distortion-product
-otoacoustic emissions (DPOAEs) using two pulsed primary tones (f1 and f2).
-
-This script is intended as an example and a starting point for continuous
-DPOAE measurements.
+This script performs a real-time acquisition of continuous distortion-product
+otoacoustic emissions (DPOAEs) using two primary tones (f1 and f2).
+The recorded microphone signal is analyzed in real time, and live plots of
+the time signal and spectrum are displayed.
 
 
 Run the following command from the project root directory with appropriate
 arguments to start (see README.md):
 
-    python3 -m record_pulse_dpoae
+    python3 -m record_dpoae
 
 Command-line arguments:
     --mic: microphone/input calibration, e.g., '2ROTIU6H_3C9CESK1W6.json'
@@ -23,7 +22,7 @@ Command-line arguments:
 
 Note:
     Sound device IDs or names should be known beforehand and can be
-      obtained using the `display_devices` script.
+      obtained using the display_devices script.
 
     Users should modify parameters defined in the `device_config.json`
       to match their specific hardware and experimental setup.
@@ -35,13 +34,14 @@ import os
 from pyoae import files
 from pyoae.calib import MicroTransferFunction, OutputCalibration
 from pyoae.device.device_config import DeviceConfig
-from pyoae.pdpoae import PulseDpoaeRecorder
-import pyoae_logger
+from pyoae.cdpoae import DpoaeRecorder
+import pyoae.pyoae_logger as pyoae_logger
+
 
 DEVICE_CONFIG_FILE = 'device_config.json'
 
 
-logger = pyoae_logger.get_pyoae_logger('PyOAE pDPOAE Recorder')
+logger = pyoae_logger.get_pyoae_logger('PyOAE cDPOAE Recorder')
 
 
 def main(
@@ -53,9 +53,9 @@ def main(
     save: bool = False,
     non_interactive: bool = False
 ) -> None:
-    """Main function executing a pulsed DPOAE measurement."""
+    """Main function executing a DPOAE measurement."""
 
-    logger.info('Pulse-DPOAE recorder started with following options:')
+    logger.info('DPOAE recorder started with following options:')
     if protocol:
         logger.info('  Protocol: %s', protocol)
     else:
@@ -99,9 +99,9 @@ def main(
         output_calib_fun = None
 
     protocol_path = os.path.join(os.getcwd(), protocol)
-    dpoae_protocol = files.load_pulsed_dpoae_protocol(protocol_path)
+    dpoae_protocol = files.load_dpoae_protocol(protocol_path)
     for msrmt_params in dpoae_protocol:
-        dpoae_recorder = PulseDpoaeRecorder(
+        dpoae_recorder = DpoaeRecorder(
             msrmt_params,
             mic_trans_fun,
             out_trans_fun=output_calib_fun,
@@ -114,7 +114,7 @@ def main(
             dpoae_recorder.save_recording()
 
 
-parser = argparse.ArgumentParser(description='PyOAE Pulse-DPOAE Recorder')
+parser = argparse.ArgumentParser(description='PyOAE DPOAE Recorder')
 parser.add_argument(
     '--protocol',
     default=argparse.SUPPRESS,
@@ -162,8 +162,13 @@ parser.add_argument(
 )
 
 
-if __name__ == "__main__":
-    # Entry point for script execution
+def run_cli():
+    """Run main with console arguments"""
     args = parser.parse_args()
     kwargs = vars(args)
     main(**kwargs)
+
+
+if __name__ == "__main__":
+    # Entry point for console module execution
+    run_cli()

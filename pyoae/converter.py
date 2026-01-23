@@ -22,6 +22,21 @@ def db_to_lin(
 
 
 @overload
+def lin_to_db(amplitude: float) -> float: ...
+@overload
+def lin_to_db(amplitude: npt.NDArray[np.floating]) -> npt.NDArray[np.floating]: ...
+
+def lin_to_db(
+    amplitude: float | npt.NDArray[np.floating],
+) -> npt.NDArray[np.floating] | float:
+    """Convert linear value from linear to dB.
+
+    This function can be used to scale from peak amplitude to dBFS.
+    """
+    return 20*np.log10(amplitude)
+
+
+@overload
 def db_spl_to_peak_mupa(level: float) -> float: ...
 @overload
 def db_spl_to_peak_mupa(

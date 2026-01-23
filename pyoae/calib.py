@@ -186,6 +186,18 @@ class OutputCalibration:
         s = self.get_sensitivity(ch, f)
         return p / s
 
+    def get_interp_transfer_function(
+        self,
+        frequencies
+    ) -> npt.NDArray[np.float32]:
+        """Return interpolated transfer function"""
+        interpolated_tf = np.interp(
+            frequencies,
+            self.frequencies,
+            self.amplitudes
+        )
+        return interpolated_tf
+
 
 class MicroTransferFunction:
     """Interpolated transfer function of the microphone."""

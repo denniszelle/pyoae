@@ -12,14 +12,15 @@ The software is actively developed, and future updates may include features such
 
 ## Requirements
 
-To use **PyOAE**, we recommend installing the dependencies in a virtual environment to avoid conflicts with other Python packages.
+To use **PyOAE**, we recommend installing it as a package in a virtual
+environment to avoid conflicts with other Python packages.
 
 ### Install via pip
 
 ```bash
 python3 -m venv .venv  # or python -m venv .venv (depending on your Python installation)
 source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-pip install -r requirements.txt
+pip install -e .
 ```
 
 ### Python Version
@@ -30,14 +31,13 @@ We recommend the use of **Python 3.12** or higher.
 
 The following package versions work without known issues on Windows 10 using Python 3.14. We do not expect any issues with earlier Python versions of down to 3.12.
 
-
-| Package               | Version (tested) | Notes                        |
-| --------------------- | ---------------- | ----------------------------- |
-| `sounddevice`         | 0.5.3            |                               |
-| `numpy`               | 2.3.4            |                               |
-| `scipy`               | 1.16.2           |                               |
-| `matplotlib`          | 3.10.7           |                               |
-| `typing_extensions`   | 4.15.0            | Only required for Python < 3.11 |
+| Package               | Version (tested) | Notes                            |
+| --------------------- | ---------------- | -----------------------------    |
+| `sounddevice`         | 0.5.3            |                                  |
+| `numpy`               | 2.3.4            |                                  |
+| `scipy`               | 1.16.2           |                                  |
+| `matplotlib`          | 3.10.7           |                                  |
+| `typing_extensions`   | 4.15.0           | Only required for Python < 3.11  |
 
 ---
 
@@ -49,17 +49,17 @@ We provide examples, instructions, and tutorials on the [EARLAB website](https:/
 
 ### 1. List Available Devices
 
-Use the helper script to list connected audio devices and identify your sound card.
-Make sure to run the command from the project root directory (the parent folder containing both the recording scripts and the `pyoae` package) with an active virtual environment:
+Use the helper script to list connected audio devices and identify your sound card. When the package has been installed as described, the available devices can be listed with
+<!-- Make sure to run the command from the project root directory (the parent folder containing both the recording scripts and the `pyoae` package) with an active virtual environment: -->
 
 ```bash
-python3 -m pyoae.device.display_devices
+display_devices
 ```
 
 You can also filter the output by device name (*highly recommended on Windows*):
 
 ```bash
-python3 -m pyoae.device.display_devices Focusrite
+display_devices Focusrite
 ```
 
 The output lists key properties such as the device name, number of input and output channels, and the sample rate. For devices that support multiple sample rates and bit depths, select the appropriate option in your audio system settings, for example, in Audio MIDI Setup (macOS), the operating system’s audio settings, or the control software for your audio interface (e.g., Focusrite Control).
@@ -105,7 +105,7 @@ To perform an absolute calibration with PyOAE, use a reference calibrator (typic
 In the terminal, run the following command to start the absolute calibration of the input channel (with the reference calibrator active):
 
 ```bash
-python -m calibrate_sensitivity
+calibrate_sensitivity
 ```
 
 The script displays messages about the measurement settings and progress in the terminal. After the recording, the calibration result (assuming a reference tone of 1000 Hz at 94 dB SPL) is displayed in the terminal:
@@ -126,7 +126,7 @@ We recommend storing your custom microphone calibration files in the `mic` folde
 PyOAE offers a very simple output calibration via the script `record_output_calib.py`. For each output channel, a multi tone is presented to characterize the output-channel response (typically dominated by the speaker, the ear-canal anatomy, and the ear-probe fit). In the terminal, run the following command to start the output calibration with the ear probe inserted into the ear canal of the measurement subject (make sure to replace the microphone-calibration file with that matching your own setup):
 
 ```bash
-python3 -m record_output_calib --mic 'mic/mic.json' --save
+record_output_calib --mic 'mic/mic.json' --save
 ```
 
 During the measurement, the recorded signal is shown in a figure window. After closing it, the script displays the recorded amplitude response for both channels. The calibration results are stored in the measurement folder in the project's root directory as a JSON file with a unique time stamp, as indicated by the INFO message in the terminal:
@@ -195,13 +195,13 @@ For more information on pulsed DPOAEs, see [Zelle et al. (2017)](https://link.sp
 To run a basic recording without stimulus output, execute the `record_soae` script from the project root directory:
 
 ```bash
-python3 -m record_soae
+record_soae
 ```
 
 To save the recording, add the argument `--save`:
 
 ```bash
-python3 -m record_soae --save
+record_soae --save
 ```
 
 If no protocol for the SOAE recording is specified, the script will use the default parameters as stated in the terminal:
@@ -227,13 +227,13 @@ An SOAE recording made in an artificial ear or cavity can also help detect distu
 To stimulate the ear using two continuous primary tones and record a DPOAE, run the `record_dpoae` script. To run a protocol example given in the `templates` folder, use the following command in the terminal. Ensure that you alter the example to match your microphone file and the time stamp of the previously performed output calibration.
 
 ```bash
-python3 -m record_dpoae --mic 'mic/mic.json' --protocol 'templates/tpl_cdpoae.json' --calib '250919-100413'
+record_dpoae --mic 'mic/mic.json' --protocol 'templates/tpl_cdpoae.json' --calib '250919-100413'
 ```
 
 Using the command line arguments `--save`, `--subject`, and `--ear`, you can save the measurement results using a subject identifier and a text describing the recording side. For example:
 
 ```bash
-python3 -m record_dpoae --mic 'mic/mic.json' --protocol 'templates/tpl_cdpoae.json' --calib '250919-100413' --subject 'S000' --ear 'right' --save
+record_dpoae --mic 'mic/mic.json' --protocol 'templates/tpl_cdpoae.json' --calib '250919-100413' --subject 'S000' --ear 'right' --save
 ```
 
 **Please note that PyOAE currently does not correct for the input and output channel phase characteristics.**
@@ -243,7 +243,7 @@ python3 -m record_dpoae --mic 'mic/mic.json' --protocol 'templates/tpl_cdpoae.js
 To stimulate the ear using two pulsed primary tones and record a pulsed DPOAE response in the time domain, run the `record_pulse_dpoae` script (with similar options as for continuous acquisition):
 
 ```bash
-python3 -m record_pulse_dpoae --mic 'mic/mic.json' --protocol 'templates/tpl_pdpoae.json' --calib '250919-100413' --subject 'S000' --ear 'right'  --save
+record_pulse_dpoae --mic 'mic/mic.json' --protocol 'templates/tpl_pdpoae.json' --calib '250919-100413' --subject 'S000' --ear 'right'  --save
 ```
 
 In order to obtain a time-domain signal of the DPOAE response, PyOAE utilized Primary-Tone Phase Variation ([Whitehead et al. (1996)](https://doi.org/10.1121/1.416065)). Suitable phase shifts of the primary tones enable their cancellation during the averaging process while maintaining the distortion-product at the cubic difference frequency fdp = 2f1-f2.
@@ -261,7 +261,7 @@ In order to display measurement results at a time point after the recording, PyO
 To visualize the results from an output calibration, use the `show_output_calib` module with the file path of the calibration file of interest:
 
 ```bash
-python3 -m show_output_calib --file 'measurements/251015-190856_out_calib.json'
+show_output_calib --file 'measurements/251015-190856_out_calib.json'
 ```
 
 ### DPOAE From Continuous Stimulation
@@ -269,19 +269,19 @@ python3 -m show_output_calib --file 'measurements/251015-190856_out_calib.json'
 To visualize the results from a single DPOAE recording acquired with continuous stimulation, use the `show_dpoae` module:
 
 ```bash
-python3 -m show_dpoae --file 'measurements/cdpoae_msrmt_251021-141156_1500_60.npz'
+show_dpoae --file 'measurements/cdpoae_msrmt_251021-141156_1500_60.npz'
 ```
 
 If one wants to plot the results from all continuous recordings within a directory use
 
 ```bash
-python3 -m show_dpoae --d 'measurements'
+show_dpoae --d 'measurements'
 ```
 
 This shows the results for all continuous DPOAE recordings in the directory `measurements` one after another. Add the command-line argument `--a` in order to show the results in separate figures:
 
 ```bash
-python3 -m show_dpoae --d 'measurements' --a
+show_dpoae --d 'measurements' --a
 ```
 
 ### Time-resolved DPOAE From Pulsed Stimulation
@@ -289,13 +289,13 @@ python3 -m show_dpoae --d 'measurements' --a
 Similarly to the visualization of continuous DPOAE, PyOAE offers a script to plot results from individual pulse-DPOAE recordings, e.g.,
 
 ```bash
-python3 -m show_pulse_dpoae --file 'pdpoae_msrmt_251021-143047_2000_45.npz'
+show_pulse_dpoae --file 'pdpoae_msrmt_251021-143047_2000_45.npz'
 ```
 
 as well as multiple recordings from a directory:
 
 ```bash
-python3 -m show_pulse_dpoae --d 'measurements'
+show_pulse_dpoae --d 'measurements'
 ```
 
 ---

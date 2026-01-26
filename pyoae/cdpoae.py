@@ -34,7 +34,7 @@ from pyoae.device.device_config import DeviceConfig
 from pyoae.dsp.containers import DpoaeMsrmtData
 from pyoae.dsp.processing import ContDpoaeProcessor
 from pyoae.generator import ContDpoaeStimulus
-from pyoae.msrmt_context import MsrmtContext
+from pyoae.msrmt_context import DpoaeMsrmtContext
 from pyoae.protocols import DpoaeMsrmtParams
 from pyoae.signals import PeriodicRampSignal
 from pyoae.sync import (
@@ -56,7 +56,7 @@ class DpoaeRecorder:
     signals: list[PeriodicRampSignal]
     """List of output signals for each channel."""
 
-    msrmt_ctx: MsrmtContext
+    msrmt_ctx: DpoaeMsrmtContext
     """Instance to context to control DPOAE measurement updates."""
 
     dpoae_processor: ContDpoaeProcessor | None
@@ -122,11 +122,14 @@ class DpoaeRecorder:
             num_total_recording_samples,
             out_calib=out_trans_fun
         )
-        self.msrmt_ctx = MsrmtContext(
+        self.msrmt_ctx = DpoaeMsrmtContext(
             fs=DeviceConfig.sample_rate,
             block_size=num_block_samples,
             input_trans_fun=mic_trans_fun,
-            non_interactive=non_interactive
+            non_interactive=non_interactive,
+            f1=self.stimulus.f1,
+            f2=self.stimulus.f2,
+            num_recorded_blocks=0
         )
         rec_data = RecordingData(
             DeviceConfig.sample_rate,

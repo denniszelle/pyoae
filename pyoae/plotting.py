@@ -104,7 +104,7 @@ class ProcessPlotter:
         self.line, = ax.plot([], [])
         ax.set_xlim(0, self.display_samples/self.fs*1E3)
         ax.set_ylim(-1.0, 1.0)
-        ax.set_title('Recorded Wavefcorm')
+        ax.set_title('Recorded Waveform')
         ax.set_xlabel('Time (ms)')
         ax.set_ylabel('Amplitude (full scale)')
 

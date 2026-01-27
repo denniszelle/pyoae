@@ -21,7 +21,7 @@ class MsrmtContext:
     block_size: int
     """Number of samples in each block."""
 
-    input_trans_fun: MicroTransferFunction | None
+    input_trans_fun: list[MicroTransferFunction] | None
     """Handle to microphone transfer function.
 
     A microphone transfer function is used to correct the

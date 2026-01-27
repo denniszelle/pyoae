@@ -489,7 +489,6 @@ class SyncMsrmt(Generic[SignalT]):
             Recorded signal with the length of already recorded data
 
         """
-        print(f'Returning recorded signal for input channel {input_channel}')
         if input_channel not in self.hardware_data.get_unique_input_channels():
             self.logger.error(
                 'Invalid input channel for get_recorded_signal. \n'

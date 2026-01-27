@@ -64,6 +64,11 @@ class DeviceConfig:
     live_display_duration: ClassVar[float] = 100.
     """Duration that will be displayed in the live-time plot in milliseconds."""
 
+    sync_channel: ClassVar[int] = 1
+
+    output_input_mapping: ClassVar[list[list[int]]] = [[0, 0], [1, 0]]
+    """Mapping of output channels to input channels"""
+
     @classmethod
     def set(cls, key, value) -> None:
         """Set a configuration attribute."""

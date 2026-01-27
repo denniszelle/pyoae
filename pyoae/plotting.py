@@ -48,10 +48,10 @@ class ProcessPlotter:
         self.display_interval = interval_length  # in seconds
         self.msrmt_events = msrmt_events
 
-        self.data = np.ndarray((0,), dtype=np.float32)
-        self.shm = None
+        self.data = []
+        self.shm = []
         self.fig = None
-        self.line = None
+        self.lines = []
 
     def terminate(self):
         """Terminate the plot window"""
@@ -62,7 +62,7 @@ class ProcessPlotter:
     def update_plot(self):
         """Update the current plot"""
 
-        if self.line is None or self.fig is None:
+        if len(self.lines) == 0 or self.fig is None:
             return True
 
         if not self.msrmt_events.enable_plot.is_set():
@@ -81,32 +81,42 @@ class ProcessPlotter:
         else:
             interval = [0, record_idx]
             time_vec = np.arange(record_idx)/self.fs*1E3
-        try:
-            y = self.data[interval[0]:interval[1]]
-            if time_vec is None:
-                self.line.set_data(self.time_vec, y)
-            else:
-                self.line.set_data(time_vec, y)
-            self.fig.canvas.draw_idle()
-        except (IndexError, ValueError, RuntimeError) as e:
-            print('Plotting error: ', e)
-            self.terminate()
-            return False
+
+        for i in range(len(self.shm)):
+            try:
+                y = self.data[i][interval[0]:interval[1]]
+                if time_vec is None:
+                    self.lines[i].set_data(self.time_vec, y)
+                else:
+                    self.lines[i].set_data(time_vec, y)
+                self.fig.canvas.draw_idle()
+            except (IndexError, ValueError, RuntimeError) as e:
+                print('Plotting error: ', e)
+                self.terminate()
+                return False
         return self.running
 
-    def run(self, shm_name: str):
+    def run(self, shared_memories: list[shared_memory.SharedMemory]):
         """Run plot process"""
-        self.shm = shared_memory.SharedMemory(name=shm_name)
 
-        self.data = np.ndarray((self.num_samples,), dtype=np.float32, buffer=self.shm.buf)
+        self.fig, axes = plt.subplots(len(shared_memories), 1, figsize=(10, 6))
 
-        self.fig, ax = plt.subplots(1, 1, figsize=(10, 6))
-        self.line, = ax.plot([], [])
-        ax.set_xlim(0, self.display_samples/self.fs*1E3)
-        ax.set_ylim(-1.0, 1.0)
-        ax.set_title('Recorded Wavefcorm')
-        ax.set_xlabel('Time (ms)')
-        ax.set_ylabel('Amplitude (full scale)')
+        if len(shared_memories) == 1:
+            axes = [axes]
+
+        self.lines = []
+
+        for i, shared_memory_i in enumerate(shared_memories):
+            self.shm.append(shared_memory.SharedMemory(name=shared_memory_i.name))
+            self.data.append(np.ndarray((self.num_samples,), dtype=np.float32, buffer=self.shm[-1].buf))
+
+            self.lines.append(axes[i].plot([], [])[0])
+            axes[i].set_xlim(0, self.display_samples/self.fs*1E3)
+            axes[i].set_ylim(-1.0, 1.0)
+            axes[i].set_ylabel('Amplitude (full scale)')
+
+        axes[0].set_title('Recorded Wavefcorm')
+        axes[-1].set_xlabel('Time (ms)')
 
         self.fig.canvas.mpl_connect(
             'close_event', self._on_close
@@ -130,7 +140,7 @@ class LivePlotProcess:
     """Controller for live plotting."""
     def __init__(
         self,
-        shm_name: str,
+        shm: list[shared_memory.SharedMemory],
         record_idx_share: Any,
         num_samples: int,
         fs: float,
@@ -146,7 +156,7 @@ class LivePlotProcess:
         )
         self.plot_process = mp.Process(
             target=self.plotter.run,
-            args=(shm_name,),
+            args=(shm,),
             daemon=True
         )
         self.plot_process.start()

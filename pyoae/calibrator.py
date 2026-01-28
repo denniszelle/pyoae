@@ -400,7 +400,7 @@ class OutputCalibRecorder:
             if a in output_channels
         })
 
-        n_in_channels = max(max(active_in_channels),DeviceConfig.sync_channel)+1
+        n_in_channels = max(max(active_in_channels),DeviceConfig.sync_channels[1])+1
         n_out_channels = max(output_channels) + 1
         hw_data = HardwareData(
             n_in_channels,

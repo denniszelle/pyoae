@@ -34,12 +34,6 @@ SYNC_MIN_SNR: Final[float] = 30.0
 Values below that threshold will raise a warning.
 """
 
-SYNC_OUTPUT_CHANNEL: Final[int] = 0
-"""Output channel of the sync signal."""
-
-# DeviceConfig.sync_channel: Final[int] = 1
-# """Input channel to record the sync signal."""
-
 NUM_INIT_RUNS: Final[int] = 10
 """Number of initialization runs to clear device buffers.
 
@@ -239,7 +233,7 @@ class LiveMsrmtData(Generic[SignalT]):
     """DAQ latency of the measurement device in samples.
 
     The latency of the data acquisition is determined by presenting
-    a tone burst on SYNC_OUTPUT_CHANNEL and recording it via an
+    a tone burst on the sync output channel and recording it via an
     electric connection (short circuit) on SYNC_IN_CHANNEL.
 
     By presenting a mute signal of length latency_samples,
@@ -555,7 +549,7 @@ class SyncMsrmt(Generic[SignalT]):
                     (frames, self.hardware_data.get_stream_output_channels())
                 )
                 # Add data to sync output channel
-                data_stereo[:, SYNC_OUTPUT_CHANNEL] = data
+                data_stereo[:, DeviceConfig.sync_channels[0]] = data
                 output_data[:] = data_stereo
 
             case MsrmtState.RECORDING | MsrmtState.STARTING:
@@ -601,7 +595,7 @@ class SyncMsrmt(Generic[SignalT]):
                 if end_idx < len(self.live_msrmt_data.sync_recorded):
                     self.live_msrmt_data.sync_recorded[
                         rec_start_idx:rec_end_idx
-                    ] = input_data[:frames, DeviceConfig.sync_channel]
+                    ] = input_data[:frames, DeviceConfig.sync_channels[1]]
 
                 else:
                     # End of sync recording reached
@@ -612,7 +606,7 @@ class SyncMsrmt(Generic[SignalT]):
                     )
                     rec_end_idx = rec_start_idx + num_remaining_frames
                     self.live_msrmt_data.sync_recorded[rec_start_idx:] = (
-                        input_data[:num_remaining_frames, DeviceConfig.sync_channel]
+                        input_data[:num_remaining_frames, DeviceConfig.sync_channels[1]]
                     )
                     self.set_state(MsrmtState.COMPUTING)
                 self.live_msrmt_data.record_idx = rec_end_idx
@@ -640,7 +634,7 @@ class SyncMsrmt(Generic[SignalT]):
                     # try to detect an early measurement start
                     # (see `USE_EARLY_LATENCY_CORRECTION` for
                     # explanation)
-                    max_monitor = np.max(input_data[:, DeviceConfig.sync_channel])
+                    max_monitor = np.max(input_data[:, DeviceConfig.sync_channels[1]])
                     if self.monitoring_amp.size:
                         # compare current maximum to average in previous blocks
                         signal_thresh = 1.5 * np.mean(self.monitoring_amp)

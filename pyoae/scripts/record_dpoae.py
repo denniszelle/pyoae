@@ -32,6 +32,7 @@ import argparse
 import os
 
 from pyoae import files
+from pyoae import input_validation
 from pyoae.calib import MicroTransferFunction, OutputCalibration
 from pyoae.device.device_config import DeviceConfig
 from pyoae.cdpoae import DpoaeRecorder
@@ -46,10 +47,11 @@ logger = pyoae_logger.get_pyoae_logger('PyOAE cDPOAE Recorder')
 
 def main(
     protocol: str = '',
-    mic: str = '',
+    mic: list[str] | None = None,
     calib: str = '',
+    channels: list[int] | None = None,
     subject: str = '',
-    ear: str = '',
+    ear: list[str] | None = None,
     save: bool = False,
     non_interactive: bool = False
 ) -> None:
@@ -67,21 +69,32 @@ def main(
         logger.info('  Ear: %s', ear)
     if save:
         logger.info('Recording will be saved.')
+    if channels:
+        logger.info('Used output_channels: %s', channels)
+    else:
+        logger.info('Setting default output channels to [0, 1]')
+        channels = [0, 1, 2, 3]
 
     logger.info('Loading global configuration from %s.', DEVICE_CONFIG_FILE)
     files.load_device_config(DEVICE_CONFIG_FILE)
     logger.info('Device Configuration: %s', DeviceConfig())
 
+    if not input_validation.validate_output_channels(channels):
+        return
+
     if mic:
         logger.info('Loading microphone calibration from %s.', mic)
-        mic_calib_data = files.load_micro_calib(mic)
-        if mic_calib_data is None:
-            logger.error('Stopping: Failed to load microphone calibration.')
-            return
-        mic_trans_fun = MicroTransferFunction(
-            mic_calib_data['abs_calibration'],
-            mic_calib_data['transfer_function']
-        )
+        mic_trans_fun = []
+        for mic_i in mic:
+            mic_calib_data = files.load_micro_calib(mic_i)
+            if mic_calib_data is None:
+                logger.error('Stopping: Failed to load microphone calibration.')
+                return
+            mic_trans_fun.append(MicroTransferFunction(
+                    mic_calib_data['abs_calibration'],
+                    mic_calib_data['transfer_function']
+                )
+            )
     else:
         mic_trans_fun = None
 
@@ -103,10 +116,11 @@ def main(
     for msrmt_params in dpoae_protocol:
         dpoae_recorder = DpoaeRecorder(
             msrmt_params,
+            channels,
             mic_trans_fun,
-            out_trans_fun=output_calib_fun,
+            output_calib_fun,
             subject=subject,
-            ear=ear,
+            ear=['left', 'right'],
             non_interactive=non_interactive
         )
         dpoae_recorder.record()
@@ -116,6 +130,12 @@ def main(
 
 parser = argparse.ArgumentParser(description='PyOAE DPOAE Recorder')
 parser.add_argument(
+    '--channels',
+    nargs='+',
+    default=argparse.SUPPRESS,
+    type=int
+)
+parser.add_argument(
     '--protocol',
     default=argparse.SUPPRESS,
     type=str,
@@ -123,6 +143,7 @@ parser.add_argument(
 )
 parser.add_argument(
     '--mic',
+    nargs='+',
     default=argparse.SUPPRESS,
     type=str,
     help='Specify path to microphone calibration JSON file.'

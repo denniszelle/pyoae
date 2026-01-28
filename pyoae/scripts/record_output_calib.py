@@ -21,6 +21,7 @@ Note:
 import argparse
 
 from pyoae import files
+from pyoae import input_validation
 from pyoae import protocols
 from pyoae.calib import MicroTransferFunction
 from pyoae.device.device_config import DeviceConfig
@@ -50,6 +51,9 @@ def main(
     logger.info('Loading global configuration from %s.', DEVICE_CONFIG_FILE)
     files.load_device_config(DEVICE_CONFIG_FILE)
     logger.info('Device Configuration: %s', DeviceConfig())
+
+    if not input_validation.validate_output_channels(channels):
+        return
 
     if mic:
         logger.info('Loading microphone calibration from %s.', mic)

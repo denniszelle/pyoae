@@ -121,7 +121,7 @@ def load_soae_protocol(
 
 def load_dpoae_protocol(
     file_path: str
-) -> list[protocols.DpoaeMsrmtParams]:
+) -> list[protocols.DpoaeMsrmtParams] | list[list[protocols.DpoaeMsrmtParams]]:
     """Loads a DPOAE measurement protocol."""
     if file_path:
         d = load_json_file(file_path)

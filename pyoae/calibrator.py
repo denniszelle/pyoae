@@ -431,8 +431,8 @@ class OutputCalibRecorder:
         self.msrmt_ctx = MsrmtContext(
             fs=DeviceConfig.sample_rate,
             block_size=num_total_recording_samples,
-            input_trans_fun=mic_transfer_functions,
             non_interactive=False,
+            input_trans_fun=mic_transfer_functions,
         )
         rec_data = RecordingData(
             DeviceConfig.sample_rate,

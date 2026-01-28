@@ -6,7 +6,7 @@ of output channels with respect to a given input calibration.
 
 Run the following command from the project root directory to start:
 
-    python3 -m show_output_calib --file '251015-190856_out_calib.json'
+    show_output_calib --file '251015-190856_out_calib.json'
 
 Command-line arguments:
     --file: path to output-calibration file to be shown,

@@ -8,7 +8,7 @@ maximum peak pressure that corresponds the a digital input amplitude
 of 1.0 re FS.
 
 Run the following command from the project root directory to start:
-    python -m calibrate_sensitivity
+    calibrate_sensitivity
 
 Note:
     Sound device IDs or names should be known beforehand and can be obtained

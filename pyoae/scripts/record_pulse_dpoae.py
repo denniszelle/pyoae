@@ -10,7 +10,7 @@ DPOAE measurements.
 Run the following command from the project root directory with appropriate
 arguments to start (see README.md):
 
-    python3 -m record_pulse_dpoae
+    record_pulse_dpoae
 
 Command-line arguments:
     --mic: microphone/input calibration, e.g., '2ROTIU6H_3C9CESK1W6.json'

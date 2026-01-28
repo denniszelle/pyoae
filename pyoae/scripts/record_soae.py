@@ -14,7 +14,7 @@ This script is intended to be used as an example and entry point for
 SOAE measurements.
 
 Run the following command from the project root directory to start:
-    python -m record_soae
+    record_soae
 
 Note:
     Sound device IDs or names should be known beforehand and can be obtained

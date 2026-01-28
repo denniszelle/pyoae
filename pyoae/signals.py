@@ -159,5 +159,8 @@ class ZeroSignal(Signal):
         end_idx: int,
         signal_buffer: npt.NDArray[np.float32]
     ) -> bool:
+        """Returns zero filled signal buffer"""
+        del start_idx
+        del end_idx
         signal_buffer[:] = 0
         return False

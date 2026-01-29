@@ -69,11 +69,10 @@ def main(
         logger.info('  Ear: %s', ear)
     if save:
         logger.info('Recording will be saved.')
-    if channels:
-        logger.info('Used output_channels: %s', channels)
-    else:
-        logger.info('Setting default output channels to [0, 1]')
-        channels = [0, 1, 2, 3]
+    if not channels:
+        channels = [0, 1]
+    logger.info('Use output_channels: %s', channels)
+
 
     logger.info('Loading global configuration from %s.', DEVICE_CONFIG_FILE)
     files.load_device_config(DEVICE_CONFIG_FILE)
@@ -114,13 +113,20 @@ def main(
     protocol_path = os.path.join(os.getcwd(), protocol)
     dpoae_protocol = files.load_dpoae_protocol(protocol_path)
     for msrmt_params in dpoae_protocol:
+
+        msrmt_params_corr = input_validation.validate_msrmt_params(
+            msrmt_params
+        )
+        if not msrmt_params_corr:
+            continue
+
         dpoae_recorder = DpoaeRecorder(
-            msrmt_params,
+            msrmt_params_corr,
             channels,
             mic_trans_fun,
             output_calib_fun,
             subject=subject,
-            ear=['left', 'right'],
+            ear=ear,
             non_interactive=non_interactive
         )
         dpoae_recorder.record()
@@ -162,6 +168,7 @@ parser.add_argument(
 )
 parser.add_argument(
     '--ear',
+    nargs='+',
     default=argparse.SUPPRESS,
     type=str,
     help='Specify the recording side, left/right, l/r.'

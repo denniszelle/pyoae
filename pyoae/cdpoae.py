@@ -51,7 +51,7 @@ logger = get_logger()
 
 @dataclass
 class ContDpoaeMsrmtInfo:
-    """Information of a single measurement"""
+    """Information of a continuous DPOAE measurement"""
 
     stimulus: ContDpoaeStimulus
     """Parameters of primary tones."""
@@ -92,7 +92,7 @@ class DpoaeRecorder:
 
     def __init__(
         self,
-        msrmt_params: DpoaeMsrmtParams | list[DpoaeMsrmtParams],
+        msrmt_params: list[DpoaeMsrmtParams],
         output_channels: list[int],
         mic_trans_functions: list[MicroTransferFunction] | None = None,
         out_trans_fun: OutputCalibration | None = None,
@@ -110,29 +110,15 @@ class DpoaeRecorder:
         if ear is None:
             ear = ['' for _ in range(len(msrmt_params))]
 
-        if len(msrmt_params) < 1:
-            self.logger.error('Invalid number of measurement definitions.')
-            self.msrmt = None
-            return
-
         num_block_samples = 0
         num_total_recording_samples = 0
         block_duration = 0
         recording_duration = 0.0
 
-        if not isinstance(msrmt_params, list):
-            if len(output_channels) > 2:
-                output_channels = output_channels[:2]
-                logger.info(
-                    'Only using output channels %s for unilateral measurement',
-                    output_channels
-                )
-            msrmt_params = [msrmt_params]
-
         if len(output_channels) < 2*len(msrmt_params):
             self.logger.error(
                 'Invalid number of output channels %s '
-                'for number of measurements %s',
+                'for number of measurements %s.',
                 len(output_channels),
                 len(msrmt_params)
             )

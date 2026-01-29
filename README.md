@@ -48,7 +48,7 @@ If you only want to use PyOAE as a library in your own project, install it direc
 the Git repository:
 
 ```bash
-pip install pyoae @ git+https://github.com/denniszelle/pyoae.git
+pip install 'pyoae @ git+https://github.com/denniszelle/pyoae.git'
 ```
 
 In this case, PyOAE is installed like a regular dependency and does not require a local

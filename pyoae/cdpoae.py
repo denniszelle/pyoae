@@ -24,12 +24,7 @@ from datetime import datetime
 from logging import Logger
 import os
 
-from matplotlib import pyplot as plt
-from matplotlib.axes import Axes
-from matplotlib.figure import Figure
-from matplotlib.lines import Line2D
 import numpy as np
-import numpy.typing as npt
 
 from pyoae import generator
 from pyoae import get_logger
@@ -40,283 +35,16 @@ from pyoae.dsp.containers import DpoaeMsrmtData
 from pyoae.dsp.processing import ContDpoaeProcessor
 from pyoae.generator import ContDpoaeStimulus
 from pyoae.msrmt_context import MsrmtContext
-from pyoae.plot_context import SpectralPlotContext
 from pyoae.protocols import DpoaeMsrmtParams
 from pyoae.signals import PeriodicRampSignal
-from pyoae.sync import HardwareData, RecordingData, SyncMsrmt, MsrmtState
+from pyoae.sync import (
+    HardwareData,
+    RecordingData,
+    SyncMsrmt
+)
 
 
 logger = get_logger()
-
-
-def setup_plot(
-    recording_duration: float,
-    fs: float,
-    block_size: int,
-    frequency_range: tuple[float, float],
-    live_display_duration: float,
-    is_calib_available:bool=False
-) -> tuple[Figure, Axes, Line2D, Axes, Line2D]:
-    """Sets up the plots.
-
-    Args:
-        recording_duration: Total duration of the recording in seconds
-        fs: Sampling frequency in Hz
-        block_size: Size of each measurement block that is repeated
-          periodically
-        live_display_duration: Time domain display duration in milliseconds
-        is_calib_available: Boolean whether a calibration is available to
-          display sound pressure or only show raw measurement data
-
-    Returns:
-        tuple[fig, line_time, line_spec]
-
-        - **fig**: Object containing the plots
-        - **line_time**: Line object with the time-domain data of the signal
-        - **line_spec**: Line object with the spectral data of the signal
-    """
-
-    fig, axes = plt.subplots(2, 1, figsize=(10, 6))
-    axes: list[Axes]
-    (ax_time, ax_spec) = axes
-
-    # Set up time plot
-    x_wave = np.arange(round(recording_duration*fs), dtype=np.float32) / fs * 1E3
-    y_wave = np.zeros_like(x_wave)
-    line_time, = ax_time.plot(
-        x_wave,
-        y_wave
-    )
-    ax_time.set_ylim(-1, 1)
-    ax_time.set_xlim(-live_display_duration, 0)
-    ax_time.set_title("Recorded Waveform")
-    ax_time.set_xlabel("Time (ms)")
-    ax_time.set_ylabel("Amplitude (full scale)")
-
-    # Set up frequency plot
-    fft_frequencies = np.fft.rfftfreq(block_size, 1 / fs)
-    fft_values = np.zeros(len(fft_frequencies))
-    line_spec, = ax_spec.plot(fft_frequencies, fft_values)
-    ax_spec.set_xlim(frequency_range[0], frequency_range[1])
-    ax_spec.set_ylim(-50, 100)
-    ax_spec.set_title("Spectrum")
-    ax_spec.set_xlabel("Frequency (Hz)")
-    if is_calib_available:
-        ax_spec.set_ylabel('Level (dB SPL)')
-    else:
-        ax_spec.set_ylabel("Level (dBFS)")
-    return fig, ax_time, line_time, ax_spec, line_spec
-
-
-def process_spectrum(
-    recorded_signal: npt.NDArray[np.float32],
-    block_size: int,
-    correction_tf: MicroTransferFunction | None,
-    artifact_rejection_thr: float
-) -> npt.NDArray[np.float32]:
-    """Processes recorded signal to obtain spectrum.
-
-    The signal is averaged in the time domain rejecting blocks
-    above some value relative to the average RMS. Then, the
-    spectrum is obtained from the averaged signal.
-
-    In a typical setting evoking continuous DPOAE, the primary
-    tones in the first and last acquisition block are multiplied
-    with cosine-shaped fade-in and fade-out ramps, respectively.
-    To avoid these ramps to influence the averaged spectrum, the
-    first and last blocks are excluded from the overall averaging.
-
-
-    Args:
-        recorded_signal: float array of measurement data
-        block_size: Size of each recording block in samples
-        correction_tf: Transfer function of the microphone
-        artifact_rejection_thr: Threshold representing a factor where blocks
-          larger than factor*mean_rms are rejected
-
-    Returns:
-        Array of floats containing the averaged spectrum.
-    """
-
-    spectrum = None
-    # Obtain an integer number of recorded blocks
-    total_blocks = int(np.floor(len(recorded_signal)/block_size))
-    block_data = recorded_signal[:total_blocks*block_size]
-    # Only apply processing for at least 3 blocks
-    if total_blocks > 2:
-        # Reshape data into block structure and
-        # remove the first and last block
-        blocks = block_data.reshape(-1, block_size)[1:-1]
-
-        # Reject RMS values larger than a scaled version
-        # of the median RMS value.
-        rms_vals = np.sqrt(np.mean(np.square(blocks), axis=1))
-        median_rms = np.median(rms_vals)
-        accepted_idc = np.where(rms_vals<artifact_rejection_thr*median_rms)[0]
-
-        # Average blocks
-        if len(accepted_idc):
-            avg = blocks[accepted_idc].mean(axis=0)
-        else:
-            avg = np.zeros(block_size)
-
-        # Apply FFT, correct spectrum by microphone calibration,
-        # convert to dBFS or dB SPL.
-        if np.sqrt(np.mean(np.square(avg))) > 0:
-            spectrum = 2*np.abs(np.fft.rfft(avg))/len(avg)
-            # dBFS and dB SPL represent RMS values
-            # assume FFT bins represent sine waves and estimate
-            # RMS by dividing by sqrt(2)
-            spectrum /= np.sqrt(2)
-            if correction_tf is None:
-                spectrum = 20*np.log10(spectrum)
-            else:
-                spectrum /= correction_tf.amplitudes
-                spectrum = 20*np.log10(spectrum/20)
-
-    if spectrum is None:
-        spectrum = np.abs(np.fft.rfft(np.zeros(block_size, np.float32)))
-    return spectrum.astype(np.float32)
-
-
-def get_results(
-    sync_msrmt: SyncMsrmt,
-    msrmt_ctx: MsrmtContext
-) -> tuple[npt.NDArray[np.float32], npt.NDArray[np.float32]]:
-    """Processes data and returns plot results.
-
-    If the measurement is currently running, the recorded signal
-    is obtained and a synchronously averaged spectrum is estimated.
-
-    Args:
-        sync_msrmt: Measurement object that handles the synchronized
-          measurement.
-        msrmt_ctx: Parameters and instances to control the measurement.
-
-    Returns:
-        tuple[recorded_signal, spectrum]
-
-        - **recorded_signal**: Float array with the recorded signal
-        - **spectrum**: Float array with the spectral estimate
-    """
-
-    # Only update while or after main measurement
-    if sync_msrmt.state in [
-        MsrmtState.RECORDING,
-        MsrmtState.END_RECORDING,
-        MsrmtState.FINISHING,
-        MsrmtState.FINISHED
-    ]:
-        recorded_signal = sync_msrmt.get_recorded_signal()
-
-        spectrum = process_spectrum(
-            recorded_signal,
-            msrmt_ctx.block_size,
-            msrmt_ctx.input_trans_fun,
-            msrmt_ctx.artifact_rejection_thr
-        )
-
-        return recorded_signal, spectrum
-
-    return np.zeros(0,np.float32), np.zeros(0,np.float32)
-
-
-def update_plot_data(
-    recorded_signal: npt.NDArray[np.float32],
-    spectrum: npt.NDArray[np.float32],
-    msrmt_ctx: MsrmtContext,
-    plot_ctx: SpectralPlotContext
-) -> tuple[Line2D, Line2D]:
-    """Updates the plot data.
-
-    Create and set the plot objects for the data.
-
-    Args:
-        recorded_signal: Float array containing the raw signal.
-        spectrum: Float array containing the spectral estimate.
-        msrmt_ctx: Parameters and instances to control the measurement.
-        plot_ctx: Parameters and instances to control plots.
-
-    Returns:
-        tuple[line_time, line_spec]
-
-        - **line_time**: Line object with the time-domain data of the signal
-        - **line_spec**: Line object with the spectral data of the signal
-    """
-
-    if len(spectrum) == 0:
-        return plot_ctx.line, plot_ctx.line_spec
-
-    n_samples_displayed = int(
-        plot_ctx.live_display_duration * 1E-3 * msrmt_ctx.fs
-    )
-
-    if len(recorded_signal) < n_samples_displayed:
-        return plot_ctx.line, plot_ctx.line_spec
-
-    x_data = -np.flipud(np.arange(n_samples_displayed) / msrmt_ctx.fs * 1E3)
-
-    plot_ctx.line.set_data(
-        x_data,
-        recorded_signal[-n_samples_displayed:]
-    )
-
-    plot_ctx.line_spec.set_ydata(spectrum)
-
-    # Update y-axis limits.
-    spec_min = min(spectrum[1:])
-    spec_max = max(spectrum)
-    padding = 15  # dB of padding on top and bottom
-
-    if (
-        spec_min < plot_ctx.axes_spec.get_ylim()[0]
-        or spec_min > plot_ctx.axes_spec.get_ylim()[0] + 2*padding
-        or spec_max > plot_ctx.axes_spec.get_ylim()[1]
-        or spec_max < plot_ctx.axes_spec.get_ylim()[1] - 2*padding
-    ):
-        plot_ctx.axes_spec.set_ylim(spec_min - padding, spec_max + padding)
-
-    return plot_ctx.line, plot_ctx.line_spec
-
-
-def update_msrmt(
-    frame,
-    sync_msrmt: SyncMsrmt,
-    msrmt_ctx: MsrmtContext,
-    plot_ctx: SpectralPlotContext
-) -> tuple[Line2D, Line2D]:
-    """Processes results from data and update the plots.
-
-    Args:
-        sync_msrmt: Measurement object that handles the synchronized
-          measurement.
-        msrmt_ctx: Parameters and instances to control the measurement.
-        plot_ctx: Parameters and instances to control plots.
-
-    Returns:
-        tuple[line_time, line_spec]
-
-        - **line_time**: Line object with the time-domain data of the signal
-        - **line_spec**: Line object with the spectral data of the signal
-    """
-
-    del frame
-
-    if sync_msrmt.state == MsrmtState.FINISHED:
-        if msrmt_ctx.msrmt_anim is not None and msrmt_ctx.non_interactive:
-            msrmt_ctx.msrmt_anim.stop_animation()
-        return plot_ctx.line, plot_ctx.line_spec
-
-    if sync_msrmt.state == MsrmtState.FINISHING:
-        sync_msrmt.set_state(MsrmtState.FINISHED)
-        if msrmt_ctx.non_interactive:
-            logger.info('Recording complete.')
-        else:
-            logger.info('Recording complete. Please close window to continue.')
-
-    recorded_signal, spectrum = get_results(sync_msrmt, msrmt_ctx)
-
-    return update_plot_data(recorded_signal, spectrum, msrmt_ctx, plot_ctx)
 
 
 class DpoaeRecorder:
@@ -330,9 +58,6 @@ class DpoaeRecorder:
 
     msrmt_ctx: MsrmtContext
     """Instance to context to control DPOAE measurement updates."""
-
-    plot_ctx: SpectralPlotContext
-    """Instance to plot context for online DPOAE spectrum."""
 
     dpoae_processor: ContDpoaeProcessor | None
     """Dpoae processor for offline post-processing"""
@@ -397,19 +122,11 @@ class DpoaeRecorder:
             num_total_recording_samples,
             out_calib=out_trans_fun
         )
-        has_input_calib = mic_trans_fun is not None
-        self.plot_ctx = self.setup_plot_context(
-            recording_duration,
-            num_block_samples,
-            is_calib_available=has_input_calib
-        )
         self.msrmt_ctx = MsrmtContext(
             fs=DeviceConfig.sample_rate,
             block_size=num_block_samples,
             input_trans_fun=mic_trans_fun,
-            artifact_rejection_thr=DeviceConfig.artifact_rejection_threshold,
-            non_interactive=non_interactive,
-            msrmt_anim=None
+            non_interactive=non_interactive
         )
         rec_data = RecordingData(
             DeviceConfig.sample_rate,
@@ -427,19 +144,16 @@ class DpoaeRecorder:
         self.msrmt = SyncMsrmt(
             rec_data,
             hw_data,
-            self.signals
+            self.signals,
+            block_duration
         )
         self.dpoae_processor = None
 
     def record(self) -> None:
         """Starts the recording."""
         self.logger.info("Starting recording...")
-        # `start_msrmt` starts the application loop
-        self.msrmt.start_msrmt(
-            update_msrmt,
-            self.msrmt_ctx,
-            self.plot_ctx
-        )
+
+        self.msrmt.run_msrmt()
 
         # Plot all data and final result after user has
         # closed the live-measurement window.
@@ -491,7 +205,7 @@ class DpoaeRecorder:
         ]
         file_name = "_".join(filter(None, parts))
         save_path = os.path.join(save_path, file_name)
-        recorded_signal, _ = get_results(self.msrmt, self.msrmt_ctx)
+        recorded_signal = self.msrmt.get_recorded_signal()
         if self.dpoae_processor is not None:
             averaged = self.dpoae_processor.raw_averaged
             spectrum = self.dpoae_processor.dpoae_spectrum
@@ -552,28 +266,3 @@ class DpoaeRecorder:
 
         self.signals.append(signal1)
         self.signals.append(signal2)
-
-    def setup_plot_context(
-        self,
-        recording_duration: float,
-        num_block_samples: int,
-        is_calib_available: bool = False,
-    ) -> SpectralPlotContext:
-        """Sets up live plot and measurement information."""
-        fig, ax_time, line_time, ax_spec, line_spec = setup_plot(
-            recording_duration,
-            DeviceConfig.sample_rate,
-            num_block_samples,
-            (self.stimulus.f1*0.6, self.stimulus.f2*1.5),
-            DeviceConfig.live_display_duration,
-            is_calib_available=is_calib_available
-        )
-        return SpectralPlotContext(
-            fig=fig,
-            axes=ax_time,
-            line=line_time,
-            update_interval=DeviceConfig.update_interval,
-            live_display_duration=DeviceConfig.live_display_duration,
-            axes_spec=ax_spec,
-            line_spec=line_spec
-        )

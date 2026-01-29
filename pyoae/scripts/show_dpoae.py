@@ -7,12 +7,12 @@ recording using continuously presented primary tones.
 Run the following command from the project root directory to
 plot results from a single measurement:
 
-    python3 -m show_dpoae --file 'cdpoae_msrmt_251021-141156_1500_60.npz'
+    show_dpoae --file 'cdpoae_msrmt_251021-141156_1500_60.npz'
 
 Run the following command from the project root directory to
 plot all continuous DPOAE recordings in a specified directory:
 
-    python3 -m show_dpoae --d 'measurements'
+    show_dpoae --d 'measurements'
 
 Command-line arguments:
     --file: path to result file to be shown,
@@ -28,7 +28,7 @@ from matplotlib import pyplot as plt
 
 from pyoae import files
 from pyoae.dsp.processing import ContDpoaeResult
-import pyoae_logger
+import pyoae.pyoae_logger as pyoae_logger
 
 
 logger = pyoae_logger.get_pyoae_logger('PyOAE DPOAE Results')
@@ -97,8 +97,13 @@ parser.add_argument(
 )
 
 
-if __name__ == "__main__":
-    # Entry point for script execution
+def run_cli():
+    """Run main with console arguments"""
     args = parser.parse_args()
     kwargs = vars(args)
     main(**kwargs)
+
+
+if __name__ == "__main__":
+    # Entry point for console module execution
+    run_cli()

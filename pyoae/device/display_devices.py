@@ -38,7 +38,8 @@ def print_info(search_param: str | int | None = None):
             print(f'{device}\n')
 
 
-if __name__ == '__main__':
+def run_cli():
+    """Run printing info with console arguments."""
     # Obtain argument if given an possibly convert to integer
     if len(sys.argv) > 1:
         search_string = sys.argv[1]
@@ -48,3 +49,8 @@ if __name__ == '__main__':
             print_info(search_string)
     else:
         print_info()
+
+
+if __name__ == '__main__':
+    # Obtain argument if given an possibly convert to integer
+    run_cli()

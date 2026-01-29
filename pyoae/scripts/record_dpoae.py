@@ -9,7 +9,7 @@ the time signal and spectrum are displayed.
 Run the following command from the project root directory with appropriate
 arguments to start (see README.md):
 
-    python3 -m record_dpoae
+    record_dpoae
 
 Command-line arguments:
     --mic: microphone/input calibration, e.g., '2ROTIU6H_3C9CESK1W6.json'
@@ -35,7 +35,7 @@ from pyoae import files
 from pyoae.calib import MicroTransferFunction, OutputCalibration
 from pyoae.device.device_config import DeviceConfig
 from pyoae.cdpoae import DpoaeRecorder
-import pyoae_logger
+import pyoae.pyoae_logger as pyoae_logger
 
 
 DEVICE_CONFIG_FILE = 'device_config.json'
@@ -162,8 +162,13 @@ parser.add_argument(
 )
 
 
-if __name__ == "__main__":
-    # Entry point for script execution
+def run_cli():
+    """Run main with console arguments"""
     args = parser.parse_args()
     kwargs = vars(args)
     main(**kwargs)
+
+
+if __name__ == "__main__":
+    # Entry point for console module execution
+    run_cli()

@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["pyoae", "pyoae.*"]
+
+[project]
+name = "pyoae"
+version = "0.3.0"
+description = "Python OAE package"
+license = { file = "LICENSE" }
+requires-python = ">=3.10"
+dependencies = [
+    "sounddevice",
+    "numpy",
+    "scipy",
+    "matplotlib",
+    "typing_extensions==4.15.0; python_version <= '3.10'",
+]
+
+# Console scripts
+[project.scripts]
+calibrate_sensitivity = "pyoae.scripts.calibrate_sensitivity:run_cli"
+display_devices = "pyoae.device.display_devices:run_cli"
+record_dpoae = "pyoae.scripts.record_dpoae:run_cli"
+record_output_calib = "pyoae.scripts.record_output_calib:run_cli"
+record_pulse_dpoae = "pyoae.scripts.record_pulse_dpoae:run_cli"
+record_soae = "pyoae.scripts.record_soae:run_cli"
+show_dpoae = "pyoae.scripts.show_dpoae:run_cli"
+show_output_calib = "pyoae.scripts.show_output_calib:run_cli"
+show_pulse_dpoae = "pyoae.scripts.show_pulse_dpoae:run_cli"

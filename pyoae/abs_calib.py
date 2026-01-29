@@ -21,7 +21,6 @@ from pyoae import get_logger
 from pyoae import soae
 from pyoae.device.device_config import DeviceConfig
 from pyoae.msrmt_context import MsrmtContext
-from pyoae.plot_context import SpectralPlotContext
 from pyoae.soae import SoaeRecorder
 from pyoae.sync import MsrmtState, SyncMsrmt
 
@@ -49,7 +48,6 @@ def max_ref_pressure(ref_in: float, ref_db_spl: float = 94.0) -> float:
 def plot_offline(
     sync_msrmt: SyncMsrmt,
     msrmt_ctx: MsrmtContext,
-    plot_ctx: SpectralPlotContext
 ) -> None:
     """Plots the final results in a non-updating plot.
 
@@ -60,17 +58,15 @@ def plot_offline(
         sync_msrmt: Measurement object that handles the synchronized
           measurement.
         msrmt_ctx: Parameters and instances to control the measurement.
-        plot_ctx: Parameters and instances to control plots.
 
     """
     if sync_msrmt.state != MsrmtState.FINISHED:
         return
     recorded_signal, spectrum = soae.get_results(sync_msrmt, msrmt_ctx)
-    _, ax_time, line_time, ax_spec, line_spec = soae.setup_plot(
+    ax_time, line_time, ax_spec, line_spec = soae.setup_plot(
         sync_msrmt.recording_data.msrmt_duration,
         sync_msrmt.recording_data.fs,
         msrmt_ctx.block_size,
-        plot_ctx.live_display_duration,
         msrmt_ctx.input_trans_fun is not None
     )
     line_time.set_xdata(np.arange(len(recorded_signal))/msrmt_ctx.fs)
@@ -110,17 +106,13 @@ class AbsCalibRecorder(SoaeRecorder):
         """Starts the recording."""
 
         self.logger.info("Starting absolute calibration...")
-        self.msrmt.start_msrmt(
-            soae.update_msrmt,
-            self.msrmt_ctx,
-            self.plot_ctx
-        )
+        self.msrmt.run_msrmt()
 
         # Plot offline results after measurement
         self.logger.info(
             'Showing offline results. Please close window to continue.'
         )
-        plot_offline(self.msrmt, self.msrmt_ctx, self.plot_ctx)
+        plot_offline(self.msrmt, self.msrmt_ctx)
 
     def save_recording(self) -> None:
         """Stores the measurement data in binary file."""

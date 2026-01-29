@@ -4,7 +4,7 @@ This package comprises the following submodules that provide the
 backend for synchronous acquisition of otoacoustic emissions
 using `python-sounddevice` to access an audio device.
 
-Version: 0.2.3 (October 2025) - www.earlab.de
+Version: 0.3.0 (January 2026) - www.earlab.de
 
 Submodules:
 
@@ -16,11 +16,21 @@ Submodules:
 - `pyoae.files`: Module for file handling.
 - `pyoae.generator`: Module with functions and classes to create output stimuli.
 - `pyoae.helpers`: Module with miscellaneous helper functions.
+- `pyoae.msrmt_context`: Module with dataclasses storing measurement context.
 - `pyoae.pdpoae`: Module to record pulsed DPOAEs.
+- `pyoae.plotting`: Module that includes live measurement plot functionality
 - `pyoae.protocols`: Module handling measurement and configuration protocols.
+- `pyoae.pyoae_logger`: Module that sets up the logger
 - `pyoae.signals`: Module managing playback signals.
 - `pyoae.soae`: Module to record SOAE (without any stimulus).
 - `pyoae.sync`: Module providing synchronized audio output/input.
+
+- `pyoae.device.device_config`: Storage module for device configuration
+- `pyoae.device.display_devices`: Function to show detected audio interfaces
+
+- `pyoae.dsp.containers`: Classes to define measurement saving structure
+- `pyoae.dsp.opt_avg`: Optimized averaging functionality
+- `pyoae.dsp.processing`: Measurement data processing functionality
 """
 
 from __future__ import annotations

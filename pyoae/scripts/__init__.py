@@ -1,0 +1,1 @@
+"""Module that includes scripts to start measurements from console"""

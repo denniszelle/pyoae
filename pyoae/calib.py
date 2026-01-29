@@ -149,8 +149,12 @@ class OutputCalibration:
         amplitudes_ip = []
         phases_ip = []
         for i in range(2):
-            h_ip = np.interp(frequencies_ip, self.frequencies, self.amplitudes[i,:])
-            phi_ip = np.interp(frequencies_ip, self.frequencies, self.phases[i, :])
+            h_ip = np.interp(
+                frequencies_ip, self.frequencies, self.amplitudes[i,:]
+            )
+            phi_ip = np.interp(
+                frequencies_ip, self.frequencies, self.phases[i, :]
+            )
             amplitudes_ip.append(h_ip)
             phases_ip.append(phi_ip)
 
@@ -228,7 +232,9 @@ class MicroTransferFunction:
         df = self.sample_rate / self.num_samples
         frequencies_ip = np.arange(num_bins, dtype=np.float32) * df
 
-        amplitudes_ip = np.interp(frequencies_ip, self.frequencies, self.amplitudes)
+        amplitudes_ip = np.interp(
+            frequencies_ip, self.frequencies, self.amplitudes
+        )
         phases_ip = np.interp(frequencies_ip, self.frequencies, self.phases)
 
         # store interpolated data
@@ -248,3 +254,15 @@ class MicroTransferFunction:
         # in order to calculate the frequency-bin index)
         idx = np.argmin(np.abs(self.frequencies - f))
         return self.amplitudes[idx]
+
+    def get_interp_transfer_function(
+        self,
+        frequencies
+    ) -> npt.NDArray[np.float32]:
+        """Return interpolated transfer function"""
+        interpolated_tf = np.interp(
+            frequencies,
+            self.frequencies,
+            self.amplitudes
+        )
+        return interpolated_tf

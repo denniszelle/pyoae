@@ -7,7 +7,7 @@ to calibrate two speakers of a DPOAE ear probe.
 
 Run the following command from the project root directory to start:
 
-    python3 -m record_output_calib --mic 'mic/mic_calib.json' --save
+    record_output_calib --mic 'mic/mic_calib.json' --save
 
 
 Note:
@@ -25,7 +25,7 @@ from pyoae import protocols
 from pyoae.calib import MicroTransferFunction
 from pyoae.device.device_config import DeviceConfig
 from pyoae.calibrator import OutputCalibRecorder
-import pyoae_logger
+import pyoae.pyoae_logger as pyoae_logger
 
 DEVICE_CONFIG_FILE = 'device_config.json'
 
@@ -102,8 +102,13 @@ parser.add_argument(
 )
 
 
-if __name__ == "__main__":
-    # Entry point for script execution
+def run_cli():
+    """Run main with console arguments"""
     args = parser.parse_args()
     kwargs = vars(args)
     main(**kwargs)
+
+
+if __name__ == "__main__":
+    # Entry point for console module execution
+    run_cli()

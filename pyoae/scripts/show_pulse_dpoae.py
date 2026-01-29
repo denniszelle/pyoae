@@ -68,7 +68,7 @@ def main(file: str = '', d: str = '', a: bool = False) -> None:
             pdpoae_result = PulseDpoaeResult(pulsed_recording)
 
     if pdpoae_result is None:
-        logger.error('Failed to load continuous DPOAE result.')
+        logger.error('Failed to load pulse DPOAE result.')
         return
 
     pdpoae_result.plot()

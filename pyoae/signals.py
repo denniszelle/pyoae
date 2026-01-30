@@ -149,10 +149,8 @@ class ZeroSignal(Signal):
     """Class that always returns zero signals"""
 
     def __init__(self):
-
+        super().__init__(np.array(0, dtype=np.float32))
         self.num_signal_samples = 0
-        self.signal_data = np.array(0, dtype=np.float32)
-
     def get_data(
         self,
         start_idx: int,

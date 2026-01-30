@@ -20,9 +20,8 @@ import numpy as np
 from pyoae import get_logger
 from pyoae import soae
 from pyoae.device.device_config import DeviceConfig
-from pyoae.msrmt_context import MsrmtContext
 from pyoae.soae import SoaeRecorder
-from pyoae.sync import MsrmtState, SyncMsrmt
+from pyoae.sync import MsrmtState
 
 logger = get_logger()
 
@@ -45,60 +44,6 @@ def max_ref_pressure(ref_in: float, ref_db_spl: float = 94.0) -> float:
     return x/y
 
 
-def plot_offline(
-    sync_msrmt: SyncMsrmt,
-    msrmt_ctx: MsrmtContext,
-) -> None:
-    """Plots the final results in a non-updating plot.
-
-    This function obtains the results from the measurement object, creates a
-    plot and shows the complete measurement as well as the spectral estimate.
-
-    Args:
-        sync_msrmt: Measurement object that handles the synchronized
-          measurement.
-        msrmt_ctx: Parameters and instances to control the measurement.
-
-    """
-    if sync_msrmt.state != MsrmtState.FINISHED:
-        return
-    recorded_signal, spectrum = soae.get_results(sync_msrmt, msrmt_ctx)
-    ax_time, line_time, ax_spec, line_spec = soae.setup_plot(
-        sync_msrmt.recording_data.msrmt_duration,
-        sync_msrmt.recording_data.fs,
-        msrmt_ctx.block_size,
-        msrmt_ctx.input_trans_fun is not None
-    )
-    line_time.set_xdata(np.arange(len(recorded_signal))/msrmt_ctx.fs)
-    line_time.set_ydata(recorded_signal)
-    ax_time.set_xlim(0, sync_msrmt.recording_data.msrmt_duration)
-    ax_time.set_xlabel("Recording Time (s)")
-
-    spec_min = min(spectrum[1:])
-    spec_max = max(spectrum)
-    # convert dBFS to dBFS_RMS
-    spec_rms = spec_max - 20 * np.log10(np.sqrt(2))
-    max_input_pressure = max_ref_pressure(spec_rms)
-
-    padding = 15  # dB of padding on top and bottom
-    ax_spec.set_ylim(spec_min - padding, spec_max + padding)
-    line_spec.set_ydata(spectrum)
-
-    calib_result = (
-        f'Reference input: {spec_max:.2f} dBFS '
-        f'-> Input pressure at full scale: {max_input_pressure: .2f}.'
-    )
-    logger.info(calib_result)
-    if spec_max < -20:
-        logger.warning(
-            'Calibration result might be invalid! '
-            'Input level probably too low.'
-        )
-    plt.title(calib_result)
-    plt.tight_layout()
-    plt.show()
-
-
 class AbsCalibRecorder(SoaeRecorder):
     """Class to manage an absolute calibration recording."""
 
@@ -112,7 +57,36 @@ class AbsCalibRecorder(SoaeRecorder):
         self.logger.info(
             'Showing offline results. Please close window to continue.'
         )
-        plot_offline(self.msrmt, self.msrmt_ctx)
+        self.plot_offline()
+
+    def plot_offline(self) -> None:
+        """Shows the final results in a polished plot.
+
+        This method overwrites that of `SoaeRecorder`.
+        """
+        if self.msrmt.state != MsrmtState.FINISHED:
+            return
+        recorded_signal, spectrum = self.get_results()
+
+        self._plot_offline(recorded_signal, spectrum)
+        # convert dBFS to dBFS_RMS
+        spec_max = max(spectrum)
+        spec_rms = spec_max - 20 * np.log10(np.sqrt(2))
+        max_input_pressure = max_ref_pressure(spec_rms)
+
+        calib_result = (
+            f'Reference input: {spec_max:.2f} dBFS '
+            f'-> Input pressure at full scale: {max_input_pressure: .2f}.'
+        )
+        logger.info(calib_result)
+        if spec_max < -20:
+            logger.warning(
+                'Calibration result might be invalid! '
+                'Input level probably too low.'
+            )
+        plt.title(calib_result)
+        plt.tight_layout()
+        plt.show()
 
     def save_recording(self) -> None:
         """Stores the measurement data in binary file."""
@@ -126,10 +100,7 @@ class AbsCalibRecorder(SoaeRecorder):
         time_stamp = cur_time.strftime("%y%m%d-%H%M%S")
         file_name = 'abs_calib_msrmt_'+ time_stamp
         save_path = os.path.join(save_path, file_name)
-        recorded_signal, spectrum = soae.get_results(
-            self.msrmt,
-            self.msrmt_ctx
-        )
+        recorded_signal, spectrum = self.get_results()
         np.savez(
             save_path,
             spectrum=spectrum,

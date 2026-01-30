@@ -47,13 +47,20 @@ from pyoae.sync import HardwareData, RecordingData, SyncMsrmt, MsrmtState
 logger = get_logger()
 
 
+SPECTRAL_PLOT_PADDING: float = 15.0
+"""Padding for y-limits of spectral plot in dB."""
+
+
 def setup_plot(
     recording_duration: float,
     fs: float,
     window_size: int,
     is_calib_available:bool=False
 ) -> tuple[Axes, Line2D, Axes, Line2D]:
-    """Sets up the plots.
+    """Sets up the plots for RMS spectrum results.
+
+    Top plot: shows the recorded time signal.
+    Bottom plot: shows the estimated RMS spectrum.
 
     Args:
         recording_duration: Total duration of the recording in seconds
@@ -180,7 +187,8 @@ def process_spectrum(
     recorded_signal: npt.NDArray[np.float32],
     fs: float,
     window_samples: int,
-    correction_tf: MicroTransferFunction | None
+    correction_tf: MicroTransferFunction | None,
+    window: str = 'hann'
 ) -> npt.NDArray[np.float32]:
     """Processes recorded signal and obtains spectrum from averaged data.
 
@@ -201,7 +209,7 @@ def process_spectrum(
         _, spectrum = average_spectrum(
             recorded_signal,
             fs,
-            'hann',
+            window,
             window_samples,
         )
         if np.max(spectrum) == 0:
@@ -217,88 +225,6 @@ def process_spectrum(
     else:
         spectrum = np.abs(np.fft.rfft(np.zeros(window_samples, np.float32)))
     return spectrum
-
-
-def get_results(
-    sync_msrmt: SyncMsrmt,
-    msrmt_ctx: MsrmtContext
-) -> tuple[npt.NDArray[np.float32], npt.NDArray[np.float32]]:
-    """Processes data and returns plot results.
-
-    If the measurement is currently running, the recorded signal is obtained
-    and a asynchronously averaged spectrum is estimated.
-
-    Args:
-        sync_msrmt: Measurement object that handles the synchronized
-          measurement.
-        msrmt_ctx: Parameters and instances to control the measurement.
-
-    Returns:
-        tuple[recorded_signal, spectrum]
-
-        - **recorded_signal**: Float array with recorded signal
-        - **spectrum**: Float array with estimated spectrum
-
-    """
-
-    if sync_msrmt.state in [
-        MsrmtState.RECORDING,
-        MsrmtState.END_RECORDING,
-        MsrmtState.FINISHING,
-        MsrmtState.FINISHED
-    ]:
-
-        spectrum = None
-        recorded_signal = sync_msrmt.get_recorded_signal()
-
-        spectrum = process_spectrum(
-            recorded_signal,
-            msrmt_ctx.fs,
-            msrmt_ctx.block_size,
-            msrmt_ctx.input_trans_fun
-        )
-
-        return recorded_signal, spectrum
-
-    return np.zeros(0,np.float32), np.zeros(0,np.float32)
-
-
-def plot_offline(
-    sync_msrmt: SyncMsrmt,
-    msrmt_ctx: MsrmtContext
-) -> None:
-    """Plots the final results in a non-updating plot.
-
-    This function obtains the results from the measurement object, creates a
-    plot and shows the complete measurement as well as the spectral estimate.
-
-    Args:
-        sync_msrmt: Measurement object that handles the synchronized
-          measurement.
-        msrmt_ctx: Parameters and instances to control the measurement.
-
-    """
-    if sync_msrmt.state != MsrmtState.FINISHED:
-        return
-    recorded_signal, spectrum = get_results(sync_msrmt, msrmt_ctx)
-    ax_time, line_time, ax_spec, line_spec = setup_plot(
-        sync_msrmt.recording_data.msrmt_duration,
-        sync_msrmt.recording_data.fs,
-        msrmt_ctx.block_size,
-        msrmt_ctx.input_trans_fun is not None
-    )
-    line_time.set_xdata(np.arange(len(recorded_signal))/msrmt_ctx.fs)
-    line_time.set_ydata(recorded_signal)
-    ax_time.set_xlim(0, sync_msrmt.recording_data.msrmt_duration)
-    ax_time.set_xlabel("Recording Time (s)")
-
-    spec_min = min(spectrum[1:])
-    spec_max = max(spectrum)
-    padding = 15  # dB of padding on top and bottom
-    ax_spec.set_ylim(spec_min - padding, spec_max + padding)
-    line_spec.set_ydata(spectrum)
-    plt.tight_layout()
-    plt.show()
 
 
 class SoaeRecorder:
@@ -362,13 +288,20 @@ class SoaeRecorder:
             num_block_samples,
             DeviceConfig.device_buffer_size
         )
+        # TODO: fix number of arguments to support bilateral PyOAE interface
         hw_data = HardwareData(
             2,
             2,
             DeviceConfig.input_device,
             DeviceConfig.output_device
         )
-        self.msrmt = SyncMsrmt(rec_data, hw_data, self.signals, msrmt_params['block_duration'])
+        # TODO: fix number of arguments to support bilateral PyOAE interface
+        self.msrmt = SyncMsrmt(
+            rec_data,
+            hw_data,
+            self.signals,
+            msrmt_params['block_duration']
+        )
 
     def record(self) -> None:
         """Starts the recording."""
@@ -380,7 +313,90 @@ class SoaeRecorder:
             self.logger.info(
                 'Showing offline results. Please close window to continue.'
             )
-            plot_offline(self.msrmt, self.msrmt_ctx)
+            self.plot_offline()
+
+    def _plot_offline(
+        self,
+        recorded_signal: npt.NDArray[np.float32],
+        spectrum: npt.NDArray[np.float32]
+    ) -> None:
+        """Helper to plot the final results in a non-updating plot.
+
+        This method obtains the results from the measurement object,
+        creates a plot and shows the complete measurement
+        as well as the RMS spectrum.
+
+        Args:
+            recorded_signal: recorded time signal
+            spectrum: RMS-averaged spectrum of recorded signal
+        """
+        ax_time, line_time, ax_spec, line_spec = setup_plot(
+            self.msrmt.recording_data.msrmt_duration,
+            self.msrmt.recording_data.fs,
+            self.msrmt_ctx.block_size,
+            self.msrmt_ctx.input_trans_fun is not None
+        )
+        line_time.set_xdata(np.arange(len(recorded_signal))/self.msrmt_ctx.fs)
+        line_time.set_ydata(recorded_signal)
+        ax_time.set_xlim(0, self.msrmt.recording_data.msrmt_duration)
+        ax_time.set_xlabel("Recording Time (s)")
+
+        spec_min = np.floor((min(spectrum[1:]) / 5)) * 5
+        spec_max = np.ceil(max(spectrum) / 5) * 5
+        # set y limits with padding
+        ax_spec.set_ylim(
+            spec_min - SPECTRAL_PLOT_PADDING,
+            spec_max + SPECTRAL_PLOT_PADDING
+        )
+        line_spec.set_ydata(spectrum)
+
+    def plot_offline(self) -> None:
+        """Shows the final results in a polished plot."""
+        if self.msrmt.state != MsrmtState.FINISHED:
+            return
+        recorded_signal, spectrum = self.get_results()
+        self._plot_offline(recorded_signal, spectrum)
+        plt.tight_layout()
+        plt.show()
+
+    def get_results(
+        self
+    ) -> tuple[npt.NDArray[np.float32], npt.NDArray[np.float32]]:
+        """Processes data and returns plot results.
+
+        If the measurement is currently running, the recorded signal is obtained
+        and a asynchronously averaged spectrum is estimated.
+
+        Returns:
+            tuple[recorded_signal, spectrum]
+
+            - **recorded_signal**: Float array with recorded signal
+            - **spectrum**: Float array with estimated spectrum
+
+        """
+
+        if self.msrmt.state in [
+            MsrmtState.RECORDING,
+            MsrmtState.END_RECORDING,
+            MsrmtState.FINISHING,
+            MsrmtState.FINISHED
+        ]:
+
+            spectrum = None
+            # TODO: add input channel to retrieve recorded signal
+            recorded_signal = self.msrmt.get_recorded_signal()
+
+            # TODO: retrieve micro TF from list
+            spectrum = process_spectrum(
+                recorded_signal,
+                self.msrmt_ctx.fs,
+                self.msrmt_ctx.block_size,
+                self.msrmt_ctx.input_trans_fun
+            )
+
+            return recorded_signal, spectrum
+
+        return np.zeros(0,np.float32), np.zeros(0,np.float32)
 
     def save_recording(self) -> None:
         """Stores the measurement data in binary file."""
@@ -400,7 +416,7 @@ class SoaeRecorder:
         ]
         file_name = "_".join(filter(None, parts))
         save_path = os.path.join(save_path, file_name)
-        recorded_signal, spectrum = get_results(self.msrmt, self.msrmt_ctx)
+        recorded_signal, spectrum = self.get_results()
         np.savez(
             save_path,
             spectrum=spectrum,

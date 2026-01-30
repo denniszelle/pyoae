@@ -133,17 +133,17 @@ class RecordingData:
 def get_input_channels(
         output_channels: list[int]
     ):
-        """Return a list of input channels"""
+    """Return a list of input channels"""
 
-        input_channels = []
-        for output_channel_i in output_channels:
-            mapping = DeviceConfig.output_input_mapping
-            for mapping_pair in mapping:
-                if mapping_pair[0] == output_channel_i:
-                    input_channels.append(
-                        mapping_pair[1]
-                    )
-        return input_channels
+    input_channels = []
+    for output_channel_i in output_channels:
+        mapping = DeviceConfig.output_input_mapping
+        for mapping_pair in mapping:
+            if mapping_pair[0] == output_channel_i:
+                input_channels.append(
+                    mapping_pair[1]
+                )
+    return input_channels
 
 
 @dataclass

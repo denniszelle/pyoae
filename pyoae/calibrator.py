@@ -48,7 +48,6 @@ def setup_offline_plot(
         fs: Sampling frequency in Hz
         block_size: Size of each measurement block that is repeated
           periodically
-        live_display_duration: Time domain display duration in milliseconds
         is_calib_available: Boolean whether a calibration is available to
           display sound pressure or only show raw measurement data
 

@@ -68,7 +68,6 @@ def setup_plot(
         recording_duration: Total duration of the recording in seconds
         fs: Sampling frequency in Hz
         window_size: Number of samples of the welch spectral estimation window
-        live_display_duration: Time domain display duration in milliseconds
         is_calib_available: Boolean whether a calibration is available to
           display sound pressure or only show raw measurement data
 

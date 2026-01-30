@@ -183,50 +183,6 @@ def average_spectrum(
     return frequencies.astype(np.float32), spec_avg.astype(np.float32)
 
 
-def process_spectrum(
-    recorded_signal: npt.NDArray[np.float32],
-    fs: float,
-    window_samples: int,
-    correction_tf: MicroTransferFunction | None,
-    window: str = 'hann'
-) -> npt.NDArray[np.float32]:
-    """Processes recorded signal and obtains spectrum from averaged data.
-
-    Args:
-        recorded_signal: Float array of measurement data
-        fs: Sampling frequency the signal was recorded with
-        window_samples: Number of samples for each window for
-          asynchronous spectrum estimations
-        correction_tf: Transfer function of the microphone
-
-    Returns:
-        Float array containing the asynchronous averaged spectrum
-    """
-
-    spectrum = None
-
-    if len(recorded_signal) > window_samples:
-        _, spectrum = average_spectrum(
-            recorded_signal,
-            fs,
-            window,
-            window_samples,
-        )
-        if np.max(spectrum) == 0:
-            # pylint: disable=no-member
-            spectrum[:] = np.finfo(np.float32).eps
-            # pylint: enable=no-member
-        if correction_tf is None:
-            spectrum = 20 * np.log10(spectrum)
-        else:
-            spectrum /= correction_tf.amplitudes
-            spectrum = 20 * np.log10(spectrum/20)
-
-    else:
-        spectrum = np.abs(np.fft.rfft(np.zeros(window_samples, np.float32)))
-    return spectrum
-
-
 class SoaeRecorder:
     """Class to manage an SOAE recording."""
 
@@ -385,14 +341,7 @@ class SoaeRecorder:
             spectrum = None
             # TODO: add input channel to retrieve recorded signal
             recorded_signal = self.msrmt.get_recorded_signal()
-
-            # TODO: retrieve micro TF from list
-            spectrum = process_spectrum(
-                recorded_signal,
-                self.msrmt_ctx.fs,
-                self.msrmt_ctx.block_size,
-                self.msrmt_ctx.input_trans_fun
-            )
+            spectrum = self.process_spectrum(recorded_signal)
 
             return recorded_signal, spectrum
 
@@ -438,3 +387,48 @@ class SoaeRecorder:
         )
         self.signals.append(signal1)
         self.signals.append(signal2)
+
+    def process_spectrum(
+        self,
+        recorded_signal: npt.NDArray[np.float32],
+        window: str = 'hann'
+    ) -> npt.NDArray[np.float32]:
+        """Processes recorded signal and obtains spectrum from averaged data.
+
+        Args:
+            recorded_signal: Float array of measurement data
+
+        Returns:
+            Float array containing the asynchronous averaged spectrum
+        """
+
+        correction_tf = None
+        if self.msrmt_ctx.input_trans_fun is not None:
+            # TODO: retrieve and use input channel
+            input_ch = 0
+            # TODO: retrieve correct micro TF from list
+            correction_tf = self.msrmt_ctx.input_trans_fun[input_ch]
+
+        spectrum = None
+
+        if len(recorded_signal) > self.msrmt_ctx.block_size:
+            _, spectrum = average_spectrum(
+                recorded_signal,
+                self.msrmt_ctx.fs,
+                window,
+                self.msrmt_ctx.block_size,
+            )
+            if np.max(spectrum) == 0:
+                # pylint: disable=no-member
+                spectrum[:] = np.finfo(np.float32).eps
+                # pylint: enable=no-member
+            if correction_tf is None:
+                spectrum = 20 * np.log10(spectrum)
+            else:
+                spectrum /= correction_tf.amplitudes
+                spectrum = 20 * np.log10(spectrum/20)
+
+        else:
+            spectrum = np.abs(np.fft.rfft(np.zeros(self.msrmt_ctx.block_size, np.float32)))
+
+        return spectrum

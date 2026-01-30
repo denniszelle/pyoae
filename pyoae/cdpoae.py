@@ -247,8 +247,7 @@ class DpoaeRecorder:
             rec_data,
             hw_data,
             self.signals,
-            block_duration,
-            output_channels
+            block_duration
         )
 
     def record(self) -> None:

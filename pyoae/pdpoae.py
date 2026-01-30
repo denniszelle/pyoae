@@ -247,18 +247,9 @@ class PulseDpoaeRecorder:
             rec_data,
             hw_data,
             self.signals,
-            block_duration,
-            output_channels
+            block_duration
         )
 
-
-        self.msrmt = SyncMsrmt(
-            rec_data,
-            hw_data,
-            self.signals,
-            block_duration,
-            output_channels
-        )
         self.dpoae_processor = None
 
     def record(self) -> None:

@@ -315,7 +315,6 @@ class SyncMsrmt(Generic[SignalT]):
         hardware_data: HardwareData,
         output_signals: list[SignalT],
         block_duration: float,
-        output_channels: list[int],
         latency_type: Literal['low', 'high']='high',
         log: Logger | None = None
     ) -> None:

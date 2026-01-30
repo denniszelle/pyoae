@@ -115,7 +115,7 @@ class ProcessPlotter:
             axes[i].set_ylim(-1.0, 1.0)
             axes[i].set_ylabel('Amplitude (full scale)')
 
-        axes[0].set_title('Recorded Wavefcorm')
+        axes[0].set_title('Recorded Waveform')
         axes[-1].set_xlabel('Time (ms)')
 
         self.fig.canvas.mpl_connect(

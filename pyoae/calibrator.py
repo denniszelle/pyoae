@@ -275,7 +275,6 @@ def plot_result_file(results: OutputCalibration) -> None:
     """Plots output calibration from result file."""
 
     counter = Counter(results.input_channels)
-    rows = max(counter.values()) + 1
     cols = len(counter)
 
     # Type ignore to set known dimensions of 2
@@ -316,8 +315,11 @@ def plot_result_file(results: OutputCalibration) -> None:
 
             p_out_max = results.amplitudes[output_idx_j,:]
             out_max_db_spl = 20*np.log10(p_out_max/(np.sqrt(2)*20))
-            y_min = 0
             y_max = np.ceil(max(out_max_db_spl)/20)*20
+            if y_max <= 0:
+                y_min = y_max-100
+            else:
+                y_min = 0
             if i < len(line_styles):
                 ax_i.plot(
                     results.frequencies,
@@ -400,7 +402,9 @@ class OutputCalibRecorder:
             if a in output_channels
         })
 
-        n_in_channels = max(max(active_in_channels),DeviceConfig.sync_channels[1])+1
+        n_in_channels = max(
+            *active_in_channels, DeviceConfig.sync_channels[1]
+        )+1
         n_out_channels = max(output_channels) + 1
         hw_data = HardwareData(
             n_in_channels,
@@ -455,8 +459,7 @@ class OutputCalibRecorder:
             rec_data,
             hw_data,
             self.signals,
-            block_duration,
-            output_channels
+            block_duration
         )
 
     def record(self) -> None:

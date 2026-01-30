@@ -21,6 +21,7 @@ Note:
 import argparse
 
 from pyoae import files
+from pyoae import input_validation
 from pyoae import protocols
 from pyoae.calib import MicroTransferFunction
 from pyoae.device.device_config import DeviceConfig
@@ -32,9 +33,10 @@ DEVICE_CONFIG_FILE = 'device_config.json'
 logger = pyoae_logger.get_pyoae_logger('PyOAE Output Calibrator')
 
 def main(
-    mic: str = '',
+    mic: list[str] | None = None,
     save: bool = False,
-    protocol: str = ''
+    protocol: str = '',
+    channels: list[int] | None = None,
 ) -> None:
     """Main function executing a multi-tone measurement."""
 
@@ -42,20 +44,31 @@ def main(
     if save:
         logger.info('Calibration will be saved.')
 
+    if channels is None:
+        logger.info('Setting default output channels 0 and 1')
+        channels = [0, 1]
+
     logger.info('Loading global configuration from %s.', DEVICE_CONFIG_FILE)
     files.load_device_config(DEVICE_CONFIG_FILE)
     logger.info('Device Configuration: %s', DeviceConfig())
 
+    if not input_validation.validate_output_channels(channels):
+        return
+
     if mic:
         logger.info('Loading microphone calibration from %s.', mic)
-        mic_calib_data = files.load_micro_calib(mic)
-        if mic_calib_data is None:
-            logger.error('Stopping: Failed to load microphone calibration.')
-            return
-        mic_trans_fun = MicroTransferFunction(
-            mic_calib_data['abs_calibration'],
-            mic_calib_data['transfer_function']
-        )
+        mic_trans_fun = []
+        for mic_i in mic:
+            mic_calib_data = files.load_micro_calib(mic_i)
+            if mic_calib_data is None:
+                logger.error('Stopping: Failed to load microphone calibration.')
+                return
+            mic_trans_fun.append(
+                MicroTransferFunction(
+                    mic_calib_data['abs_calibration'],
+                    mic_calib_data['transfer_function']
+                )
+            )
     else:
         mic_trans_fun = None
 
@@ -71,6 +84,7 @@ def main(
 
     calib_recorder = OutputCalibRecorder(
         msrmt_params,
+        output_channels=channels,
         mic_trans_fun=mic_trans_fun
     )
     calib_recorder.record()
@@ -83,7 +97,14 @@ def main(
 
 parser = argparse.ArgumentParser(description='PyOAE Multi-Tone Calibration')
 parser.add_argument(
+    '--channels',
+    nargs='+',
+    default=argparse.SUPPRESS,
+    type=int
+)
+parser.add_argument(
     '--mic',
+    nargs='+',
     default=argparse.SUPPRESS,
     type=str,
     help='Specify path to microphone calibration JSON file.'

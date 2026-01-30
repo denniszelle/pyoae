@@ -12,7 +12,7 @@ from pyoae.calib import MicroTransferFunction
 
 
 @dataclass
-class MsrmtContext:
+class BaseMsrmtContext:
     """Parameters and instances to control measurement updates."""
 
     fs: float
@@ -21,23 +21,32 @@ class MsrmtContext:
     block_size: int
     """Number of samples in each block."""
 
-    input_trans_fun: MicroTransferFunction | None
-    """Handle to microphone transfer function.
-
-    A microphone transfer function is used to correct the
-    recorded signal from the microphone characteristics.
-
-    Note:
-        This is a dummy object for future implementation.
-    """
-
     non_interactive: bool
     """Flag enabling/disabling non-interactive measurement mode."""
 
 
 @dataclass
-class DpoaeMsrmtContext(MsrmtContext):
+class MsrmtContext(BaseMsrmtContext):
+    """Parameters and instances to control measurement updates."""
+
+    input_trans_fun: list[MicroTransferFunction] | None
+    """Handle to list of microphone transfer functions.
+
+    A microphone transfer function is used to correct the
+    recorded signal from the microphone characteristics.
+    """
+
+
+@dataclass
+class DpoaeMsrmtContext(BaseMsrmtContext):
     """Measurement context for continuous/pulsed DPOAE acquisition."""
+
+    input_trans_fun: MicroTransferFunction | None
+    """Handle to microphone transfer function.
+
+    A microphone transfer function is used to correct the
+    recorded signal from the microphone characteristics.
+    """
 
     f1: float
     """Stimulus frequency in Hz of the first primary tone.

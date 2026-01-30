@@ -1,0 +1,24 @@
+{
+    "msrmts": [
+        [
+            {
+                "block_duration": 0.1,
+                "num_averaging_blocks": 100,
+                "f2": 2300,
+                "f1": null,
+                "f2f1_ratio": 1.2,
+                "level2": 45,
+                "level1": null
+            },
+            {
+                "block_duration": 0.1,
+                "num_averaging_blocks": 100,
+                "f2": 4500,
+                "f1": null,
+                "f2f1_ratio": 1.2,
+                "level2": 45,
+                "level1": null
+            }
+        ]
+    ]
+}

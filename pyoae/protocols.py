@@ -13,8 +13,7 @@ OUTPUT_CALIB_KEYS: Final[list[str]] = [
     'f_start',
     'f_stop',
     'lines_per_octave',
-    'amplitude_per_line',
-    'num_channels'
+    'amplitude_per_line'
 ]
 """Necessary keys for output calibration"""
 
@@ -62,7 +61,6 @@ class CalibMsrmtParams(MsrmtParams):
     f_stop: float
     lines_per_octave: float
     amplitude_per_line: float
-    num_channels: int
 
 
 def get_default_soae_msrmt_params() -> MsrmtParams:
@@ -82,8 +80,7 @@ def get_default_calib_msrmt_params() -> CalibMsrmtParams:
         'f_start': 200.0,
         'f_stop': 10000.0,
         'lines_per_octave': 9.1,
-        'amplitude_per_line': 0.004,
-        'num_channels': 2
+        'amplitude_per_line': 0.004
     }
     return d
 
@@ -103,7 +100,6 @@ def get_custom_calib_msrmt_params(
         'f_start': calib_params['f_start'],
         'f_stop': calib_params['f_stop'],
         'lines_per_octave': calib_params['lines_per_octave'],
-        'amplitude_per_line': calib_params['amplitude_per_line'],
-        'num_channels': calib_params['num_channels']
+        'amplitude_per_line': calib_params['amplitude_per_line']
     }
     return d

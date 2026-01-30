@@ -211,12 +211,16 @@ class HardwareData:
         return self.max_out_channels
 
     def get_unique_input_channels(self) -> list[int]:
-        """Return """
+        """Return list of unique input channels"""
         active_in_channels = list({
             b for a, b in DeviceConfig.output_input_mapping
             if a in self.output_channels
         })
         return active_in_channels
+
+    def get_output_msrmt_channels(self, msrmt_idx) -> list[int]:
+        """Return list of output channels for a given measurement index"""
+        return self.output_channels[2*msrmt_idx:2*msrmt_idx+2]
 
 
 @dataclass

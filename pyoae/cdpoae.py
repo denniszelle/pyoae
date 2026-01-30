@@ -153,7 +153,7 @@ class DpoaeRecorder:
 
         for i, msrmt_params_i in enumerate(msrmt_params):
 
-            output_channels_i = output_channels[2*i:2*i+2]
+            output_channels_i = hw_data.get_output_msrmt_channels(i)
 
             num_block_samples = int(
                 msrmt_params_i['block_duration'] * DeviceConfig.sample_rate
@@ -315,11 +315,18 @@ class DpoaeRecorder:
         cur_time = datetime.now()
         time_stamp = cur_time.strftime('%y%m%d-%H%M%S')
         for i, msrmt_info_i in enumerate(self.msrmt_info):
+            side_id = helpers.sanitize_filename_part(msrmt_info_i.ear)
+            if len(side_id) == 0:
+                output_channels_i = (
+                    self.msrmt.hardware_data.get_output_msrmt_channels(i)
+                )
+                side_id = f'out_{output_channels_i[0]}_{output_channels_i[1]}'
+
             parts = [
                 'cdpoae_msrmt',
                 time_stamp,
                 helpers.sanitize_filename_part(self.subject),
-                helpers.sanitize_filename_part(msrmt_info_i.ear),
+                side_id,
                 str(int(msrmt_info_i.stimulus.f2)),
                 str(int(msrmt_info_i.stimulus.level2)),
             ]

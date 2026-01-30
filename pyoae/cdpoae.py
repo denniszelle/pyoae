@@ -75,7 +75,7 @@ class ContDpoaeMsrmtInfo:
 class DpoaeRecorder:
     """Class to manage a DPOAE recording."""
 
-    msrmt_infos: list[ContDpoaeMsrmtInfo]
+    msrmt_info: list[ContDpoaeMsrmtInfo]
     """Information of measurements"""
 
     signals: list[PeriodicRampSignal | ZeroSignal]
@@ -105,7 +105,7 @@ class DpoaeRecorder:
         self.logger = log or get_logger()
         self.subject = subject
         self.signals = []
-        self.msrmt_infos = []
+        self.msrmt_info = []
 
         if ear is None:
             ear = ['' for _ in range(len(msrmt_params))]
@@ -205,7 +205,7 @@ class DpoaeRecorder:
                 f2=stimulus.f2,
                 num_recorded_blocks=0
             )
-            self.msrmt_infos.append(
+            self.msrmt_info.append(
                 ContDpoaeMsrmtInfo(
                     stimulus,
                     msrmt_ctx,
@@ -221,13 +221,13 @@ class DpoaeRecorder:
             all(
             (
                 obj.num_total_recording_samples
-                == self.msrmt_infos[0].num_total_recording_samples
-            ) for obj in self.msrmt_infos
+                == self.msrmt_info[0].num_total_recording_samples
+            ) for obj in self.msrmt_info
             )
             and all((
                 obj.num_block_samples
-                == self.msrmt_infos[0].num_block_samples
-            ) for obj in self.msrmt_infos
+                == self.msrmt_info[0].num_block_samples
+            ) for obj in self.msrmt_info
             )
         ):
             self.logger.error(
@@ -267,7 +267,7 @@ class DpoaeRecorder:
         # We utilize the `ContDpoaeProcessor` to handle
         # raw data from the recorder.
 
-        for i, msrmt_info_i in enumerate(self.msrmt_infos):
+        for i, msrmt_info_i in enumerate(self.msrmt_info):
             input_channel = (
                 self.msrmt.hardware_data.get_unique_input_channels()[i]
             )
@@ -286,12 +286,12 @@ class DpoaeRecorder:
                 'recorded_sync': self.msrmt.live_msrmt_data.sync_recorded
             }
 
-            self.msrmt_infos[i].dpoae_processor = ContDpoaeProcessor(
+            self.msrmt_info[i].dpoae_processor = ContDpoaeProcessor(
                 recording,
                 mic=msrmt_info_i.msrmt_ctx.input_trans_fun
             )
 
-            processor = self.msrmt_infos[i].dpoae_processor
+            processor = self.msrmt_info[i].dpoae_processor
             if processor is None:
                 return
 
@@ -315,7 +315,7 @@ class DpoaeRecorder:
         os.makedirs(save_path, exist_ok=True)
         cur_time = datetime.now()
         time_stamp = cur_time.strftime('%y%m%d-%H%M%S')
-        for i, msrmt_info_i in enumerate(self.msrmt_infos):
+        for i, msrmt_info_i in enumerate(self.msrmt_info):
             parts = [
                 'cdpoae_msrmt',
                 time_stamp,
@@ -330,7 +330,7 @@ class DpoaeRecorder:
                 self.msrmt.hardware_data.get_unique_input_channels()[i]
             )
             recorded_signal = self.msrmt.get_recorded_signal(input_channel)
-            processor = self.msrmt_infos[i].dpoae_processor
+            processor = self.msrmt_info[i].dpoae_processor
             if processor is not None:
                 averaged = processor.raw_averaged
                 spectrum = processor.dpoae_spectrum

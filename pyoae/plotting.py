@@ -55,7 +55,6 @@ class ProcessPlotter:
 
     def terminate(self):
         """Terminate the plot window"""
-        print('Terminating figure.')
         self.running = False
         plt.close('all')
 

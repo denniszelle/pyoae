@@ -18,7 +18,6 @@ from matplotlib import pyplot as plt
 import numpy as np
 
 from pyoae import get_logger
-from pyoae import soae
 from pyoae.device.device_config import DeviceConfig
 from pyoae.soae import SoaeRecorder
 from pyoae.sync import MsrmtState
@@ -59,14 +58,14 @@ class AbsCalibRecorder(SoaeRecorder):
         )
         self.plot_offline()
 
-    def plot_offline(self) -> None:
+    def plot_offline(self, index: int = 0) -> None:
         """Shows the final results in a polished plot.
 
         This method overwrites that of `SoaeRecorder`.
         """
         if self.msrmt.state != MsrmtState.FINISHED:
             return
-        recorded_signal, spectrum = self.get_results()
+        recorded_signal, spectrum = self.get_results(index)
 
         self._plot_offline(recorded_signal, spectrum)
         # convert dBFS to dBFS_RMS
@@ -100,7 +99,7 @@ class AbsCalibRecorder(SoaeRecorder):
         time_stamp = cur_time.strftime("%y%m%d-%H%M%S")
         file_name = 'abs_calib_msrmt_'+ time_stamp
         save_path = os.path.join(save_path, file_name)
-        recorded_signal, spectrum = self.get_results()
+        recorded_signal, spectrum = self.get_results(0)
         np.savez(
             save_path,
             spectrum=spectrum,

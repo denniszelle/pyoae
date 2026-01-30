@@ -35,20 +35,23 @@ logger = pyoae_logger.get_pyoae_logger(
 )
 
 def main(
-    save: bool = False
+    save: bool = False,
+    input_ch: int | None = None,
 ) -> None:
     """Main function executing a sensitivity measurement."""
 
     logger.info('Sensitivity calibration.')
     if save:
         logger.info('Recording will be saved.')
+    if input_ch is None:
+        input_ch = 0
 
     logger.info('Loading global configuration from %s.', DEVICE_CONFIG_FILE)
     files.load_device_config(DEVICE_CONFIG_FILE)
     logger.info('Device Configuration: %s', DeviceConfig())
 
     msrmt_params = protocols.get_default_soae_msrmt_params()
-    recorder = AbsCalibRecorder(msrmt_params)
+    recorder = AbsCalibRecorder(msrmt_params, [input_ch])
     recorder.record()
     if save:
         recorder.save_recording()
@@ -60,6 +63,12 @@ parser.add_argument(
     action=argparse.BooleanOptionalAction,
     default=False,
     help='Save measurement results and data to files.'
+)
+parser.add_argument(
+    '--mic',
+    default=argparse.SUPPRESS,
+    type=str,
+    help='Specify path to microphone calibration JSON file.'
 )
 
 

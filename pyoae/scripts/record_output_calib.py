@@ -123,7 +123,7 @@ parser.add_argument(
 )
 
 
-def run_cli():
+def run_cli() -> None:
     """Run main with console arguments"""
     args = parser.parse_args()
     kwargs = vars(args)

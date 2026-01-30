@@ -28,8 +28,9 @@ import argparse
 
 from pyoae import files
 from pyoae.device.device_config import DeviceConfig
+from pyoae import pyoae_logger
 from pyoae.soae import SoaeRecorder
-import pyoae.pyoae_logger as pyoae_logger
+
 
 DEVICE_CONFIG_FILE = 'device_config.json'
 
@@ -98,7 +99,7 @@ parser.add_argument(
 )
 
 
-def run_cli():
+def run_cli() -> None:
     """Run main with console arguments"""
     args = parser.parse_args()
     kwargs = vars(args)

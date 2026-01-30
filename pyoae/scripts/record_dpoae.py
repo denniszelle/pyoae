@@ -33,10 +33,10 @@ import os
 
 from pyoae import files
 from pyoae import input_validation
+from pyoae import pyoae_logger
 from pyoae.calib import MicroTransferFunction, OutputCalibration
-from pyoae.device.device_config import DeviceConfig
 from pyoae.cdpoae import DpoaeRecorder
-import pyoae.pyoae_logger as pyoae_logger
+from pyoae.device.device_config import DeviceConfig
 
 
 DEVICE_CONFIG_FILE = 'device_config.json'
@@ -190,7 +190,7 @@ parser.add_argument(
 )
 
 
-def run_cli():
+def run_cli() -> None:
     """Run main with console arguments"""
     args = parser.parse_args()
     kwargs = vars(args)

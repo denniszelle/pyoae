@@ -27,8 +27,8 @@ import argparse
 from matplotlib import pyplot as plt
 
 from pyoae import files
+from pyoae import pyoae_logger
 from pyoae.dsp.processing import ContDpoaeResult
-import pyoae.pyoae_logger as pyoae_logger
 
 
 logger = pyoae_logger.get_pyoae_logger('PyOAE DPOAE Results')
@@ -97,7 +97,7 @@ parser.add_argument(
 )
 
 
-def run_cli():
+def run_cli() -> None:
     """Run main with console arguments"""
     args = parser.parse_args()
     kwargs = vars(args)

@@ -61,7 +61,7 @@ class DeviceConfig:
     update_interval: ClassVar[float] = 100.
     """Interval in milliseconds for updating the plots."""
 
-    live_display_duration: ClassVar[float] = 100.
+    live_display_duration: ClassVar[float] = 100.  # TODO: unused, check removal.
     """Duration that will be displayed in the live-time plot in milliseconds."""
 
     sync_channels: ClassVar[list[int]] = [0, 1]

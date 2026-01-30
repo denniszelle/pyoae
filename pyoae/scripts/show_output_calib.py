@@ -6,7 +6,7 @@ of output channels with respect to a given input calibration.
 
 Run the following command from the project root directory to start:
 
-    python3 -m show_output_calib --file '251015-190856_out_calib.json'
+    show_output_calib --file '251015-190856_out_calib.json'
 
 Command-line arguments:
     --file: path to output-calibration file to be shown,
@@ -16,10 +16,10 @@ Command-line arguments:
 
 import argparse
 
-from pyoae import files
-from pyoae.calib import OutputCalibration
 from pyoae import calibrator
-import pyoae.pyoae_logger as pyoae_logger
+from pyoae import files
+from pyoae import pyoae_logger
+from pyoae.calib import OutputCalibration
 
 
 logger = pyoae_logger.get_pyoae_logger('PyOAE Output Calibration Data')
@@ -54,7 +54,7 @@ parser.add_argument(
 )
 
 
-def run_cli():
+def run_cli() -> None:
     """Run main with console arguments"""
     args = parser.parse_args()
     kwargs = vars(args)

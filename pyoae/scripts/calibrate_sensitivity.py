@@ -8,7 +8,7 @@ maximum peak pressure that corresponds the a digital input amplitude
 of 1.0 re FS.
 
 Run the following command from the project root directory to start:
-    python -m calibrate_sensitivity
+    calibrate_sensitivity
 
 Note:
     Sound device IDs or names should be known beforehand and can be obtained
@@ -22,9 +22,10 @@ import argparse
 
 from pyoae import files
 from pyoae import protocols
+from pyoae import pyoae_logger
 from pyoae.device.device_config import DeviceConfig
 from pyoae.abs_calib import AbsCalibRecorder
-import pyoae.pyoae_logger as pyoae_logger
+
 
 DEVICE_CONFIG_FILE = 'device_config.json'
 
@@ -62,7 +63,7 @@ parser.add_argument(
 )
 
 
-def run_cli():
+def run_cli() -> None:
     """Run main with console arguments"""
     args = parser.parse_args()
     kwargs = vars(args)

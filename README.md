@@ -12,20 +12,51 @@ The software is actively developed, and future updates may include features such
 
 ## Requirements
 
+### Virtual Environment
+
 To use **PyOAE**, we recommend installing it as a package in a virtual
 environment to avoid conflicts with other Python packages.
 
-### Install via pip
-
 ```bash
 python3 -m venv .venv  # or python -m venv .venv (depending on your Python installation)
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+source .venv/bin/activate  # On Windows: .venv\Scripts\Activate.ps1
+```
+
+### Installation
+
+PyOAE can be installed in two different ways, depending on how you intend to use it.
+
+#### 1. Development / working inside the PyOAE repository
+
+If you are developing PyOAE itself or working directly within a cloned PyOAE repository,
+install it in *editable* mode from the project root:
+
+```bash
 pip install -e .
 ```
 
+This creates a link between the installed package and your local working copy, so that
+code changes take effect immediately without reinstallation. Any console scripts or
+entry points defined in `pyproject.toml` are also made available in your environment.
+
+*Note:* Editable installation is required only when developing PyOAE itself; it is **not**
+necessary for normal usage of the library or its command-line tools.
+
+#### 2. Using PyOAE as a dependency in another project
+
+If you only want to use PyOAE as a library in your own project, install it directly from
+the Git repository:
+
+```bash
+pip install 'pyoae @ git+https://github.com/denniszelle/pyoae.git'
+```
+
+In this case, PyOAE is installed like a regular dependency and does not require a local
+clone or editable installation.
+
 ### Python Version
 
-We recommend the use of **Python 3.12** or higher.
+PyOAE requires **Python 3.10** or higher. We recommend the use of **Python 3.12** or higher.
 
 ### Dependencies
 

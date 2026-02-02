@@ -7,7 +7,6 @@
     "ramp_duration": 5.0,
     "max_digital_output": 0.5,
     "update_interval": 100.0,
-    "live_display_duration": 10.0,
     "sync_channels": [0, 1],
     "output_input_mapping":[
         [0, 0],

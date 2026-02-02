@@ -33,7 +33,7 @@ from pyoae import helpers
 from pyoae.calib import MicroTransferFunction, OutputCalibration
 from pyoae.device.device_config import DeviceConfig
 from pyoae.dsp.containers import DpoaeMsrmtData
-from pyoae.dsp.processing import PulseDpoaeProcessor
+from pyoae.dsp.pulsed_dpoae import PulseDpoaeProcessor
 from pyoae.generator import PulseDpoaeStimulus
 from pyoae.msrmt_context import DpoaeMsrmtContext
 from pyoae.protocols import PulseDpoaeMsrmtParams

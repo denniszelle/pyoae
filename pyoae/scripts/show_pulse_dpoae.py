@@ -27,7 +27,7 @@ from matplotlib import pyplot as plt
 
 from pyoae import files
 from pyoae import pyoae_logger
-from pyoae.dsp.processing import PulseDpoaeResult
+from pyoae.dsp.pulsed_dpoae import PulseDpoaeResult
 
 
 logger = pyoae_logger.get_pyoae_logger('PyOAE Pulse-DPOAE Results')

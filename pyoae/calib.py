@@ -58,7 +58,7 @@ class SpeakerCalibData(TypedDict):
     """Channels the output calibration was performed on"""
 
     frequencies: list[float]
-    """Measured frequencies of the multitones"""
+    """Measured frequencies of the multi tones"""
 
     max_out: list[list[float]]
     """Maximum amplitude output"""

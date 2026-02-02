@@ -78,7 +78,9 @@ def setup_offline_plot(
     for i, ax_i in enumerate(axes):
         for j, ax_ij in enumerate(ax_i):
             if i == len(axes) - 1:
-                axes[-1][j].set_title(f'Channel Comparison for Input Channel {sorted_input_channels[j]}')
+                axes[-1][j].set_title(
+                    f'Channel Comparison for Input Channels {sorted_input_channels[j]}'
+                )
                 axes[-1][j].set_xlabel("Frequency (Hz)")
             else:
                 output_idc = np.where(np.asarray(input_channels) == sorted_input_channels[j])[0]
@@ -172,7 +174,7 @@ def get_channel_spectra(
     return spectra
 
 
-def plot_offline(
+def plot_offline(  # TODO: split into several functions
     sync_msrmt: SyncMsrmt,
     msrmt_ctx: MsrmtContext,
     mt_frequencies: npt.NDArray[np.float32],
@@ -227,7 +229,10 @@ def plot_offline(
     for i, ax_i in enumerate(axes):
         for j, ax_ij in enumerate(ax_i):
             if i < len(axes) - 1:
-
+                # TODO: move the loop body into dedicated
+                # functions for sake of clarity
+                # TODO: check if plotting routine can be
+                # partially merged with that of plot_result_file
                 output_idc = np.where(np.asarray(input_channels) == sorted_input_channels[j])[0]
                 if len(output_idc) > i:
                     output_idx = output_idc[i]
@@ -385,7 +390,7 @@ class OutputCalibRecorder:
             num_total_recording_samples / DeviceConfig.sample_rate
         )
 
-        # Set to false if major problem occured during calibration
+        # Set to false if major problem occurred during calibration
         self.ready_to_record = True
         self.results = None
 

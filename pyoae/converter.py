@@ -9,8 +9,9 @@ import numpy.typing as npt
 @overload
 def db_to_lin(level: float) -> float: ...
 @overload
-def db_to_lin(level: npt.NDArray[np.floating]) -> npt.NDArray[np.floating]: ...
-
+def db_to_lin(
+    level: npt.NDArray[np.floating]
+) -> npt.NDArray[np.floating]: ...
 def db_to_lin(
     level: float | npt.NDArray[np.floating],
 ) -> npt.NDArray[np.floating] | float:
@@ -24,8 +25,9 @@ def db_to_lin(
 @overload
 def lin_to_db(amplitude: float) -> float: ...
 @overload
-def lin_to_db(amplitude: npt.NDArray[np.floating]) -> npt.NDArray[np.floating]: ...
-
+def lin_to_db(
+    amplitude: npt.NDArray[np.floating]
+) -> npt.NDArray[np.floating]: ...
 def lin_to_db(
     amplitude: float | npt.NDArray[np.floating],
 ) -> npt.NDArray[np.floating] | float:
@@ -43,7 +45,6 @@ def db_spl_to_peak_mupa(
     level: npt.NDArray[np.floating]
 ) -> npt.NDArray[np.floating]:
     ...
-
 def db_spl_to_peak_mupa(
     level: float | npt.NDArray[np.floating]
 ) -> float | npt.NDArray[np.floating]:
@@ -57,7 +58,6 @@ def db_spl_to_rms_mupa(level: float) -> float: ...
 def db_spl_to_rms_mupa(
     level: npt.NDArray[np.floating]
 ) -> npt.NDArray[np.floating]: ...
-
 def db_spl_to_rms_mupa(
     level: float | npt.NDArray[np.floating]
 ) -> float | npt.NDArray[np.floating]:
@@ -72,7 +72,6 @@ def peak_mupa_to_db_spl(
     amplitude: npt.NDArray[np.floating]
 ) -> npt.NDArray[np.floating]:
     ...
-
 def peak_mupa_to_db_spl(
     amplitude: float | npt.NDArray[np.floating]
 ) -> float | npt.NDArray[np.floating]:
@@ -88,7 +87,6 @@ def rms_mupa_to_db_spl(
     amplitude: npt.NDArray[np.floating]
 ) -> npt.NDArray[np.floating]:
     ...
-
 def rms_mupa_to_db_spl(
     amplitude: float | npt.NDArray[np.floating]
 ) -> float | npt.NDArray[np.floating]:

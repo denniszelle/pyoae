@@ -156,7 +156,9 @@ class PulseDpoaeRecorder:
                 msrmt_params_i['block_duration'] * DeviceConfig.sample_rate
             )
             num_total_recording_samples = (
-                msrmt_params_i['num_averaging_blocks'] * num_block_samples * 4
+                msrmt_params_i['num_averaging_blocks']
+                * num_block_samples
+                * generator.NUM_PTPV_SEGMENTS
             )
             block_duration = num_block_samples / DeviceConfig.sample_rate
             recording_duration = (

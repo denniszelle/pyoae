@@ -121,6 +121,15 @@ def main(
         if not msrmt_params_corr:
             return
 
+        if not input_validation.validate_mic_tfs(
+            mic_trans_fun,
+            msrmt_params_corr
+        ):
+            logger.error(
+                'Number of microphone TFs and number of measurements diverge.'
+            )
+            continue
+
         dpoae_recorder = PulseDpoaeRecorder(
             msrmt_params_corr,
             channels,

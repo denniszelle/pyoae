@@ -1,6 +1,6 @@
 """Module to validate user input for the record script."""
 
-from typing import TypeVar
+from typing import Any, TypeVar
 
 import numpy as np
 
@@ -35,3 +35,16 @@ def validate_msrmt_params(msrmt_params: list[T] | T) -> list[T]:
     else:
         msrmt_params = [msrmt_params]
     return msrmt_params
+
+def validate_mic_tfs(
+    micro_tfs: list[Any] | None,
+    msrmt_params: list[Any]
+) -> bool:
+    """Validate matching length of number of microphone TFs and msrmt params"""
+    if micro_tfs is None:
+        return True
+
+    if len(micro_tfs) == len(msrmt_params):
+        return True
+
+    return False

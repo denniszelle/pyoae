@@ -39,7 +39,7 @@ from pyoae.dsp import averaging
 from pyoae.device.device_config import DeviceConfig
 from pyoae.msrmt_context import MsrmtContext
 from pyoae.protocols import MsrmtParams
-from pyoae.signals import ZeroSignal
+from pyoae.signals import Signal
 from pyoae.sync import (
     get_input_channels,
     HardwareData,
@@ -128,7 +128,7 @@ class SoaeRecorder:
 
     msrmt_ctx: MsrmtContext
 
-    signals: list[ZeroSignal]
+    signals: list[Signal]
     """List of output signals for each channel
 
     These are mute signals for SOAE acquisition.
@@ -206,7 +206,7 @@ class SoaeRecorder:
         )
 
         self.signals = [
-            ZeroSignal() for _ in range(hw_data.get_stream_output_channels())
+            Signal() for _ in range(hw_data.get_stream_output_channels())
         ]
 
         self.msrmt = SyncMsrmt(

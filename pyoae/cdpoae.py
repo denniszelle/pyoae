@@ -37,7 +37,7 @@ from pyoae.dsp.processing import ContDpoaeProcessor
 from pyoae.generator import ContDpoaeStimulus
 from pyoae.msrmt_context import DpoaeMsrmtContext
 from pyoae.protocols import DpoaeMsrmtParams
-from pyoae.signals import PeriodicRampSignal, ZeroSignal
+from pyoae.signals import PeriodicRampSignal
 from pyoae.sync import (
     get_input_channels,
     HardwareData,
@@ -78,7 +78,7 @@ class DpoaeRecorder:
     msrmt_info: list[ContDpoaeMsrmtInfo]
     """Information of measurements"""
 
-    signals: list[PeriodicRampSignal | ZeroSignal]
+    signals: list[PeriodicRampSignal]
     """List of output signals for each channel."""
 
     msrmt: SyncMsrmt | None
@@ -102,6 +102,9 @@ class DpoaeRecorder:
         log: Logger | None = None
     ) -> None:
         """Creates a DPOAE recorder for given measurement parameters."""
+
+        # TODO: verify that lists msrmt_params and mic_trans_functions have same lengths
+
         self.logger = log or get_logger()
         self.subject = subject
         self.signals = []
@@ -148,7 +151,7 @@ class DpoaeRecorder:
 
         # Initialize signals
         self.signals = [
-            ZeroSignal() for _ in range(hw_data.get_stream_output_channels())
+            PeriodicRampSignal() for _ in range(hw_data.get_stream_output_channels())
         ]
 
         for i, msrmt_params_i in enumerate(msrmt_params):

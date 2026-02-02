@@ -37,7 +37,7 @@ from pyoae.dsp.processing import PulseDpoaeProcessor
 from pyoae.generator import PulseDpoaeStimulus
 from pyoae.msrmt_context import DpoaeMsrmtContext
 from pyoae.protocols import PulseDpoaeMsrmtParams
-from pyoae.signals import PeriodicSignal, ZeroSignal
+from pyoae.signals import PeriodicSignal
 from pyoae.sync import (
     get_input_channels,
     HardwareData,
@@ -78,7 +78,7 @@ class PulseDpoaeRecorder:
     msrmt_infos: list[PulseDpoaeMsrmtInfo]
     """List of measurement information"""
 
-    signals: list[PeriodicSignal | ZeroSignal]
+    signals: list[PeriodicSignal]
     """List of output signals for each channel."""
 
     msrmt: SyncMsrmt | None
@@ -145,7 +145,7 @@ class PulseDpoaeRecorder:
         )
 
         self.signals = [
-            ZeroSignal() for _ in range(hw_data.get_stream_output_channels())
+            PeriodicSignal() for _ in range(hw_data.get_stream_output_channels())
         ]
 
         for i, msrmt_params_i in enumerate(msrmt_params):

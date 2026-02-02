@@ -103,8 +103,6 @@ class DpoaeRecorder:
     ) -> None:
         """Creates a DPOAE recorder for given measurement parameters."""
 
-        # TODO: verify that lists msrmt_params and mic_trans_functions have same lengths
-
         self.logger = log or get_logger()
         self.subject = subject
         self.signals = []

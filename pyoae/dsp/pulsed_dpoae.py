@@ -21,6 +21,13 @@ from pyoae.dsp.containers import (
 from pyoae.dsp.opt_avg import OptAverage
 
 
+ROI_BOUNDARIES = [1750.0, 3500.0]
+"""f2 frequency boundaries for region of interest lengths."""
+
+ROI_LENGTHS = [50.0, 40.0, 30.0]
+"""Durations of regions of interest in milliseconds."""
+
+
 def _msrmt_to_pulse_recording(
     msrmt_data: DpoaeMsrmtData
 ) -> PulseDpoaeRecording:
@@ -30,6 +37,29 @@ def _msrmt_to_pulse_recording(
         'average': None,
         'signal': None
     }
+
+
+def _get_roi_length(f2: float) -> float:
+    """Retrieves the length of analysis segment for a pulsed DPOAE.
+
+    The DPOAE latency depends on the specified f2 frequency with
+    lower frequencies resulting in longer latencies (specified in ms).
+
+    For a region of interest (ROI) centered around the pulsed DPOAE,
+    different minimum lengths are required to capture the complete
+    DPOAE response.
+
+    Args:
+        f2: frequency of second primary tone in Hz
+
+    Returns:
+        - length of region of interest in ms
+    """
+    if f2 < ROI_BOUNDARIES[0]:
+        return ROI_LENGTHS[0]
+    if f2 < ROI_BOUNDARIES[1]:
+        return ROI_LENGTHS[1]
+    return ROI_LENGTHS[2]
 
 
 class PulseDpoaeResult:

@@ -507,8 +507,8 @@ class SyncMsrmt(Generic[SignalT]):
         input_data: npt.NDArray[np.floating],
         output_data: npt.NDArray[np.floating],
         frames: int,
-        time: Any,
-        status: sd.CallbackFlags
+        time: Any,  # pylint: disable=unused-argument
+        status: sd.CallbackFlags  # pylint: disable=unused-argument
     ) -> None:
         """Callback for the measurement
 
@@ -525,8 +525,8 @@ class SyncMsrmt(Generic[SignalT]):
             status: Status containing information about the callback
 
         """
-        del time
-        del status
+        # del time
+        # del status
 
         # Set the end of the measurement index for this callback
         start_idx = self.live_msrmt_data.play_idx

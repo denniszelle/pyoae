@@ -271,6 +271,9 @@ class PulseDpoaeRecorder:
             input_channel = (
                 self.msrmt.hardware_data.get_unique_input_channels()[i]
             )
+            output_channels_i = (
+                self.msrmt.hardware_data.get_output_msrmt_channels(i)
+            )
             recorded_signal = self.msrmt.get_recorded_signal(input_channel)
             if not recorded_signal.size:
                 continue
@@ -283,7 +286,10 @@ class PulseDpoaeRecorder:
                 'level1': msrmt_info_i.stimulus.level1,
                 'level2': msrmt_info_i.stimulus.level2,
                 'num_block_samples': msrmt_info_i.msrmt_ctx.block_size,
-                'recorded_sync': self.msrmt.live_msrmt_data.sync_recorded
+                'recorded_sync': self.msrmt.live_msrmt_data.sync_recorded,
+                'out_ch': output_channels_i,
+                'in_ch': input_channel,
+                'msrmt_idx': i
             }
             msrmt_info_i.dpoae_processor = PulseDpoaeProcessor(
                 recording,
@@ -352,7 +358,8 @@ class PulseDpoaeRecorder:
                 average = avg,
                 raw_average = raw_avg,
                 out_ch = output_channels_i,
-                in_ch = input_channel
+                in_ch = input_channel,
+                msrmt_idx = i,
             )
             self.logger.info("Measurement saved to %s.npz", file_save_path)
 

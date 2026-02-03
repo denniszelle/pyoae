@@ -39,6 +39,9 @@ class DpoaeMsrmtData(TypedDict):
     in_ch: int | None
     """Input channel used"""
 
+    msrmt_idx: int | None
+    """Measurement index corresponding to position in protocol"""
+
 
 class ContDpoaeRecording(TypedDict):
     """Structured content from a DPOAE recording file."""

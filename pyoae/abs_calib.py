@@ -100,10 +100,12 @@ class AbsCalibRecorder(SoaeRecorder):
         file_name = 'abs_calib_msrmt_'+ time_stamp
         save_path = os.path.join(save_path, file_name)
         recorded_signal, spectrum = self.get_results(0)
+        input_channel = self.msrmt.hardware_data.get_unique_input_channels()[0]
         np.savez(
             save_path,
             spectrum=spectrum,
             recorded_signal=recorded_signal,
-            samplerate=DeviceConfig.sample_rate
+            samplerate=DeviceConfig.sample_rate,
+            in_ch = input_channel
         )
         self.logger.info("Calibration saved to %s.", save_path)

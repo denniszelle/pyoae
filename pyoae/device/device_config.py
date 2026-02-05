@@ -61,6 +61,9 @@ class DeviceConfig:
     update_interval: ClassVar[float] = 100.
     """Interval in milliseconds for updating the plots."""
 
+    enable_output_phase_calib: bool = False
+    """Flag to enable or disable the output phase calibration."""
+
     sync_channels: ClassVar[list[int]] = [0, 1]
     """Sync channel of format [output_channel, input_channel]"""
 

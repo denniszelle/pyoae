@@ -97,14 +97,14 @@ def setup_offline_plot(
 
 def process_spectrum(
     recorded_signal: npt.NDArray[np.float32],
-    correction_tf: MicroTransferFunction | None
+    micro_tf: MicroTransferFunction | None
 ) -> npt.NDArray[np.float32]:
     """Processes recorded signal to obtain spectrum.
 
     Args:
         recorded_signal: float array of measurement data
         block_size: Size of each recording block in samples
-        correction_tf: Transfer function of the microphone
+        micro_tf: Transfer function of the microphone
 
     Returns:
         Array of floats containing the spectrum.
@@ -114,10 +114,10 @@ def process_spectrum(
     # assume FFT bins represent sine waves and estimate
     # RMS by dividing by sqrt(2)
     spectrum /= np.sqrt(2)
-    if correction_tf is None:
+    if micro_tf is None:
         spectrum = 20*np.log10(spectrum)
     else:
-        mic_tf = correction_tf.get_interp_transfer_function(
+        mic_tf = micro_tf.get_interp_transfer_function(
             num_samples = len(recorded_signal)
         )
         spectrum /= abs(mic_tf)

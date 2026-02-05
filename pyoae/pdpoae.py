@@ -164,9 +164,6 @@ class PulseDpoaeRecorder:
             )
 
             if mic_trans_fun:
-                mic_trans_fun[i].num_samples = num_block_samples
-                mic_trans_fun[i].sample_rate = DeviceConfig.sample_rate
-                mic_trans_fun[i].interpolate_transfer_fun()
                 mic_trans_fun_i = mic_trans_fun[i]
             else:
                 mic_trans_fun_i = None

@@ -117,7 +117,10 @@ def process_spectrum(
     if correction_tf is None:
         spectrum = 20*np.log10(spectrum)
     else:
-        spectrum /= correction_tf.amplitudes
+        mic_tf = correction_tf.get_interp_transfer_function(
+            num_samples = len(recorded_signal)
+        )
+        spectrum /= abs(mic_tf)
         spectrum = 20*np.log10(spectrum/20)
 
     return spectrum.astype(np.float32)
@@ -418,9 +421,6 @@ class OutputCalibRecorder:
             mic_transfer_functions = []
             if len(mic_trans_fun) == len(active_in_channels):
                 for trans_fun_i in mic_trans_fun:
-                    trans_fun_i.num_samples = num_block_samples
-                    trans_fun_i.sample_rate = DeviceConfig.sample_rate
-                    trans_fun_i.interpolate_transfer_fun()
                     mic_transfer_functions.append(trans_fun_i)
             else:
                 self.ready_to_record = False

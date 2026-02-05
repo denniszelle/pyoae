@@ -34,7 +34,7 @@ import numpy.typing as npt
 
 from pyoae import get_logger
 from pyoae import helpers
-from pyoae.calib import MicroTransferFunction
+from pyoae.calib_storage import MicroTransferFunction
 from pyoae.dsp import averaging
 from pyoae.device.device_config import DeviceConfig
 from pyoae.msrmt_context import MsrmtContext

@@ -22,9 +22,10 @@ import argparse
 
 from pyoae import files
 from pyoae import protocols
+from pyoae import pyoae_logger
 from pyoae.device.device_config import DeviceConfig
 from pyoae.abs_calib import AbsCalibRecorder
-import pyoae.pyoae_logger as pyoae_logger
+
 
 DEVICE_CONFIG_FILE = 'device_config.json'
 
@@ -34,20 +35,24 @@ logger = pyoae_logger.get_pyoae_logger(
 )
 
 def main(
-    save: bool = False
+    save: bool = False,
+    input_ch: int | None = None,
 ) -> None:
     """Main function executing a sensitivity measurement."""
 
     logger.info('Sensitivity calibration.')
     if save:
         logger.info('Recording will be saved.')
+    if not input_ch:
+        input_ch = 0
+    logger.info('Use input channel: %s', input_ch)
 
     logger.info('Loading global configuration from %s.', DEVICE_CONFIG_FILE)
     files.load_device_config(DEVICE_CONFIG_FILE)
     logger.info('Device Configuration: %s', DeviceConfig())
 
     msrmt_params = protocols.get_default_soae_msrmt_params()
-    recorder = AbsCalibRecorder(msrmt_params)
+    recorder = AbsCalibRecorder(msrmt_params, [input_ch])
     recorder.record()
     if save:
         recorder.save_recording()
@@ -55,14 +60,25 @@ def main(
 
 parser = argparse.ArgumentParser(description='PyOAE Sensitivity Calibration')
 parser.add_argument(
+    '--input_ch',
+    default=argparse.SUPPRESS,
+    type=int
+)
+parser.add_argument(
     '--save',
     action=argparse.BooleanOptionalAction,
     default=False,
     help='Save measurement results and data to files.'
 )
+parser.add_argument(
+    '--mic',
+    default=argparse.SUPPRESS,
+    type=str,
+    help='Specify path to microphone calibration JSON file.'
+)
 
 
-def run_cli():
+def run_cli() -> None:
     """Run main with console arguments"""
     args = parser.parse_args()
     kwargs = vars(args)

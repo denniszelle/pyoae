@@ -25,7 +25,7 @@ import sys
 import sounddevice as sd
 
 
-def print_info(search_param: str | int | None = None):
+def print_info(search_param: str | int | None = None) -> None:
     """Print info about devices."""
     if search_param is None:
         search_param = ''
@@ -38,7 +38,7 @@ def print_info(search_param: str | int | None = None):
             print(f'{device}\n')
 
 
-def run_cli():
+def run_cli() -> None:
     """Run printing info with console arguments."""
     # Obtain argument if given an possibly convert to integer
     if len(sys.argv) > 1:

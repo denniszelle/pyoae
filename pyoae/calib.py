@@ -49,11 +49,22 @@ class SpeakerCalibData(TypedDict):
     Container is compatible with JSON export.
     """
     date: str
+    """Date the output calibration was performed"""
+
+    output_channels: list[int]
+    """Channels the output calibration was performed on"""
+
+    input_channels: list[int]
+    """Channels the output calibration was performed on"""
+
     frequencies: list[float]
-    max_out_ch01: list[float]
-    max_out_ch02: list[float]
-    phase_ch01: list[float]
-    phase_ch02: list[float]
+    """Measured frequencies of the multitones"""
+
+    max_out: list[list[float]]
+    """Maximum amplitude output"""
+
+    phase: list[list[float]]
+    """Phase shift of the first given channel"""
 
 
 def get_empty_micro_calib_data() -> MicroCalibData:
@@ -86,11 +97,11 @@ def get_empty_speaker_calib_data() -> SpeakerCalibData:
     """Returns an empty container for speaker-calibration data."""
     d: SpeakerCalibData = {
         'date': '',
+        'output_channels': [],
+        'input_channels': [],
         'frequencies': [],
-        'max_out_ch01': [],
-        'max_out_ch02': [],
-        'phase_ch01': [],
-        'phase_ch02': []
+        'max_out': [],
+        'phase': []
     }
     return d
 
@@ -110,6 +121,12 @@ class OutputCalibration:
     phases: npt.NDArray[np.float32]
     """Phases of the transfer function in radiant."""
 
+    output_channels: list[int]
+    """Output channels used for calibration"""
+
+    input_channels: list[int]
+    """Input channels used for calibration"""
+
     num_samples: int | None
     """Number of samples for which the transfer function was interpolated."""
 
@@ -127,12 +144,11 @@ class OutputCalibration:
     ) -> None:
         self.date = calib_data['date']
         self.frequencies = np.array(calib_data['frequencies'], dtype=np.float32)
-        amp_ch01 = np.array(calib_data['max_out_ch01'], dtype=np.float32)
-        amp_ch02 = np.array(calib_data['max_out_ch02'], dtype=np.float32)
-        self.amplitudes = np.array([amp_ch01, amp_ch02], dtype=np.float32)
-        phi_ch01 = np.array(calib_data['phase_ch01'], dtype=np.float32)
-        phi_ch02 = np.array(calib_data['phase_ch02'], dtype=np.float32)
-        self.phases = np.array([phi_ch01, phi_ch02], dtype=np.float32)
+        self.amplitudes = np.array(calib_data['max_out'])
+        self.phases = np.array([calib_data['phase']], dtype=np.float32)
+
+        self.output_channels = calib_data['output_channels']
+        self.input_channels = calib_data['input_channels']
 
         self.num_samples = num_samples
         self.sample_rate = sample_rate
@@ -148,7 +164,7 @@ class OutputCalibration:
 
         amplitudes_ip = []
         phases_ip = []
-        for i in range(2):
+        for i in range(len(self.output_channels)):
             h_ip = np.interp(
                 frequencies_ip, self.frequencies, self.amplitudes[i,:]
             )

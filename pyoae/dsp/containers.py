@@ -33,6 +33,15 @@ class DpoaeMsrmtData(TypedDict):
     recorded_sync: npt.NDArray[np.float32]
     """Raw signal of the sync signal"""
 
+    out_ch: list[int] | None
+    """Output channels used"""
+
+    in_ch: int | None
+    """Input channel used"""
+
+    msrmt_idx: int | None
+    """Measurement index corresponding to position in protocol"""
+
 
 class ContDpoaeRecording(TypedDict):
     """Structured content from a DPOAE recording file."""

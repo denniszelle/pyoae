@@ -61,8 +61,11 @@ class DeviceConfig:
     update_interval: ClassVar[float] = 100.
     """Interval in milliseconds for updating the plots."""
 
-    live_display_duration: ClassVar[float] = 100.
-    """Duration that will be displayed in the live-time plot in milliseconds."""
+    sync_channels: ClassVar[list[int]] = [0, 1]
+    """Sync channel of format [output_channel, input_channel]"""
+
+    output_input_mapping: ClassVar[list[list[int]]] = [[0, 0], [1, 0]]
+    """Mapping of output channels to input channels"""
 
     @classmethod
     def set(cls, key, value) -> None:
@@ -93,5 +96,4 @@ class DeviceConfig:
             Use ramp: {self.use_ramp}
             Ramp duration: {self.ramp_duration} ms
             Update interval: {self.update_interval} ms
-            Live display: {self.live_display_duration} ms
         '''

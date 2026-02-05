@@ -16,10 +16,10 @@ Command-line arguments:
 
 import argparse
 
-from pyoae import files
-from pyoae.calib import OutputCalibration
 from pyoae import calibrator
-import pyoae.pyoae_logger as pyoae_logger
+from pyoae import files
+from pyoae import pyoae_logger
+from pyoae.calib import OutputCalibration
 
 
 logger = pyoae_logger.get_pyoae_logger('PyOAE Output Calibration Data')
@@ -54,7 +54,7 @@ parser.add_argument(
 )
 
 
-def run_cli():
+def run_cli() -> None:
     """Run main with console arguments"""
     args = parser.parse_args()
     kwargs = vars(args)

@@ -13,7 +13,6 @@ from pyoae import get_logger
 from pyoae.calib import OutputCalibration
 from pyoae.device.device_config import DeviceConfig
 from pyoae.protocols import DpoaeMsrmtParams, PulseDpoaeMsrmtParams, PulseStimulus
-# from pyoae.signals import PeriodicRampSignal
 
 
 SYNC_CROSS: Final[int] = 10
@@ -119,7 +118,7 @@ def create_ptpv_signals(
     amplitude: float,
     phase_shift: float,
     num_block_samples: int,
-    num_segments: int = 4
+    num_segments: int = NUM_PTPV_SEGMENTS
 ) -> list[npt.NDArray[np.float32]]:
     """Creates a list with PTPV signals."""
     # Generate output signals
@@ -172,8 +171,10 @@ class ContDpoaeStimulus(DpoaeStimulus):
         self.f2 = correct_frequency(msrmt_params['f2'], block_duration)
         if msrmt_params['f1'] is None:
             if msrmt_params['f2f1_ratio'] is None:
+                logger.error(
+                    'Neither f1 nor f2f1_ratio set. Please adjust protocol'
+                )
                 self.f1 = 0.0  # invalid stimulus parameters
-                # TODO: log error
             else:
                 self.f1 = self.f2/msrmt_params['f2f1_ratio']
                 self.f1 = correct_frequency(self.f1, block_duration)
@@ -187,6 +188,7 @@ class ContDpoaeStimulus(DpoaeStimulus):
     def generate_stimuli(
         self,
         num_block_samples: int,
+        output_channels: list[int],
         output_calibration: OutputCalibration | None = None
     ) -> tuple[npt.NDArray[np.float32], npt.NDArray[np.float32]]:
         """Generates primary tones for continuous DPOAE acquisition."""
@@ -203,12 +205,12 @@ class ContDpoaeStimulus(DpoaeStimulus):
                 self.level1
             )
             amplitude1 = output_calibration.pressure_to_full_scale(
-                0,
+                output_channels[0],
                 pressure1,
                 self.f1
             )
             amplitude2 = output_calibration.pressure_to_full_scale(
-                1,
+                output_channels[1],
                 pressure2,
                 self.f2
             )
@@ -240,13 +242,15 @@ class PulseDpoaeStimulus(DpoaeStimulus):
         self,
         msrmt_params: PulseDpoaeMsrmtParams
     ) -> None:
-        """Calculate primary-tone frequencies f1 and f2 for pulsed DPOAE acquisition."""
+        """Calculate primary-tone frequencies for pulsed DPOAE acquisition."""
         self.logger = get_logger()
         self.f2 = msrmt_params['f2']
         if msrmt_params['f1'] is None:
             if msrmt_params['f2f1_ratio'] is None:
+                logger.error(
+                    'Neither f1 nor f2f1_ratio set. Please adjust protocol'
+                )
                 self.f1 = 0.0  # invalid stimulus parameters
-                # TODO: log error
             else:
                 self.f1 = self.f2/msrmt_params['f2f1_ratio']
         else:

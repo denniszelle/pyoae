@@ -5,6 +5,7 @@ from enum import auto, Enum
 from logging import Logger
 from multiprocessing import shared_memory
 import multiprocessing as mp
+import sys
 from time import sleep
 from typing import Any, Generic, Literal, Final, TypeVar
 
@@ -15,6 +16,7 @@ import sounddevice as sd
 
 from pyoae import generator
 from pyoae import get_logger
+from pyoae.device.device_config import DeviceConfig
 from pyoae.plotting import LivePlotProcess, MsrmtEvents
 from pyoae.signals import Signal
 
@@ -31,12 +33,6 @@ SYNC_MIN_SNR: Final[float] = 30.0
 
 Values below that threshold will raise a warning.
 """
-
-SYNC_OUTPUT_CHANNEL: Final[int] = 0
-"""Output channel of the sync signal."""
-
-SYNC_INPUT_CHANNEL: Final[int] = 1
-"""Input channel to record the sync signal."""
 
 NUM_INIT_RUNS: Final[int] = 10
 """Number of initialization runs to clear device buffers.
@@ -134,6 +130,22 @@ class RecordingData:
     """Block size of the measurement device."""
 
 
+def get_input_channels(
+        output_channels: list[int]
+    ):
+    """Return a list of input channels"""
+
+    input_channels = []
+    for output_channel_i in output_channels:
+        mapping = DeviceConfig.output_input_mapping
+        for mapping_pair in mapping:
+            if mapping_pair[0] == output_channel_i:
+                input_channels.append(
+                    mapping_pair[1]
+                )
+    return input_channels
+
+
 @dataclass
 class HardwareData:
     """Basic information about input and output hardware."""
@@ -150,6 +162,66 @@ class HardwareData:
     output_device: int | str
     """Numeric ID or name of the output device."""
 
+    output_channels: list[int]
+
+    input_channels: list[int]
+
+    max_in_channels: int | None = None
+
+    max_out_channels: int | None = None
+
+    def get_stream_input_channels(self) -> int:
+        """Return input_channels suitable for sd.Stream."""
+
+        if self.max_in_channels is None:
+            dev = sd.query_devices(self.input_device)
+            self.max_in_channels = dev['max_input_channels'] # type: ignore
+
+        if not isinstance(self.max_in_channels, int):
+            return -1
+
+        if sys.platform == 'win32':
+            # Windows requires the exact device channel count
+            return self.max_in_channels
+
+        if sys.platform in ('darwin', 'linux'):
+            # macOS and Linux allow fewer channels
+            return self.n_in_channels
+
+        return self.n_in_channels
+
+    def get_stream_output_channels(self) -> int:
+        """Return output_channels suitable for sd.Stream"""
+
+        if self.max_out_channels is None:
+            dev = sd.query_devices(self.output_device)
+            self.max_out_channels = dev['max_output_channels'] # type: ignore
+
+        if not isinstance(self.max_out_channels, int):
+            return -1
+
+        if sys.platform == 'win32':
+            # Windows requires the exact device channel count
+            return self.max_out_channels
+
+        if sys.platform in ('darwin', 'linux'):
+            # macOS and Linux allow fewer channels
+            return self.max_out_channels
+
+        return self.max_out_channels
+
+    def get_unique_input_channels(self) -> list[int]:
+        """Return list of unique input channels"""
+        active_in_channels = list({
+            b for a, b in DeviceConfig.output_input_mapping
+            if a in self.output_channels
+        })
+        return active_in_channels
+
+    def get_output_msrmt_channels(self, msrmt_idx) -> list[int]:
+        """Return list of output channels for a given measurement index"""
+        return self.output_channels[2*msrmt_idx:2*msrmt_idx+2]
+
 
 @dataclass
 class LiveMsrmtData(Generic[SignalT]):
@@ -165,7 +237,7 @@ class LiveMsrmtData(Generic[SignalT]):
     """DAQ latency of the measurement device in samples.
 
     The latency of the data acquisition is determined by presenting
-    a tone burst on SYNC_OUTPUT_CHANNEL and recording it via an
+    a tone burst on the sync output channel and recording it via an
     electric connection (short circuit) on SYNC_IN_CHANNEL.
 
     By presenting a mute signal of length latency_samples,
@@ -192,7 +264,7 @@ class LiveMsrmtData(Generic[SignalT]):
     For more detailed information, see the documentation of sounddevice.Stream
     """
 
-    recorded_signal: npt.NDArray[np.float32]
+    recorded_signal: list[npt.NDArray[np.float32]]
     """1D NumPy array with recorded main measurement."""
 
 
@@ -231,6 +303,9 @@ class SyncMsrmt(Generic[SignalT]):
     When this counter reaches the predefined number of initial runs,
     set by `NUM_INIT_RUNS` the measurement state switches to SYNCING.
     """
+
+    shm: list[shared_memory.SharedMemory]
+    """List of shared memory objects for recorded signal"""
 
     monitoring_amp: npt.NDArray[np.float32]
     """Signal amplitude of monitoring channel during playback start."""
@@ -286,17 +361,27 @@ class SyncMsrmt(Generic[SignalT]):
         sync_pulse = generator.generate_sync(self.recording_data.fs)
         sync_output[:len(sync_pulse)] = sync_pulse
 
-        self.shm = shared_memory.SharedMemory(
-            create=True,
-            size=self.recording_data.msrmt_samples * np.float32().nbytes
-        )
-        recorded_signal = np.ndarray(
-            (self.recording_data.msrmt_samples,),
-            dtype=np.float32,
-            buffer=self.shm.buf
-        )
+
+        self.shm = []
+        recorded_signal = []
+        for i in range(hardware_data.get_stream_input_channels()-1):
+            if i in hardware_data.get_unique_input_channels():
+            # Only setup shared memory for channels that are used.
+                self.shm.append(
+                        shared_memory.SharedMemory(
+                        create=True,
+                        size=self.recording_data.msrmt_samples * np.float32().nbytes
+                    )
+                )
+                recorded_signal.append(np.ndarray(
+                        (self.recording_data.msrmt_samples,),
+                        dtype=np.float32,
+                        buffer=self.shm[-1].buf
+                    )
+                )
+
         self.record_idx_share = mp.Value('i', 0)
-        recorded_signal[:] = 0
+
         self.block_duration = block_duration
 
         self.live_msrmt_data = LiveMsrmtData[SignalT](
@@ -394,19 +479,27 @@ class SyncMsrmt(Generic[SignalT]):
             )
         self.live_msrmt_data.latency_samples = max(int(lag), 0)
 
-    def get_recorded_signal(self) -> npt.NDArray[np.float32]:
+    def get_recorded_signal(self, input_channel) -> npt.NDArray[np.float32]:
         """Returns the recorded signal.
 
         Returns:
             Recorded signal with the length of already recorded data
 
         """
+        if input_channel not in self.hardware_data.get_unique_input_channels():
+            self.logger.error(
+                'Invalid input channel for get_recorded_signal. \n'
+                f'{input_channel} was given but options are only'
+                f'{self.hardware_data.get_unique_input_channels()}')
+            return np.zeros(0,np.float32)
+        idx = self.hardware_data.get_unique_input_channels().index(input_channel)
         if self.state in [MsrmtState.RECORDING, MsrmtState.END_RECORDING]:
-            return self.live_msrmt_data.recorded_signal[
+            return self.live_msrmt_data.recorded_signal[idx][
                 :self.live_msrmt_data.record_idx
             ]
         if self.state in [MsrmtState.FINISHING, MsrmtState.FINISHED]:
-            return self.live_msrmt_data.recorded_signal
+
+            return self.live_msrmt_data.recorded_signal[idx]
         return np.zeros(0,np.float32)
 
     def msrmt_callback(
@@ -414,8 +507,8 @@ class SyncMsrmt(Generic[SignalT]):
         input_data: npt.NDArray[np.floating],
         output_data: npt.NDArray[np.floating],
         frames: int,
-        time: Any,
-        status: sd.CallbackFlags
+        time: Any,  # pylint: disable=unused-argument
+        status: sd.CallbackFlags  # pylint: disable=unused-argument
     ) -> None:
         """Callback for the measurement
 
@@ -432,8 +525,8 @@ class SyncMsrmt(Generic[SignalT]):
             status: Status containing information about the callback
 
         """
-        del time
-        del status
+        # del time
+        # del status
 
         # Set the end of the measurement index for this callback
         start_idx = self.live_msrmt_data.play_idx
@@ -455,12 +548,11 @@ class SyncMsrmt(Generic[SignalT]):
                 # multiple of device block size
                 # if len(data) < frames:
                 #     data = np.pad(data, (0, frames-len(data)))
-
                 data_stereo = np.zeros(
-                    (frames, self.hardware_data.n_out_channels)
+                    (frames, self.hardware_data.get_stream_output_channels())
                 )
                 # Add data to sync output channel
-                data_stereo[:, SYNC_OUTPUT_CHANNEL] = data
+                data_stereo[:, DeviceConfig.sync_channels[0]] = data
                 output_data[:] = data_stereo
 
             case MsrmtState.RECORDING | MsrmtState.STARTING:
@@ -506,7 +598,7 @@ class SyncMsrmt(Generic[SignalT]):
                 if end_idx < len(self.live_msrmt_data.sync_recorded):
                     self.live_msrmt_data.sync_recorded[
                         rec_start_idx:rec_end_idx
-                    ] = input_data[:frames, SYNC_INPUT_CHANNEL]
+                    ] = input_data[:frames, DeviceConfig.sync_channels[1]]
 
                 else:
                     # End of sync recording reached
@@ -517,7 +609,7 @@ class SyncMsrmt(Generic[SignalT]):
                     )
                     rec_end_idx = rec_start_idx + num_remaining_frames
                     self.live_msrmt_data.sync_recorded[rec_start_idx:] = (
-                        input_data[:num_remaining_frames, SYNC_INPUT_CHANNEL]
+                        input_data[:num_remaining_frames, DeviceConfig.sync_channels[1]]
                     )
                     self.set_state(MsrmtState.COMPUTING)
                 self.live_msrmt_data.record_idx = rec_end_idx
@@ -545,7 +637,7 @@ class SyncMsrmt(Generic[SignalT]):
                     # try to detect an early measurement start
                     # (see `USE_EARLY_LATENCY_CORRECTION` for
                     # explanation)
-                    max_monitor = np.max(input_data[:, SYNC_INPUT_CHANNEL])
+                    max_monitor = np.max(input_data[:, DeviceConfig.sync_channels[1]])
                     if self.monitoring_amp.size:
                         # compare current maximum to average in previous blocks
                         signal_thresh = 1.5 * np.mean(self.monitoring_amp)
@@ -575,10 +667,13 @@ class SyncMsrmt(Generic[SignalT]):
                         rec_start_idx
                     )
                     num_remaining_frames = rec_end_idx - msrmt_start_idx
-
-                    self.live_msrmt_data.recorded_signal[
-                        :num_remaining_frames
-                    ] = input_data[frames - num_remaining_frames:, 0]
+                    counter = 0
+                    for i in range(self.hardware_data.n_in_channels):
+                        if i in self.hardware_data.get_unique_input_channels():
+                            self.live_msrmt_data.recorded_signal[counter][
+                                :num_remaining_frames
+                            ] = input_data[frames - num_remaining_frames:, i]
+                            counter += 1
 
                     self.live_msrmt_data.record_idx = num_remaining_frames
                     self.msrmt_events.enable_plot.set()
@@ -593,13 +688,21 @@ class SyncMsrmt(Generic[SignalT]):
                     num_remaining_frames = (
                         self.recording_data.msrmt_samples - rec_start_idx
                     )
-                    self.live_msrmt_data.recorded_signal[
-                        rec_start_idx:rec_start_idx+num_remaining_frames
-                    ] = input_data[:num_remaining_frames, 0]
+                    counter = 0
+                    for i in range(self.hardware_data.n_in_channels):
+                        if i in self.hardware_data.get_unique_input_channels():
+                            self.live_msrmt_data.recorded_signal[counter][
+                                rec_start_idx:rec_start_idx+num_remaining_frames
+                            ] = input_data[:num_remaining_frames, i]
+                            counter += 1
                     self.set_state(MsrmtState.FINISHING)
                 else:
-                    self.live_msrmt_data.recorded_signal[
-                        rec_start_idx:rec_end_idx] = input_data[:frames, 0]
+                    counter = 0
+                    for i in range(self.hardware_data.n_in_channels):
+                        if i in self.hardware_data.get_unique_input_channels():
+                            self.live_msrmt_data.recorded_signal[counter][
+                                rec_start_idx:rec_end_idx] = input_data[:frames, i]
+                            counter += 1
 
                 self.live_msrmt_data.record_idx = rec_end_idx
             case MsrmtState.FINISHED:
@@ -620,8 +723,8 @@ class SyncMsrmt(Generic[SignalT]):
                 samplerate=self.recording_data.fs,
                 blocksize=self.recording_data.block_size,
                 channels=(
-                    self.hardware_data.n_in_channels,
-                    self.hardware_data.n_out_channels
+                    self.hardware_data.get_stream_input_channels(),
+                    self.hardware_data.get_stream_output_channels()
                 ),
                 dtype='float32',
                 callback=self.msrmt_callback,
@@ -658,7 +761,7 @@ class SyncMsrmt(Generic[SignalT]):
     def start_plot_process(self) -> None:
         """Start plotting in a separate process"""
         self.plot_process = LivePlotProcess(
-            self.shm.name,
+            self.shm,
             self.record_idx_share,
             self.recording_data.msrmt_samples,
             self.recording_data.fs,
@@ -679,9 +782,10 @@ class SyncMsrmt(Generic[SignalT]):
         if hasattr(
             self, 'shm'
         ):
-            recorded_copy = self.live_msrmt_data.recorded_signal[
-                :self.live_msrmt_data.record_idx
-            ].copy()
-            self.shm.close()
-            self.shm.unlink()
-            self.live_msrmt_data.recorded_signal = recorded_copy
+            for i, shm_i in enumerate(self.shm):
+                recorded_copy = self.live_msrmt_data.recorded_signal[i][
+                    :self.live_msrmt_data.record_idx
+                ].copy()
+                shm_i.close()
+                shm_i.unlink()
+                self.live_msrmt_data.recorded_signal[i] = recorded_copy

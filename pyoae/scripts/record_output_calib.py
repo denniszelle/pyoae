@@ -23,9 +23,9 @@ import argparse
 from pyoae import files
 from pyoae import input_validation
 from pyoae import protocols
-from pyoae.calib import MicroTransferFunction
+from pyoae.calib_storage import MicroTransferFunction
 from pyoae.device.device_config import DeviceConfig
-from pyoae.calibrator import OutputCalibRecorder
+from pyoae.output_calib import OutputCalibRecorder
 import pyoae.pyoae_logger as pyoae_logger
 
 DEVICE_CONFIG_FILE = 'device_config.json'

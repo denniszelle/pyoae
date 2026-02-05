@@ -30,7 +30,7 @@ import numpy as np
 from pyoae import generator
 from pyoae import get_logger
 from pyoae import helpers
-from pyoae.calib import MicroTransferFunction, OutputCalibration
+from pyoae.calib_storage import MicroTransferFunction, OutputCalibration
 from pyoae.device.device_config import DeviceConfig
 from pyoae.dsp.containers import DpoaeMsrmtData
 from pyoae.dsp.processing import PulseDpoaeProcessor

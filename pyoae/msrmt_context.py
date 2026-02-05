@@ -8,7 +8,7 @@ and update the associated plots.
 
 from dataclasses import dataclass
 
-from pyoae.calib import MicroTransferFunction
+from pyoae.calib_storage import MicroTransferFunction
 
 
 @dataclass

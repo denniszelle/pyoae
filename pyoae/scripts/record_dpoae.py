@@ -34,7 +34,7 @@ import os
 from pyoae import files
 from pyoae import input_validation
 from pyoae import pyoae_logger
-from pyoae.calib import MicroTransferFunction, OutputCalibration
+from pyoae.calib_storage import MicroTransferFunction, OutputCalibration
 from pyoae.cdpoae import DpoaeRecorder
 from pyoae.device.device_config import DeviceConfig
 

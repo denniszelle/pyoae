@@ -15,7 +15,7 @@ import numpy.typing as npt
 from pyoae import files
 from pyoae import generator
 from pyoae import get_logger
-from pyoae.calib import (
+from pyoae.calib_storage import (
     MicroTransferFunction,
     OutputCalibration,
     SpeakerCalibData

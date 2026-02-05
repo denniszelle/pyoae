@@ -10,6 +10,7 @@ Note:
 
 from typing import TypedDict
 from logging import Logger
+from numbers import Complex
 
 import numpy as np
 import numpy.typing as npt
@@ -19,29 +20,59 @@ from pyoae.device.device_config import DeviceConfig
 
 class AbsCalibData(TypedDict):
     """Container for absolute-calibration data in calibration file."""
+
     date: str
+    """Date of the absolute calibration"""
+
     ref_frequency: float
+    """Reference frequency of the absolute calibration"""
+
     sensitivity: float
+    """Sensitivity of the microphone at the reference frequency"""
+
     calib_type: int
+    """Identifier of the calibration type."""
 
 
-class TransferFunData(TypedDict):
+class MicroTransferFunData(TypedDict):
     """Container for transfer-function data in calibration file."""
+
     date: str
+    """Date of the microphone transfer function calibration"""
+
     frequencies: list[float]
+    """Frequencies for which the transfer function has been evaluated"""
+
     amplitudes: list[float]
+    """Amplitudes of the transfer function"""
+
     phases: list[float]
+    """Phase values of the transfer function"""
 
 
 class MicroCalibData(TypedDict):
     """Container to load a microphone calibration file."""
+
     doc_type: str
+    """Document type the loaded calibration"""
+
     rev: int
+    """Revision number of the document"""
+
     probe_sn: str
+    """Serial number of the probe"""
+
     model: str
+    """Model identifier of the probe"""
+
     side: str
+    """Measurement side for the probe"""
+
     abs_calibration: AbsCalibData
-    transfer_function: TransferFunData
+    """Sensitivity calibration of the probe"""
+
+    transfer_function: MicroTransferFunData
+    """Transfer function calibration of the probe"""
 
 
 class SpeakerCalibData(TypedDict):
@@ -76,7 +107,7 @@ def get_empty_micro_calib_data() -> MicroCalibData:
         'sensitivity': 1,
         'calib_type': 2
     }
-    t: TransferFunData = {
+    t: MicroTransferFunData = {
         'date': '',
         'frequencies': [1.0, 20000.0],
         'amplitudes': [1.0, 1.0],
@@ -110,6 +141,9 @@ def get_empty_speaker_calib_data() -> SpeakerCalibData:
 class OutputCalibration:
     """Linear scaling functions to apply output calibration."""
 
+    logger: Logger
+    """Class logger for debug, info, warning and error messages"""
+
     frequencies: npt.NDArray[np.float32]
     """Frequencies of the output sensitivity function."""
 
@@ -141,10 +175,17 @@ class OutputCalibration:
         self,
         calib_data: SpeakerCalibData,
         num_samples: int | None = None,
-        sample_rate: float | None = None
+        sample_rate: float | None = None,
+        log: Logger | None = None
     ) -> None:
+        """Initializes an scaled input-channel transfer function."""
+
+        self.logger = log or get_logger()
+
         self.date = calib_data['date']
-        self.frequencies = np.array(calib_data['frequencies'], dtype=np.float32)
+        self.frequencies = np.array(
+            calib_data['frequencies'], dtype=np.float32
+        )
         self.amplitudes = np.array(calib_data['max_out'])
         self.phases = np.array([calib_data['phase']], dtype=np.float32)
 
@@ -187,16 +228,24 @@ class OutputCalibration:
             ch: index of the output channel starting at 0
             f: frequency of the output stimulus
         """
-        if ch >= self.amplitudes.shape[0]:
-            # TODO: log error
+
+        if ch not in self.output_channels:
+            self.logger.error('Output channel was not calibrated.')
             return 0.0
 
-        # TODO: check frequency boundaries
+        ch_idx = self.output_channels.index(ch)
+
+        if f < np.min(self.frequencies) or f > np.max(self.frequencies):
+            self.logger.warning(
+                'Stimulus frequency %s Hz outside calibrated boundaries.',
+                f
+            )
+
         # find frequency-bin index
         # (alternatively, we could store the frequency resolution
         # in order to calculate the frequency-bin index)
         idx = np.argmin(np.abs(self.frequencies - f))
-        return self.amplitudes[ch, idx]
+        return self.amplitudes[ch_idx, idx]
 
     def pressure_to_full_scale(self, ch: int, p: float, f: float) -> float:
         """Calculates digital full-scale amplitude from peak pressure."""
@@ -222,7 +271,7 @@ class MicroTransferFunction:
     def __init__(
         self,
         abs_calib: AbsCalibData,
-        trans_fun: TransferFunData,
+        trans_fun: MicroTransferFunData,
         log: Logger | None = None
     ) -> None:
         """Initializes an scaled input-channel transfer function."""
@@ -243,18 +292,24 @@ class MicroTransferFunction:
         self.raw_amps /= abs_calib['sensitivity']
 
 
-    # def get_sensitivity(self, f: float) -> Complex:
-    #     """Returns the output sensitivity in DFS/muPa.
+    def get_sensitivity(self, f: float) -> Complex:
+        """Returns the output sensitivity in DFS/muPa.
 
-    #     Args:
-    #         f: frequency at which transfer function should be sampled
-    #     """
-    #     # TODO: check frequency boundaries
-    #     # find frequency-bin index
-    #     # (alternatively, we could store the frequency resolution
-    #     # in order to calculate the frequency-bin index)
-    #     idx = np.argmin(np.abs(self.frequencies - f))
-    #     return self.amplitudes[idx]
+        Args:
+            f: frequency at which transfer function should be sampled
+        """
+
+        if f < np.min(self.frequencies) or f > np.max(self.frequencies):
+            self.logger.warning(
+                '%s Hz outside microphone calibrated boundaries.',
+                f
+            )
+
+        # find frequency-bin index
+        # (alternatively, we could store the frequency resolution
+        # in order to calculate the frequency-bin index)
+        idx = np.argmin(np.abs(self.frequencies - f))
+        return self.amplitudes[idx]
 
     def get_interp_transfer_function(
         self,

@@ -15,7 +15,7 @@ from typing import (
 import types
 import numpy as np
 
-from pyoae import calib
+from pyoae import calib_storage
 from pyoae import get_logger
 from pyoae import protocols
 from pyoae.device.device_config import DeviceConfig
@@ -71,7 +71,7 @@ def load_device_config(file_path: str) -> None:
         log.error('Failed to load device configuration from %s', file_path)
 
 
-def load_micro_calib(file_path: str | Path) -> calib.MicroCalibData | None:
+def load_micro_calib(file_path: str | Path) -> calib_storage.MicroCalibData | None:
     """Loads the microphone calibration data from JSON."""
     d = {}
     if file_path:
@@ -79,7 +79,7 @@ def load_micro_calib(file_path: str | Path) -> calib.MicroCalibData | None:
     if not d:
         log.error('Micro calibration %s not found.', file_path)
         return None
-    micro_calib_data = calib.get_empty_micro_calib_data()
+    micro_calib_data = calib_storage.get_empty_micro_calib_data()
 
     if d:
         for key in micro_calib_data:
@@ -89,7 +89,7 @@ def load_micro_calib(file_path: str | Path) -> calib.MicroCalibData | None:
     return micro_calib_data
 
 
-def load_output_calib(file_path: str) -> calib.SpeakerCalibData:
+def load_output_calib(file_path: str) -> calib_storage.SpeakerCalibData:
     """Loads the output calibration from a JSON."""
     d = {}
     if file_path:
@@ -97,7 +97,7 @@ def load_output_calib(file_path: str) -> calib.SpeakerCalibData:
 
     if not d:
         log.error('Output calibration %s not found.', file_path)
-    out_calib_data = calib.get_empty_speaker_calib_data()
+    out_calib_data = calib_storage.get_empty_speaker_calib_data()
 
     if d:
         for key in out_calib_data:
@@ -253,7 +253,7 @@ def load_pdpoae_recording(file_path: str | Path) -> PulseDpoaeRecording | None:
 
 
 def save_output_calibration(
-    out_calib: calib.SpeakerCalibData
+    out_calib: calib_storage.SpeakerCalibData
 ) -> None:
     """Saves output calibration results to JSON."""
     file_path = os.path.join(

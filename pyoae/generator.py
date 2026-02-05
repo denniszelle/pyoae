@@ -10,7 +10,7 @@ from scipy.signal import windows
 
 from pyoae import converter
 from pyoae import get_logger
-from pyoae.calib import OutputCalibration
+from pyoae.calib_storage import OutputCalibration
 from pyoae.device.device_config import DeviceConfig
 from pyoae.protocols import DpoaeMsrmtParams, PulseDpoaeMsrmtParams, PulseStimulus
 

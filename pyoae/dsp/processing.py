@@ -6,8 +6,6 @@ from typing import cast
 
 from matplotlib import pyplot as plt
 from matplotlib.axes import Axes
-# from matplotlib.figure import Figure
-# from matplotlib.lines import Line2D
 import numpy as np
 import numpy.typing as npt
 import scipy.signal as sig
@@ -15,7 +13,7 @@ import scipy.signal as sig
 from pyoae import files
 from pyoae import generator
 from pyoae import get_logger
-from pyoae.calib import MicroTransferFunction
+from pyoae.calib_storage import MicroTransferFunction
 from pyoae.dsp.containers import (
     DpoaeMsrmtData,
     ContDpoaeRecording,

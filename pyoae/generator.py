@@ -534,6 +534,6 @@ def generate_mt_signal(
 
     mt_signal = np.zeros_like(time_vec)
     for i, f in enumerate(frequencies):
-        mt_signal += np.sin(2 * np.pi * f * time_vec + phases[i])
+        mt_signal += np.cos(2 * np.pi * f * time_vec + phases[i])
 
     return mt_signal

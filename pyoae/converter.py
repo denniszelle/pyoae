@@ -78,7 +78,7 @@ def peak_mupa_to_db_spl(
 ) -> float | npt.NDArray[np.floating]:
     """Converts sound pressure level to peak signal amplitude in muPa."""
     # return 20 * np.sqrt(2) * 10**(amplitude/20)
-    return 20*np.log10(amplitude/20)/np.sqrt(2)
+    return 20*np.log10(amplitude/20/np.sqrt(2))
 
 
 @overload

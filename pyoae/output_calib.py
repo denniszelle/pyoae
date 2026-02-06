@@ -351,9 +351,6 @@ def plot_result_file(results: OutputCalibration) -> None:
 
     for i, input_channel_i in enumerate(sorted_input_channels):
 
-        y_min = None
-        # y_max = None
-
         ax_i_amp = axes[0][i]
         ax_i_amp.set_xlim(f_min, f_max)
         ax_i_amp.set_xscale('log')
@@ -375,7 +372,6 @@ def plot_result_file(results: OutputCalibration) -> None:
 
             p_out_max = results.raw_amps[output_idx_j,:]
             out_max_db_spl = 20*np.log10(p_out_max/(np.sqrt(2)*20))
-            # y_max = np.ceil(max(out_max_db_spl)/20)*20
             if i < len(line_styles):
                 ax_i_amp.plot(
                     results.raw_freqs,
@@ -400,6 +396,7 @@ def plot_result_file(results: OutputCalibration) -> None:
                     results.raw_phases[output_idx_j],
                     label=f'Channel {output_channel_j} Speaker Phase'
                 )
+
         ax_i_amp.set_ylim(y_min, y_max)
         ax_i_phase.set_ylim(phase_min, phase_max)
 

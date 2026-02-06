@@ -144,16 +144,16 @@ class OutputCalibration:
     logger: Logger
     """Class logger for debug, info, warning and error messages"""
 
-    frequencies: npt.NDArray[np.float32]
+    raw_freqs: npt.NDArray[np.float32]
     """Frequencies of the output sensitivity function."""
 
-    amplitudes: npt.NDArray[np.float32]
+    raw_amps: npt.NDArray[np.float32]
     """Output sensitivity function (transfer function).
 
     This is a 2D array of dimensions [num_ch, num_bins]
     """
 
-    phases: npt.NDArray[np.float32]
+    raw_phases: npt.NDArray[np.float32]
     """Phases of the transfer function in radiant."""
 
     output_channels: list[int]
@@ -162,20 +162,12 @@ class OutputCalibration:
     input_channels: list[int]
     """Input channels used for calibration"""
 
-    num_samples: int | None
-    """Number of samples for which the transfer function was interpolated."""
-
-    sample_rate: float | None
-    """Sample rate in Hz for which the transfer function was interpolated"""
-
     date: str
     """Time stamp of output calibration."""
 
     def __init__(
         self,
         calib_data: SpeakerCalibData,
-        num_samples: int | None = None,
-        sample_rate: float | None = None,
         log: Logger | None = None
     ) -> None:
         """Initializes an scaled input-channel transfer function."""
@@ -183,43 +175,14 @@ class OutputCalibration:
         self.logger = log or get_logger()
 
         self.date = calib_data['date']
-        self.frequencies = np.array(
+        self.raw_freqs = np.array(
             calib_data['frequencies'], dtype=np.float32
         )
-        self.amplitudes = np.array(calib_data['max_out'])
-        self.phases = np.array([calib_data['phase']], dtype=np.float32)
+        self.raw_amps = np.array(calib_data['max_out'])
+        self.raw_phases = np.array(calib_data['phase'], dtype=np.float32)
 
         self.output_channels = calib_data['output_channels']
         self.input_channels = calib_data['input_channels']
-
-        self.num_samples = num_samples
-        self.sample_rate = sample_rate
-
-    def interpolate_transfer_fun(self) -> None:
-        """Interpolates the transfer function """
-        if self.num_samples is None or self.sample_rate is None:
-            return
-
-        num_bins = (self.num_samples // 2) + 1
-        df = self.sample_rate / self.num_samples
-        frequencies_ip = np.arange(num_bins, dtype=np.float32) * df
-
-        amplitudes_ip = []
-        phases_ip = []
-        for i in range(len(self.output_channels)):
-            h_ip = np.interp(
-                frequencies_ip, self.frequencies, self.amplitudes[i,:]
-            )
-            phi_ip = np.interp(
-                frequencies_ip, self.frequencies, self.phases[i, :]
-            )
-            amplitudes_ip.append(h_ip)
-            phases_ip.append(phi_ip)
-
-        # store interpolated data
-        self.frequencies = frequencies_ip
-        self.amplitudes = np.array(amplitudes_ip, np.float32)
-        self.phases = np.array(phases_ip, np.float32)
 
     def get_sensitivity(self, ch: int, f: float) -> float:
         """Returns the output sensitivity in DFS/muPa.
@@ -235,7 +198,7 @@ class OutputCalibration:
 
         ch_idx = self.output_channels.index(ch)
 
-        if f < np.min(self.frequencies) or f > np.max(self.frequencies):
+        if f < np.min(self.raw_freqs) or f > np.max(self.raw_freqs):
             self.logger.warning(
                 'Stimulus frequency %s Hz outside calibrated boundaries.',
                 f
@@ -244,8 +207,8 @@ class OutputCalibration:
         # find frequency-bin index
         # (alternatively, we could store the frequency resolution
         # in order to calculate the frequency-bin index)
-        idx = np.argmin(np.abs(self.frequencies - f))
-        return self.amplitudes[ch_idx, idx]
+        idx = np.argmin(np.abs(self.raw_freqs - f))
+        return self.raw_amps[ch_idx, idx]
 
     def pressure_to_full_scale(self, ch: int, p: float, f: float) -> float:
         """Calculates digital full-scale amplitude from peak pressure."""

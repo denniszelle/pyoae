@@ -325,7 +325,7 @@ def plot_result_file(results: OutputCalibration) -> None:
 
     # Type ignore to set known dimensions of 2
     fig, axes = plt.subplots(
-        1,
+        2,
         cols,
         figsize=(12, 6),
         sharex='all',
@@ -337,21 +337,35 @@ def plot_result_file(results: OutputCalibration) -> None:
 
     line_styles = ['b.-', 'rx-', 'gd-']
 
-    f_min = np.floor((results.frequencies.min() - 20) / 20) * 20
-    f_max = np.ceil((results.frequencies.max() + 500)/ 1000) * 1000
+    f_min = np.floor((results.raw_freqs.min() - 20) / 20) * 20
+    f_max = np.ceil((results.raw_freqs.max() + 500)/ 1000) * 1000
     f_min = max(20, f_min)
+
+    y_max = np.ceil(np.max(20*np.log10(results.raw_amps/(np.sqrt(2)*20)))) + 10
+    if y_max <= 0:
+        y_min = y_max-100
+    else:
+        y_min = 0
+    phase_max = np.ceil(np.max(results.raw_phases))+2
+    phase_min = np.floor(np.min(results.raw_phases))-2
 
     for i, input_channel_i in enumerate(sorted_input_channels):
 
         y_min = None
-        y_max = None
+        # y_max = None
 
-        ax_i = axes[0][i]
-        ax_i.set_xlim(f_min, f_max)
-        ax_i.set_xscale('log')
-        ax_i.set_title(f"Maximum Output Level - Mic Channel {input_channel_i}")
-        ax_i.set_xlabel("Frequency (Hz)")
-        ax_i.set_ylabel('Level (dB SPL)')
+        ax_i_amp = axes[0][i]
+        ax_i_amp.set_xlim(f_min, f_max)
+        ax_i_amp.set_xscale('log')
+        ax_i_amp.set_title(f'Maximum Output Level - Mic Channel {input_channel_i}')
+        ax_i_amp.set_ylabel('Level (dB SPL)')
+        ax_i_phase = axes[1][i]
+        ax_i_amp.set_xlim(f_min, f_max)
+        ax_i_phase.set_xscale('log')
+        ax_i_phase.set_title(f'Speaker Phase - Mic Channel {input_channel_i}')
+        ax_i_phase.set_xlabel('Frequency (Hz)')
+        ax_i_phase.set_ylabel('Phase (rad)')
+
 
         output_idc = np.where(
             np.asarray(results.input_channels) == input_channel_i
@@ -359,30 +373,45 @@ def plot_result_file(results: OutputCalibration) -> None:
         for j, output_idx_j in enumerate(output_idc):
             output_channel_j = results.output_channels[output_idx_j]
 
-            p_out_max = results.amplitudes[output_idx_j,:]
+            p_out_max = results.raw_amps[output_idx_j,:]
             out_max_db_spl = 20*np.log10(p_out_max/(np.sqrt(2)*20))
-            y_max = np.ceil(max(out_max_db_spl)/20)*20
-            if y_max <= 0:
-                y_min = y_max-100
-            else:
-                y_min = 0
+            # y_max = np.ceil(max(out_max_db_spl)/20)*20
             if i < len(line_styles):
-                ax_i.plot(
-                    results.frequencies,
+                ax_i_amp.plot(
+                    results.raw_freqs,
                     out_max_db_spl,
                     line_styles[j],
-                    label=f'Channel {output_channel_j}'
+                    label=f'Channel {output_channel_j} Maximum Output Level'
+                )
+                ax_i_phase.plot(
+                    results.raw_freqs,
+                    results.raw_phases[output_idx_j],
+                    line_styles[j],
+                    label=f'Channel {output_channel_j} Speaker Phase'
                 )
             else:
-                ax_i.plot(
-                    results.frequencies,
+                ax_i_amp.plot(
+                    results.raw_freqs,
                     out_max_db_spl,
                     label=f'Channel {output_channel_j}'
                 )
-        if y_min is not None and y_max is not None:
-            ax_i.set_ylim(y_min, y_max)
-        ax_i.legend()
-        ax_i.grid(True, which='both')
+                ax_i_phase.plot(
+                    results.raw_freqs,
+                    results.raw_phases[output_idx_j],
+                    label=f'Channel {output_channel_j} Speaker Phase'
+                )
+        ax_i_amp.set_ylim(y_min, y_max)
+        ax_i_phase.set_ylim(phase_min, phase_max)
+
+        ticks = get_log_frequency_ticks(
+            min(results.raw_freqs), max(results.raw_freqs)
+        )
+        ax_i_phase.set_xticks(ticks)
+        ax_i_phase.set_xticklabels([str(int(t)) for t in ticks])
+
+        ax_i_amp.legend()
+        ax_i_amp.grid(True, which='both')
+        ax_i_phase.grid(True, which='both')
     if fig.canvas.manager is not None:
         fig.canvas.manager.set_window_title(f'Calibration {results.date}')
     plt.tight_layout()

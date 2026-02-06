@@ -377,7 +377,8 @@ class PulseDpoaeRecorder:
         stimulus.create_stimulus_mask(block_duration, msrmt_params)
         stimulus1, stimulus2 = stimulus.generate_stimuli(
             num_block_samples,
-            output_calibration=out_calib
+            output_channels,
+            output_calibration=out_calib,
         )
         self.signals[output_channels[0]] = PeriodicSignal(
             stimulus1,

@@ -215,6 +215,37 @@ class OutputCalibration:
         s = abs(self.get_sensitivity(ch, f))
         return p / s
 
+    def get_interp_transfer_function(
+        self,
+        channel: int,
+        frequencies_ip: npt.NDArray[np.float32] | None = None,
+        num_samples: int | None = None
+    ) -> npt.NDArray[np.complex64]:
+        """Return interpolated transfer function"""
+
+        index = self.output_channels.index(channel)
+
+        if frequencies_ip is None:
+            if num_samples is None:
+                self.logger.error(
+                    'Neither frequencies nor number of samples given.'
+                )
+                return np.ndarray(0, np.complex64)
+            frequencies_ip = np.fft.rfftfreq(
+                num_samples, 1/DeviceConfig.sample_rate
+            )
+
+        amplitudes_ip = np.interp(
+            frequencies_ip, self.raw_freqs, self.raw_amps[index]
+        )
+        phases_ip = np.interp(frequencies_ip, self.raw_freqs, self.raw_phases[index])
+
+        interpolated_tf = (
+            np.array(amplitudes_ip, dtype=np.complex64)
+            *np.exp(1j * phases_ip, dtype=np.complex64)
+        )
+        return interpolated_tf
+
 
 class MicroTransferFunction:
     """Interpolated transfer function of the microphone."""

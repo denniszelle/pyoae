@@ -118,7 +118,9 @@ def create_ptpv_signals(
     amplitude: float,
     phase_shift: float,
     num_block_samples: int,
-    num_segments: int = NUM_PTPV_SEGMENTS
+    num_segments: int = NUM_PTPV_SEGMENTS,
+    output_calibration: OutputCalibration | None = None,
+    output_channel: int | None = None
 ) -> list[npt.NDArray[np.float32]]:
     """Creates a list with PTPV signals."""
     # Generate output signals
@@ -134,10 +136,28 @@ def create_ptpv_signals(
             frequency,
             i*phase_shift
         )
-        pulse = amplitude * pulse_pattern
+
         # move to appropriate position in signal template
         signal_template = np.zeros(num_block_samples, dtype=np.float32)
-        signal_template[idx_on:idx_on+num_pulse_samples] = pulse
+        signal_template[idx_on:idx_on+num_pulse_samples] = pulse_pattern
+
+        if (
+            DeviceConfig.enable_output_phase_calib
+            and output_calibration is not None
+            and output_channel is not None
+        ):
+            # logger.info('Applying output calibration to pulsed signal.')
+            signal_spec = np.fft.rfft(signal_template)
+            freqs = np.fft.rfftfreq(len(signal_template), 1/DeviceConfig.sample_rate)
+            corr_spec = output_calibration.get_interp_transfer_function(
+                output_channel,
+                freqs,
+                num_block_samples
+            )
+            signal_template = np.real(np.fft.irfft(signal_spec/corr_spec))
+            signal_template = signal_template/max(signal_template)
+
+        signal_template = amplitude * signal_template
         stimuli.append(signal_template)
     return stimuli
 
@@ -286,7 +306,8 @@ class PulseDpoaeStimulus(DpoaeStimulus):
     def generate_stimuli(
         self,
         num_block_samples: int,
-        output_calibration: OutputCalibration | None = None
+        output_channels: list[int | None],
+        output_calibration: OutputCalibration | None = None,
     ) -> tuple[npt.NDArray[np.float32], npt.NDArray[np.float32]]:
         """Generates primary tones for continuous DPOAE acquisition."""
 
@@ -329,7 +350,9 @@ class PulseDpoaeStimulus(DpoaeStimulus):
             amplitude1,
             PRIMARY1_PTPV_SHIFT,
             num_block_samples,
-            num_segments=NUM_PTPV_SEGMENTS
+            num_segments=NUM_PTPV_SEGMENTS,
+            output_calibration=output_calibration,
+            output_channel=output_channels[0]
         )
         f2_stimuli = create_ptpv_signals(
             self.f2_pulse_mask,
@@ -337,7 +360,9 @@ class PulseDpoaeStimulus(DpoaeStimulus):
             amplitude2,
             PRIMARY2_PTPV_SHIFT,
             num_block_samples,
-            num_segments=NUM_PTPV_SEGMENTS
+            num_segments=NUM_PTPV_SEGMENTS,
+            output_calibration=output_calibration,
+            output_channel=output_channels[1]
         )
 
         # concatenate PTPV segments to create the stimulus signals

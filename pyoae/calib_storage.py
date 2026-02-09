@@ -14,9 +14,33 @@ from numbers import Complex
 
 import numpy as np
 import numpy.typing as npt
+from scipy import interpolate
 
 from pyoae import get_logger
 from pyoae.device.device_config import DeviceConfig
+
+
+def interpolate_tf(
+    interp_freqs,
+    raw_freqs,
+    raw_values
+):
+    """Interpolate transfer function."""
+
+    amp_spline = interpolate.CubicSpline(
+        raw_freqs,
+        raw_values,
+        bc_type='natural',
+        extrapolate=False
+    )
+    values_ip = amp_spline(interp_freqs)
+    values_ip[interp_freqs < raw_freqs[0]] = raw_values[0]
+    values_ip[interp_freqs > raw_freqs[-1]] = raw_values[-1]
+
+    # values_ip = np.interp(interp_freqs, raw_freqs, raw_values)
+
+    return values_ip
+
 
 class AbsCalibData(TypedDict):
     """Container for absolute-calibration data in calibration file."""
@@ -235,10 +259,12 @@ class OutputCalibration:
                 num_samples, 1/DeviceConfig.sample_rate
             )
 
-        amplitudes_ip = np.interp(
+        amplitudes_ip = interpolate_tf(
             frequencies_ip, self.raw_freqs, self.raw_amps[index]
         )
-        phases_ip = np.interp(frequencies_ip, self.raw_freqs, self.raw_phases[index])
+        phases_ip = interpolate_tf(
+            frequencies_ip, self.raw_freqs, self.raw_phases[index]
+        )
 
         interpolated_tf = (
             np.array(amplitudes_ip, dtype=np.complex64)
@@ -321,9 +347,15 @@ class MicroTransferFunction:
                 num_samples, 1/DeviceConfig.sample_rate
             )
 
-        amplitudes_ip = np.interp(
+        amplitudes_ip = interpolate_tf(
             frequencies_ip, self.raw_freqs, self.raw_amps
         )
+
+        phases_ip = interpolate_tf(
+            frequencies_ip, self.raw_freqs, self.raw_phases
+        )
+
+        amplitudes_ip = np.interp(frequencies_ip, self.raw_freqs, self.raw_amps)
         phases_ip = np.interp(frequencies_ip, self.raw_freqs, self.raw_phases)
 
         interpolated_tf = (

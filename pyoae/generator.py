@@ -54,6 +54,13 @@ def short_pulse_half_width(f2: float) -> float:
     return max(13071.3/f2, 13071.3/4000)
 
 
+def compute_rms(
+    signal: npt.NDArray[np.float64]
+):
+    """Compute the Root-Mean-Square value of a signal."""
+    return np.sqrt(np.mean(np.square(signal)))
+
+
 def create_pulse_mask(
     block_duration: float,
     pulse: PulseStimulus,
@@ -115,7 +122,6 @@ def create_pulse_pattern(
 def create_ptpv_signals(
     pulse_mask: PulseStimulus,
     frequency: float,
-    amplitude: float,
     phase_shift: float,
     num_block_samples: int,
     num_segments: int = NUM_PTPV_SEGMENTS,
@@ -157,9 +163,72 @@ def create_ptpv_signals(
             signal_template = np.real(np.fft.irfft(signal_spec/corr_spec))
             signal_template = signal_template/max(signal_template)
 
-        signal_template = amplitude * signal_template
         stimuli.append(signal_template)
     return stimuli
+
+
+def compute_pulse_amplitude(
+    signals: list[npt.NDArray[np.float32]],
+    pulse_mask: PulseStimulus,
+    output_calibration: OutputCalibration,
+    output_channel: int
+):
+    """Compute pulse level in dB SPL for given pulse shape"""
+
+    bounds_ss = (
+        int(
+            (pulse_mask['t_on']+ pulse_mask['t_rise']
+            )*DeviceConfig.sample_rate
+        ),
+        int(
+            (
+                pulse_mask['t_on']
+                + pulse_mask['duration']
+                - pulse_mask['t_fall']
+            )*DeviceConfig.sample_rate
+        ),
+    )
+    signal_amplitudes = []
+    for signal_i in signals:
+        speaker_sig_i = compute_speaker_signal(
+            signal_i,
+            output_calibration,
+            output_channel,
+            DeviceConfig.sample_rate
+        )
+        # For extremely short steady states, use maximum
+        if bounds_ss[1]-bounds_ss[0] < 50:
+            signal_amplitudes.append(
+                np.max(speaker_sig_i)/np.sqrt(2)
+            )
+        # Add RMS of steady state to signal amplitudes
+        else:
+            signal_amplitudes.append(
+                compute_rms(speaker_sig_i[bounds_ss[0]:bounds_ss[1]])
+            )
+
+    return np.mean(signal_amplitudes)*np.sqrt(2)
+
+
+def compute_speaker_signal(
+    raw_signal: npt.NDArray[np.float32],
+    output_calibration: OutputCalibration,
+    output_channel: int,
+    sample_rate: float
+):
+    """Compute the speaker signal for a given raw signal."""
+    raw_spec = np.fft.rfft(raw_signal)
+    freqs = np.fft.rfftfreq(len(raw_signal), 1/sample_rate)
+    calib_spec = output_calibration.get_interp_transfer_function(
+        output_channel,
+        freqs
+    )
+    speaker_spec = raw_spec*calib_spec
+    np.save(
+        'interp_speaker.npy',
+        calib_spec
+    )
+    return np.real(np.fft.irfft(speaker_spec))
 
 
 @dataclass
@@ -306,48 +375,18 @@ class PulseDpoaeStimulus(DpoaeStimulus):
     def generate_stimuli(
         self,
         num_block_samples: int,
-        output_channels: list[int | None],
+        output_channels: list[int],
         output_calibration: OutputCalibration | None = None,
     ) -> tuple[npt.NDArray[np.float32], npt.NDArray[np.float32]]:
         """Generates primary tones for continuous DPOAE acquisition."""
-
-        if output_calibration is None:
-            # No calibration for output channels available.
-            amplitude1, amplitude2 = calculate_full_scale_amplitudes(
-                self.level2,
-                self.level1
-            )
-        else:
-            pressure1, pressure2 = calculate_pressure_amplitudes(
-                self.level2,
-                self.level1
-            )
-            amplitude1 = output_calibration.pressure_to_full_scale(
-                0,
-                pressure1,
-                self.f1
-            )
-            amplitude2 = output_calibration.pressure_to_full_scale(
-                1,
-                pressure2,
-                self.f2
-            )
-            logger.info('Setting output amplitudes for DPOAE acquisition:')
-            logger.info('p1: %.1f muPa (%.6f re FS).', pressure1, amplitude1)
-            logger.info('p2: %.1f muPa (%.6f re FS).', pressure2, amplitude2)
 
         if self.f1_pulse_mask is None or self.f2_pulse_mask is None:
             # TODO: Consider raising ValueError
             return (np.zeros(0, np.float32), np.zeros(0, np.float32))
 
-        # Verify output amplitudes
-        amplitude1 = check_output_limit(amplitude1)
-        amplitude2 = check_output_limit(amplitude2)
-
         f1_stimuli = create_ptpv_signals(
             self.f1_pulse_mask,
             self.f1,
-            amplitude1,
             PRIMARY1_PTPV_SHIFT,
             num_block_samples,
             num_segments=NUM_PTPV_SEGMENTS,
@@ -357,7 +396,6 @@ class PulseDpoaeStimulus(DpoaeStimulus):
         f2_stimuli = create_ptpv_signals(
             self.f2_pulse_mask,
             self.f2,
-            amplitude2,
             PRIMARY2_PTPV_SHIFT,
             num_block_samples,
             num_segments=NUM_PTPV_SEGMENTS,
@@ -365,9 +403,63 @@ class PulseDpoaeStimulus(DpoaeStimulus):
             output_channel=output_channels[1]
         )
 
+        if output_calibration is None:
+            # No calibration for output channels available.
+            amplitude1, amplitude2 = calculate_full_scale_amplitudes(
+                self.level2,
+                self.level1
+            )
+
+            # Verify output amplitudes
+            amplitude1 = check_output_limit(amplitude1)
+            amplitude2 = check_output_limit(amplitude2)
+
+        else:
+
+            pressure1, pressure2 = calculate_pressure_amplitudes(
+                self.level2,
+                self.level1
+            )
+
+            # New version with tf calibration
+            max_amplitude1 = compute_pulse_amplitude(
+                f1_stimuli,
+                self.f1_pulse_mask,
+                output_calibration,
+                output_channels[0]
+            )
+
+            max_amplitude2 = compute_pulse_amplitude(
+                f2_stimuli,
+                self.f2_pulse_mask,
+                output_calibration,
+                output_channels[1]
+            )
+
+            amplitude1 = check_output_limit(pressure1/max_amplitude1)
+            amplitude2 = check_output_limit(pressure2/max_amplitude2)
+
+            # # Old version with pure amplitude calibration
+            # amplitude1 = output_calibration.pressure_to_full_scale(
+            #     0,
+            #     pressure1,
+            #     self.f1
+            # )
+            # amplitude2 = output_calibration.pressure_to_full_scale(
+            #     1,
+            #     pressure2,
+            #     self.f2
+            # )
+
+            # # Verify output amplitudes
+            # amplitude1 = check_output_limit(amplitude1)
+            # amplitude2 = check_output_limit(amplitude2)
+
         # concatenate PTPV segments to create the stimulus signals
         stimulus1 = np.concatenate(f1_stimuli).astype(np.float32, copy=False)
+        stimulus1 *= amplitude1
         stimulus2 = np.concatenate(f2_stimuli).astype(np.float32, copy=False)
+        stimulus2 *= amplitude2
 
         return stimulus1, stimulus2
 

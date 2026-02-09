@@ -12,6 +12,7 @@ from pyoae import converter
 from pyoae import get_logger
 from pyoae.calib_storage import OutputCalibration
 from pyoae.device.device_config import DeviceConfig
+from pyoae.dsp import processing
 from pyoae.protocols import DpoaeMsrmtParams, PulseDpoaeMsrmtParams, PulseStimulus
 
 
@@ -52,13 +53,6 @@ def short_pulse_half_width(f2: float) -> float:
         half-width in ms.
     """
     return max(13071.3/f2, 13071.3/4000)
-
-
-def compute_rms(
-    signal: npt.NDArray[np.float64]
-):
-    """Compute the Root-Mean-Square value of a signal."""
-    return np.sqrt(np.mean(np.square(signal)))
 
 
 def create_pulse_mask(
@@ -204,7 +198,7 @@ def compute_pulse_amplitude(
         # Add RMS of steady state to signal amplitudes
         else:
             signal_amplitudes.append(
-                compute_rms(speaker_sig_i[bounds_ss[0]:bounds_ss[1]])
+                processing.estimate_power(speaker_sig_i[bounds_ss[0]:bounds_ss[1]])
             )
 
     return np.mean(signal_amplitudes)*np.sqrt(2)

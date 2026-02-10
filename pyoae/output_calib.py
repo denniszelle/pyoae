@@ -25,7 +25,7 @@ from pyoae.device.device_config import DeviceConfig
 # from pyoae.dsp import processing
 from pyoae.msrmt_context import MsrmtContext
 from pyoae.protocols import CalibMsrmtParams
-from pyoae.signals import Signal
+from pyoae.signals import PeriodicSignal
 from pyoae.sync import (
     get_input_channels,
     HardwareData,
@@ -156,9 +156,10 @@ def get_channel_spectra(
 
     spectra = []
 
-    block_size = int(
+    channel_segment_size = int(
         msrmt_ctx.block_size/len(sync_msrmt.hardware_data.output_channels)
     )
+    block_size = msrmt_ctx.block_size
 
     for i, _ in enumerate(sync_msrmt.hardware_data.output_channels):
 
@@ -166,6 +167,12 @@ def get_channel_spectra(
         recorded_signal = sync_msrmt.get_recorded_signal(
             input_channel
         )
+
+        # Obtain an integer number of recorded blocks
+        total_blocks = int(len(recorded_signal)/block_size)
+        block_data = recorded_signal[:total_blocks*block_size]
+        blocks = block_data.reshape(-1, block_size)
+
         if input_channel not in sync_msrmt.hardware_data.input_channels:
             logger.error('Invalid input channel')
             spectra.append(np.zeros(0, dtype=np.float32))
@@ -175,15 +182,20 @@ def get_channel_spectra(
                 input_channel
             )
         )
+
+        # block_avg = np.mean(blocks, axis=0)
+        block_avg = blocks[0]
+
         if msrmt_ctx.input_trans_fun is None:
-            spectrum = process_spectrum(
-                recorded_signal[i*block_size:(i+1)*block_size], None
-            )
+            input_tf = None
         else:
-            spectrum = process_spectrum(
-                recorded_signal[i*block_size:(i+1)*block_size],
-                msrmt_ctx.input_trans_fun[input_channel_idx]
-            )
+            input_tf = msrmt_ctx.input_trans_fun[input_channel_idx]
+
+        spectrum = process_spectrum(
+            block_avg[i*channel_segment_size:(i+1)*channel_segment_size],
+            input_tf
+        )
+
         spectra.append(spectrum)
     return spectra
 
@@ -459,7 +471,7 @@ class OutputCalibRecorder:
 
     output_amplitude: float
 
-    signals: list[Signal]
+    signals: list[PeriodicSignal]
     """List of output signals for each channel."""
 
     msrmt_ctx: MsrmtContext
@@ -485,10 +497,13 @@ class OutputCalibRecorder:
 
         self.logger = log or get_logger()
         num_block_samples = int(
-            msrmt_params['block_duration'] * DeviceConfig.sample_rate
+            msrmt_params['block_duration']
+            * len(output_channels)
+            * DeviceConfig.sample_rate
         )
         num_total_recording_samples = (
-            len(output_channels) * num_block_samples
+            num_block_samples
+            * msrmt_params['num_averaging_blocks']
         )
         block_duration = num_block_samples / DeviceConfig.sample_rate
         recording_duration = (
@@ -540,7 +555,7 @@ class OutputCalibRecorder:
 
         self.msrmt_ctx = MsrmtContext(
             fs=DeviceConfig.sample_rate,
-            block_size=num_total_recording_samples,
+            block_size=num_block_samples,
             non_interactive=False,
             input_trans_fun=mic_transfer_functions,
         )
@@ -548,7 +563,7 @@ class OutputCalibRecorder:
             DeviceConfig.sample_rate,
             recording_duration,
             num_total_recording_samples,
-            num_total_recording_samples,
+            num_block_samples,
             DeviceConfig.device_buffer_size
         )
 
@@ -655,7 +670,8 @@ class OutputCalibRecorder:
         hw_data: HardwareData
     ) -> None:
         """Generates the output signals for playback."""
-        df = DeviceConfig.sample_rate/num_block_samples
+        mt_samples = int(np.round(num_block_samples/len(hw_data.output_channels)))
+        df = DeviceConfig.sample_rate/mt_samples
         self.mt_frequencies = generator.compute_mt_frequencies(
             msrmt_params['f_start'],
             msrmt_params['f_stop'],
@@ -666,7 +682,7 @@ class OutputCalibRecorder:
         self.mt_phases = generator.compute_mt_phases(num_mt_frequencies)
 
         mt_signal = generator.generate_mt_signal(
-            num_block_samples,
+            mt_samples,
             DeviceConfig.sample_rate,
             self.mt_frequencies,
             self.mt_phases
@@ -701,19 +717,19 @@ class OutputCalibRecorder:
 
         # print(f'RMS after ramping: {processing.estimate_power(mt_signal)}')
 
-        n_total_samples = len(hw_data.output_channels) * len(mt_signal)
+        n_total_samples = num_block_samples * msrmt_params['num_averaging_blocks']
 
         counter = 0
         for i in range(hw_data.get_stream_output_channels()):
             if i in hw_data.output_channels:
-                stimulus = np.zeros(n_total_samples, dtype=np.float32)
+                stimulus = np.zeros(num_block_samples, dtype=np.float32)
                 stimulus[
                     counter*len(mt_signal):(counter+1)*len(mt_signal)
                 ] = mt_signal
-                signal = Signal(stimulus)
+                signal = PeriodicSignal(stimulus, n_total_samples)
                 self.signals.append(signal)
                 counter += 1
             else:
                 self.signals.append(
-                    Signal(np.zeros(n_total_samples, dtype=np.float32))
+                    PeriodicSignal()
                 )

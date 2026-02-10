@@ -22,6 +22,7 @@ from pyoae.calib_storage import (
 )
 from pyoae import converter
 from pyoae.device.device_config import DeviceConfig
+# from pyoae.dsp import processing
 from pyoae.msrmt_context import MsrmtContext
 from pyoae.protocols import CalibMsrmtParams
 from pyoae.signals import Signal
@@ -654,10 +655,12 @@ class OutputCalibRecorder:
         hw_data: HardwareData
     ) -> None:
         """Generates the output signals for playback."""
+        df = DeviceConfig.sample_rate/num_block_samples
         self.mt_frequencies = generator.compute_mt_frequencies(
             msrmt_params['f_start'],
             msrmt_params['f_stop'],
-            msrmt_params['lines_per_octave']
+            msrmt_params['lines_per_octave'],
+            df
         )
         num_mt_frequencies = len(self.mt_frequencies)
         self.mt_phases = generator.compute_mt_phases(num_mt_frequencies)
@@ -682,6 +685,7 @@ class OutputCalibRecorder:
                 'Output calibration results might be invalid.'
             )
 
+        # TODO: add correction for ramp duration
         # we always use rising and falling edges
         ramp_len = int(
             DeviceConfig.ramp_duration * 1E-3 * DeviceConfig.sample_rate
@@ -689,9 +693,13 @@ class OutputCalibRecorder:
         ramp = 0.5*(1 - np.cos(2*np.pi*np.arange(ramp_len)/(2*ramp_len)))
         ramp = ramp.astype(np.float32)
 
+        # print(f'RMS before ramping: {processing.estimate_power(mt_signal)}')
+
         # apply ramps
         mt_signal[:ramp_len] *= ramp
         mt_signal[-ramp_len:] *= ramp[::-1]
+
+        # print(f'RMS after ramping: {processing.estimate_power(mt_signal)}')
 
         n_total_samples = len(hw_data.output_channels) * len(mt_signal)
 

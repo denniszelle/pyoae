@@ -591,7 +591,8 @@ def generate_sync(sample_rate: float) -> npt.NDArray[np.float32]:
 def compute_mt_frequencies(
     f_start: float,
     f_stop: float,
-    lines_per_octave: float
+    lines_per_octave: float,
+    df: float
 ) -> npt.NDArray[np.floating]:
     """Computes multi-tone frequencies.
 
@@ -601,7 +602,7 @@ def compute_mt_frequencies(
     b = 2 ** (1/lines_per_octave)
     n = int(np.log(f_stop/f_start)/np.log(b))
     f = f_start * b ** (np.arange(n))
-    f = np.round(f)
+    f = np.round(f/df)*df
     return f
 
 

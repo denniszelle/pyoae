@@ -10,6 +10,7 @@ from typing import (
 OUTPUT_CALIB_KEYS: Final[list[str]] = [
     'block_duration',
     'num_averaging_blocks',
+    'num_clusters',
     'f_start',
     'f_stop',
     'lines_per_octave',
@@ -57,6 +58,7 @@ class PulseDpoaeMsrmtParams(DpoaeMsrmtParams):
 
 class CalibMsrmtParams(MsrmtParams):
     """Measurement parameters for multi-tone measurements."""
+    num_clusters: int
     f_start: float
     f_stop: float
     lines_per_octave: float
@@ -77,6 +79,7 @@ def get_default_calib_msrmt_params() -> CalibMsrmtParams:
     d: CalibMsrmtParams = {
         'block_duration': 1.0,
         'num_averaging_blocks': 1,
+        'num_clusters': 1,
         'f_start': 200.0,
         'f_stop': 10000.0,
         'lines_per_octave': 9.1,
@@ -97,6 +100,7 @@ def get_custom_calib_msrmt_params(
     d: CalibMsrmtParams = {
         'block_duration': calib_params['block_duration'],
         'num_averaging_blocks': calib_params['num_averaging_blocks'],
+        'num_clusters': calib_params['num_clusters'],
         'f_start': calib_params['f_start'],
         'f_stop': calib_params['f_stop'],
         'lines_per_octave': calib_params['lines_per_octave'],

@@ -10,10 +10,8 @@ from logging import Logger
 from matplotlib import pyplot as plt
 from matplotlib.axes import Axes
 import numpy as np
-import numpy.typing as npt
 
 from pyoae import files
-from pyoae import generator
 from pyoae import get_logger
 from pyoae.calib_storage import (
     MicroTransferFunction,
@@ -22,8 +20,8 @@ from pyoae.calib_storage import (
 )
 from pyoae import converter
 from pyoae.device.device_config import DeviceConfig
-# from pyoae.dsp import processing
 from pyoae.msrmt_context import MsrmtContext
+from pyoae import mt_generator
 from pyoae.protocols import CalibMsrmtParams
 from pyoae.signals import PeriodicSignal
 from pyoae.sync import (
@@ -109,40 +107,11 @@ def setup_offline_plot(
     return axes
 
 
-def process_spectrum(
-    recorded_signal: npt.NDArray[np.float32],
-    micro_tf: MicroTransferFunction | None
-) -> npt.NDArray[np.complex64]:
-    """Processes recorded signal to obtain spectrum.
-
-    Args:
-        recorded_signal: float array of measurement data
-        block_size: Size of each recording block in samples
-        micro_tf: Transfer function of the microphone
-
-    Returns:
-        Array of floats containing the spectrum in RMS muPa.
-    """
-    spectrum = 2*(np.fft.rfft(recorded_signal))/len(recorded_signal)
-    # dBFS and dB SPL represent RMS values
-    # assume FFT bins represent sine waves and estimate
-    # RMS by dividing by sqrt(2)
-    np.divide(spectrum, np.sqrt(2), spectrum)
-
-    spectrum = spectrum.astype(np.complex64)
-    if micro_tf is not None:
-        mic_tf = micro_tf.get_interp_transfer_function(
-            num_samples = len(recorded_signal)
-        )
-        np.divide(spectrum, mic_tf, spectrum)
-
-    return spectrum
-
-
-def get_channel_spectra(
+def get_mt_results(
     sync_msrmt: SyncMsrmt,
-    msrmt_ctx: MsrmtContext
-) -> list[npt.NDArray[np.float32]]:
+    msrmt_ctx: MsrmtContext,
+    mt_definition: mt_generator.MultiToneDefinition
+) -> list[mt_generator.MultiToneResult]:
     """Processes data and returns spectra per output channels.
 
     Args:
@@ -154,7 +123,7 @@ def get_channel_spectra(
         list[spectrum_ch01, spectrum_ch02, ...]
     """
 
-    spectra = []
+    results = []
 
     channel_segment_size = int(
         msrmt_ctx.block_size/len(sync_msrmt.hardware_data.output_channels)
@@ -175,29 +144,33 @@ def get_channel_spectra(
 
         if input_channel not in sync_msrmt.hardware_data.input_channels:
             logger.error('Invalid input channel')
-            spectra.append(np.zeros(0, dtype=np.float32))
+            results.append(np.zeros(0, dtype=np.float32))
             continue
+
         input_channel_idx = (
             sync_msrmt.hardware_data.get_unique_input_channels().index(
                 input_channel
             )
         )
 
-        # block_avg = np.mean(blocks, axis=0)
-        block_avg = blocks[0]
+        block_avg = np.mean(blocks, axis=0)
 
         if msrmt_ctx.input_trans_fun is None:
             input_tf = None
         else:
             input_tf = msrmt_ctx.input_trans_fun[input_channel_idx]
 
-        spectrum = process_spectrum(
+        analyzer = mt_generator.MultiToneAnalyzer(
+            mt_definition,
             block_avg[i*channel_segment_size:(i+1)*channel_segment_size],
-            input_tf
+            DeviceConfig.sample_rate,
         )
 
-        spectra.append(spectrum)
-    return spectra
+        results.append(
+            analyzer.compute_result(input_tf)
+        )
+
+    return results
 
 
 def get_log_frequency_ticks(
@@ -205,6 +178,7 @@ def get_log_frequency_ticks(
     f_max,
     bases=(1,3,5)
 ):
+    """Return frequency ticks for x-axis plotting with log x-scale."""
     decade_min = int(np.floor(np.log10(f_min)))
     decade_max = int(np.ceil(np.log10(f_max)))
 
@@ -217,9 +191,7 @@ def get_log_frequency_ticks(
 def plot_offline(
     sync_msrmt: SyncMsrmt,
     msrmt_ctx: MsrmtContext,
-    mt_frequencies: npt.NDArray[np.float32],
-    mt_phases: npt.NDArray[np.float32],
-    output_amplitude: float
+    mt_results: list[mt_generator.MultiToneResult]
 ) -> None:
     """Plots the final results in a non-updating plot.
 
@@ -230,8 +202,8 @@ def plot_offline(
         return
 
     has_input_calib =  msrmt_ctx.input_trans_fun is not None
-    f_min = np.floor((mt_frequencies.min() - 20) / 20) * 20
-    f_max = np.ceil((mt_frequencies.max() + 500)/ 1000) * 1000
+    f_min = np.floor((mt_results[0].frequencies.min() - 20) / 20) * 20
+    f_max = np.ceil((mt_results[0].frequencies.max() + 500)/ 1000) * 1000
     f_min = max(20, f_min)
     axes = setup_offline_plot(
         (f_min, f_max),
@@ -240,25 +212,8 @@ def plot_offline(
         has_input_calib
     )
 
-    ch_spectra = get_channel_spectra(sync_msrmt, msrmt_ctx)
-
-    # plot channel spectra
-    num_bins = len(ch_spectra[0])
-    df = (
-        DeviceConfig.sample_rate
-        / (msrmt_ctx.block_size
-        / len(sync_msrmt.hardware_data.output_channels))
-    )
-    f = np.arange(num_bins, dtype=np.float32) * df
-
-    # find frequency indices to sample transfer function
-    mt_bin_idx = np.round((mt_frequencies/df)).astype(np.int_)
-
-    # calculate the remaining output capacity to
-    # retrieve the maximum output level
-    output_overhead = 20*np.log10(1/output_amplitude)
-
     padding = 15  # dB of padding on top and bottom
+    phase_padding = 3 # rad of padding on top and bottom
     line_vecs = ['b-', 'r-', 'g-']
     ax_cmp_min = 80
     ax_cmp_max = 120
@@ -267,27 +222,33 @@ def plot_offline(
     counter = Counter(input_channels)
     sorted_input_channels = list(counter.keys())
 
-    raw_spec_min = float(
-        np.min(converter.rms_mupa_to_db_spl(np.abs(np.asarray((ch_spectra)))))
-    )
-    corr_spec_max = float(
-        np.max(converter.rms_mupa_to_db_spl(
-            np.abs(np.asarray(ch_spectra)[:,mt_bin_idx]) / output_amplitude
-        ))
-    )
-    corr_spec_min = float(
-        np.min(converter.rms_mupa_to_db_spl(
-            np.abs(np.asarray(ch_spectra)[:,mt_bin_idx]) / output_amplitude
-        ))
-    )
-    all_phases = np.unwrap(
-        np.angle(np.asarray(ch_spectra)[:,mt_bin_idx])-mt_phases
-    )
-    phase_min = float(np.min(all_phases))
-    phase_max = float(np.max(all_phases))
+    # Get boundaries
+    raw_y_min = np.inf
+    raw_y_max = -np.inf
+    phase_min = np.inf
+    phase_max = -np.inf
+    amp_min = np.inf
+    amp_max = -np.inf
+    for result_i in mt_results:
+        raw_y_min = min(raw_y_min, np.abs(result_i.spectra).min())
+        raw_y_max = max(raw_y_max, np.abs(result_i.spectra).max())
+        phase_min = min(phase_min, result_i.phase.min())
+        phase_max = max(phase_max, result_i.phase.max())
+        amp_min = min(amp_min, result_i.amplitude.min())
+        amp_max = max(amp_max, result_i.amplitude.max())
+    amp_min = converter.rms_mupa_to_db_spl(amp_min) - padding
+    amp_max = converter.rms_mupa_to_db_spl(amp_max) + padding
+    raw_y_min = min(converter.rms_mupa_to_db_spl(raw_y_min), ax_cmp_min)
+    raw_y_max = max(converter.rms_mupa_to_db_spl(raw_y_max), ax_cmp_max)
+    phase_min -= phase_padding
+    phase_max += phase_padding
+
+    mt_frequencies = mt_results[0].frequencies
 
     for i, ax_i in enumerate(axes):
+        # i is the row in the plot
         for j, ax_ij in enumerate(ax_i):
+            # j is the column in the plot
             if i < len(axes) - 2:
 
                 output_idc = np.where(
@@ -298,36 +259,34 @@ def plot_offline(
                 else:
                     continue
                 # Plot measurement of channel ij
-                out_db_spl = converter.rms_mupa_to_db_spl(
-                    abs(ch_spectra[output_idx][mt_bin_idx])
-                )
+                out_db_spl = converter.rms_mupa_to_db_spl(mt_results[output_idx].raw_amplitude)
+                phases = mt_results[output_idx].phase
 
-                phases = np.unwrap(
-                    np.angle(ch_spectra[output_idx][mt_bin_idx])-mt_phases
-                )
-
-                p_out_peak = (
-                    np.sqrt(2)
-                    * abs(ch_spectra[output_idx][mt_bin_idx])
-                )
-                p_out_max = p_out_peak / output_amplitude
+                # p_out_peak = mt_results[output_idx].raw_amplitude*np.sqrt(2)
+                p_out_max = mt_results[output_idx].amplitude*np.sqrt(2)
                 out_max_db_spl = converter.peak_mupa_to_db_spl(p_out_max)
 
-                ax_ij.plot(
-                    f,
-                    converter.rms_mupa_to_db_spl(abs(ch_spectra[output_idx])),
-                    linewidth=0.5,
-                    color='k'
-                )
+                # Plot raw spectrum
+                for spec_k in mt_results[output_idx].spectra:
+                    ax_ij.plot(
+                        mt_results[output_idx].freq_spectra,
+                        converter.rms_mupa_to_db_spl(abs(spec_k)),
+                        linewidth=0.5,
+                        color='k'
+                    )
+
+                # Add markers to raw spectrum
                 ax_ij.plot(mt_frequencies, out_db_spl, 'ro', markersize=2)
 
+                # Add markers to raw spectrum plot with amplitude correction
                 ax_ij.plot(
                     mt_frequencies,
-                    out_db_spl + output_overhead,
+                    out_max_db_spl,
                     'ko',
                     markersize=3,
-                    markerfacecolor='w'
                 )
+
+                # Add corrected values to amplitude and phase plot
                 if len(line_vecs) > i:
                     axes[-2][j].plot(
                         mt_frequencies, out_max_db_spl, line_vecs[i]
@@ -338,10 +297,8 @@ def plot_offline(
                     axes[-2][j].plot(mt_frequencies, out_max_db_spl)
                     axes[-1][j].plot(mt_frequencies, phases)
                     ax_ij.plot(mt_frequencies, out_max_db_spl)
-                # print(f'spec_min: {spec_min}')
-                # print(f'spec_max: {spec_max + padding}')
-                ax_ij.set_ylim(raw_spec_min, corr_spec_max + padding)
-                # ax_ij.set_ylim(spec_min, spec_max)
+
+                ax_ij.set_ylim(raw_y_min, raw_y_max + padding)
                 axes[-2][j].grid(True, which='both')
                 axes[-1][j].grid(True, which='both')
                 ticks = get_log_frequency_ticks(
@@ -349,9 +306,7 @@ def plot_offline(
                 )
                 axes[-1][j].set_xticks(ticks)
                 axes[-1][j].set_xticklabels([str(int(t)) for t in ticks])
-                ax_cmp_min = min(ax_cmp_min, corr_spec_min-padding)
-                ax_cmp_max = max(ax_cmp_max, corr_spec_max+padding)
-                axes[-2][j].set_ylim(ax_cmp_min, ax_cmp_max)
+                axes[-2][j].set_ylim(amp_min, amp_max)
                 axes[-1][j].set_ylim(phase_min, phase_max)
 
     plt.tight_layout()
@@ -465,11 +420,9 @@ def plot_result_file(results: OutputCalibration) -> None:
 class OutputCalibRecorder:
     """Class to manage a DPOAE recording."""
 
-    mt_frequencies: npt.NDArray[np.float32]
+    mt_definition: mt_generator.MultiToneDefinition
 
-    mt_phases: npt.NDArray[np.float32]
-
-    output_amplitude: float
+    mt_results: list[mt_generator.MultiToneResult]
 
     signals: list[PeriodicSignal]
     """List of output signals for each channel."""
@@ -593,7 +546,7 @@ class OutputCalibRecorder:
 
         self.msrmt.run_msrmt()
 
-        # Compute calibration results
+        # # # Compute calibration results
         self.compute_calib_results()
 
         if self.results is None:
@@ -608,9 +561,7 @@ class OutputCalibRecorder:
             plot_offline(
                 self.msrmt,
                 self.msrmt_ctx,
-                self.mt_frequencies,
-                self.mt_phases,
-                self.output_amplitude
+                self.mt_results
             )
 
     def compute_calib_results(self) -> None:
@@ -618,33 +569,20 @@ class OutputCalibRecorder:
         if self.msrmt.state != MsrmtState.FINISHED:
             return
 
-        ch_spectra = get_channel_spectra(
-            self.msrmt, self.msrmt_ctx
+        self.mt_results = get_mt_results(
+            self.msrmt, self.msrmt_ctx, self.mt_definition
         )
-
-        # plot channel spectra
-        df = (
-            DeviceConfig.sample_rate
-            / self.msrmt_ctx.block_size
-            * len(self.msrmt.hardware_data.output_channels)
-        )
-
-        # find frequency indices to sample transfer function
-        mt_bin_idx = np.round((self.mt_frequencies/df)).astype(np.int_)
 
         max_out = []
         phase = []
 
-        calib_results: list[npt.NDArray[np.float32]] = []
-        for ch_spec in ch_spectra:
-            p_out_peak = np.multiply(np.sqrt(2), np.abs(ch_spec[mt_bin_idx]))
-            p_out_max = p_out_peak / self.output_amplitude
-            calib_results.append(p_out_max.astype(np.float32))
-            phases = np.unwrap(
-                np.angle(ch_spec[mt_bin_idx])-self.mt_phases
-            ).tolist()
-            max_out.append(calib_results[-1].tolist())
-            phase.append(phases)
+        frequencies = self.mt_results[0].frequencies.astype(float).tolist()
+
+        for result_i in self.mt_results:
+            max_out.append(
+                (result_i.amplitude*np.sqrt(2)).astype(float).tolist()
+            )
+            phase.append(result_i.phase.astype(float).tolist())
 
         cur_time = datetime.now()
         time_stamp = cur_time.strftime('%y%m%d-%H%M%S')
@@ -653,9 +591,9 @@ class OutputCalibRecorder:
             'date': time_stamp,
             'output_channels': self.msrmt.hardware_data.output_channels,
             'input_channels': self.msrmt.hardware_data.input_channels,
-            'frequencies': self.mt_frequencies.tolist(),
+            'frequencies': frequencies,
             'max_out': max_out,
-            'phase': phase,
+            'phase': phase
         }
 
     def save_recording(self) -> None:
@@ -670,25 +608,50 @@ class OutputCalibRecorder:
         hw_data: HardwareData
     ) -> None:
         """Generates the output signals for playback."""
-        mt_samples = int(np.round(num_block_samples/len(hw_data.output_channels)))
-        df = DeviceConfig.sample_rate/mt_samples
-        self.mt_frequencies = generator.compute_mt_frequencies(
+        mt_samples = int(np.round(
+            num_block_samples
+            / len(hw_data.output_channels)
+        ))
+        df = DeviceConfig.sample_rate/mt_samples*msrmt_params['num_clusters']
+        mt_frequencies = mt_generator.compute_mt_frequencies(
             msrmt_params['f_start'],
             msrmt_params['f_stop'],
             msrmt_params['lines_per_octave'],
             df
         )
-        num_mt_frequencies = len(self.mt_frequencies)
-        self.mt_phases = generator.compute_mt_phases(num_mt_frequencies)
+        # Remove redundant frequencies
+        mt_frequencies = np.unique(mt_frequencies)
+        num_mt_frequencies = len(mt_frequencies)
+        mt_phases = mt_generator.compute_mt_phases(num_mt_frequencies)
+        amplitudes = (
+            np.ones_like(mt_frequencies)
+            * msrmt_params['amplitude_per_line']
+        ).astype(np.float32)
+        cluster_idc = np.arange(num_mt_frequencies)
+        cluster_idc = cluster_idc % msrmt_params['num_clusters']
 
-        mt_signal = generator.generate_mt_signal(
+
+        self.mt_definition = mt_generator.MultiToneDefinition(
+            mt_frequencies,
+            mt_phases,
+            amplitudes,
+            cluster_idc.astype(np.int32)
+        )
+
+
+
+        # mt_signal = mt_generator.generate_mt_signal(
+        #     mt_samples,
+        #     DeviceConfig.sample_rate,
+        #     self.mt_frequencies,
+        #     self.mt_phases
+        # )
+
+        mt_signal = self.mt_definition.generate_mt_signal(
             mt_samples,
             DeviceConfig.sample_rate,
-            self.mt_frequencies,
-            self.mt_phases
+            DeviceConfig.ramp_duration
         )
-        self.output_amplitude = msrmt_params['amplitude_per_line']
-        mt_signal *= self.output_amplitude
 
         max_amplitude = np.max(mt_signal)
         if max_amplitude > DeviceConfig.max_digital_output:
@@ -700,22 +663,6 @@ class OutputCalibRecorder:
             self.logger.warning(
                 'Output calibration results might be invalid.'
             )
-
-        # TODO: add correction for ramp duration
-        # we always use rising and falling edges
-        ramp_len = int(
-            DeviceConfig.ramp_duration * 1E-3 * DeviceConfig.sample_rate
-        )
-        ramp = 0.5*(1 - np.cos(2*np.pi*np.arange(ramp_len)/(2*ramp_len)))
-        ramp = ramp.astype(np.float32)
-
-        # print(f'RMS before ramping: {processing.estimate_power(mt_signal)}')
-
-        # apply ramps
-        mt_signal[:ramp_len] *= ramp
-        mt_signal[-ramp_len:] *= ramp[::-1]
-
-        # print(f'RMS after ramping: {processing.estimate_power(mt_signal)}')
 
         n_total_samples = num_block_samples * msrmt_params['num_averaging_blocks']
 

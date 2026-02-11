@@ -588,44 +588,6 @@ def generate_sync(sample_rate: float) -> npt.NDArray[np.float32]:
     return sync_pulse
 
 
-def compute_mt_frequencies(
-    f_start: float,
-    f_stop: float,
-    lines_per_octave: float,
-    df: float
-) -> npt.NDArray[np.floating]:
-    """Computes multi-tone frequencies.
-
-    Computes frequency lines from start to stop frequency adjusted to
-    segment length with the specified lines per octave.
-    """
-    b = 2 ** (1/lines_per_octave)
-    n = int(np.log(f_stop/f_start)/np.log(b))
-    f = f_start * b ** (np.arange(n))
-    f = np.round(f/df)*df
-    return f
-
-
-def compute_mt_phases(num_frequencies: int) -> npt.NDArray[np.floating]:
-    """Computes approximately equally distributed phases"""
-    phi = np.zeros(num_frequencies)
-    for i in range(num_frequencies):
-        phi[i] = np.random.uniform(0, 2 * np.pi)
-    return phi
-
-
-def interlace_mt_frequencies(
-    frequencies: npt.NDArray[np.floating],
-    num_tones: int
-) -> list[npt.NDArray[np.floating]]:
-    """Creates interlaced frequency lists.
-
-    Splits frequency array into `num_tones` interlaced sets.
-    Each set contains every nth frequency starting at a different offset.
-    """
-    return [frequencies[i::num_tones] for i in range(num_tones)]
-
-
 def get_time_vector(
     num_samples: int,
     sample_rate: float
@@ -633,19 +595,3 @@ def get_time_vector(
     """Computes and returns a time vector in seconds."""
     time_vec = np.arange(num_samples) / sample_rate
     return time_vec.astype(np.float32)
-
-
-def generate_mt_signal(
-    num_samples: int,
-    sample_rate: float,
-    frequencies: npt.NDArray[np.float32],
-    phases: npt.NDArray[np.float32]
-) -> npt.NDArray[np.float32]:
-    """Create a multi-tone signal used for output calibration."""
-    time_vec = get_time_vector(num_samples, sample_rate)
-
-    mt_signal = np.zeros_like(time_vec)
-    for i, f in enumerate(frequencies):
-        mt_signal += np.cos(2 * np.pi * f * time_vec + phases[i])
-
-    return mt_signal

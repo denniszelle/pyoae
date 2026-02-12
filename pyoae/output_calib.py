@@ -22,7 +22,10 @@ from pyoae import converter
 from pyoae.device.device_config import DeviceConfig
 from pyoae.msrmt_context import MsrmtContext
 from pyoae import mt_generator
-from pyoae.protocols import CalibMsrmtParams
+from pyoae.protocols import (
+    CalibMsrmtParams,
+    CalibMsrmtDef
+)
 from pyoae.signals import PeriodicSignal
 from pyoae.sync import (
     get_input_channels,
@@ -441,7 +444,7 @@ class OutputCalibRecorder:
 
     def __init__(
         self,
-        msrmt_params: CalibMsrmtParams,
+        msrmt_params: CalibMsrmtParams | CalibMsrmtDef,
         output_channels: list[int],
         mic_trans_fun: list[MicroTransferFunction] | None = None,
         log: Logger | None = None
@@ -603,7 +606,7 @@ class OutputCalibRecorder:
 
     def generate_output_signals(
         self,
-        msrmt_params: CalibMsrmtParams,
+        msrmt_params: CalibMsrmtParams | CalibMsrmtDef,
         num_block_samples: int,
         hw_data: HardwareData
     ) -> None:
@@ -612,40 +615,48 @@ class OutputCalibRecorder:
             num_block_samples
             / len(hw_data.output_channels)
         ))
-        df = DeviceConfig.sample_rate/mt_samples*msrmt_params['num_clusters']
-        mt_frequencies = mt_generator.compute_mt_frequencies(
-            msrmt_params['f_start'],
-            msrmt_params['f_stop'],
-            msrmt_params['lines_per_octave'],
-            df
-        )
-        # Remove redundant frequencies
-        mt_frequencies = np.unique(mt_frequencies)
-        num_mt_frequencies = len(mt_frequencies)
-        mt_phases = mt_generator.compute_mt_phases(num_mt_frequencies)
-        amplitudes = (
-            np.ones_like(mt_frequencies)
-            * msrmt_params['amplitude_per_line']
-        ).astype(np.float32)
-        cluster_idc = np.arange(num_mt_frequencies)
-        cluster_idc = cluster_idc % msrmt_params['num_clusters']
 
+        # For CalibMsrmtParams
+        if 'num_clusters' in msrmt_params:
+            df = DeviceConfig.sample_rate/mt_samples*msrmt_params['num_clusters']
+            mt_frequencies = mt_generator.compute_mt_frequencies(
+                msrmt_params['f_start'],
+                msrmt_params['f_stop'],
+                msrmt_params['lines_per_octave'],
+                df,
+                extra_density=40.0
+            )
+            # Remove redundant frequencies
+            mt_frequencies = np.unique(mt_frequencies)
+            num_mt_frequencies = len(mt_frequencies)
+            mt_phases = mt_generator.compute_mt_phases(num_mt_frequencies)
+            mt_amplitudes = (
+                np.ones_like(mt_frequencies)
+                * msrmt_params['amplitude_per_line']
+            ).astype(np.float32)
+            mt_amplitudes[mt_frequencies<1000] *= 2
+            mt_amplitudes[mt_frequencies>4000] *= 4
+            cluster_idc = np.arange(num_mt_frequencies)
+            cluster_idc = cluster_idc % msrmt_params['num_clusters']
+
+        elif 'frequencies' in msrmt_params:
+            mt_frequencies = msrmt_params['frequencies']
+            mt_phases = msrmt_params['phases']
+            mt_amplitudes = msrmt_params['amplitudes']
+            cluster_idc = msrmt_params['cluster_idc']
+
+        else:
+            self.logger.error('Invalid protocol type.')
+            # TODO: cancel properly
+            self.msrmt = None
+            return
 
         self.mt_definition = mt_generator.MultiToneDefinition(
             mt_frequencies,
             mt_phases,
-            amplitudes,
+            mt_amplitudes,
             cluster_idc.astype(np.int32)
         )
-
-
-
-        # mt_signal = mt_generator.generate_mt_signal(
-        #     mt_samples,
-        #     DeviceConfig.sample_rate,
-        #     self.mt_frequencies,
-        #     self.mt_phases
-        # )
 
         mt_signal = self.mt_definition.generate_mt_signal(
             mt_samples,

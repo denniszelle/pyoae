@@ -23,6 +23,7 @@ def ramp_envelope(n_samples: int, ramp_samples: int) -> np.ndarray:
 
     return env
 
+
 @dataclass
 class MultiToneResult:
     """Class to define results for multitone measurements."""
@@ -143,8 +144,8 @@ class MultiToneDefinition:
             t_segment = time_vec[: end - start]
             segment = np.zeros_like(t_segment)
 
-            cluster_freqs, cluster_amps, cluster_phases = self.get_cluster_signals(
-                cluster_idx_i
+            cluster_freqs, cluster_amps, cluster_phases = (
+                self.get_cluster_signals(cluster_idx_i)
             )
 
             for i, freq_i in enumerate(cluster_freqs):
@@ -310,18 +311,32 @@ def compute_mt_frequencies(
     f_start: float,
     f_stop: float,
     lines_per_octave: float,
-    df: float
-) -> npt.NDArray[np.floating]:
+    df: float,
+    extra_density: float = 0.0,
+) -> np.ndarray:
     """Computes multi-tone frequencies.
 
     Computes frequency lines from start to stop frequency adjusted to
     segment length with the specified lines per octave.
+
     """
-    b = 2 ** (1/lines_per_octave)
-    n = int(np.log(f_stop/f_start)/np.log(b))
-    f = f_start * b ** (np.arange(n))
-    f = np.round(f/df)*df
-    return f
+
+    freqs = [f_start]
+    f = f_start
+
+    while f < f_stop:
+        # linear increase of density over frequency
+        t = (f - f_start) / (f_stop - f_start)
+        current_lpo = lines_per_octave + extra_density * t
+
+        b = 2 ** (1 / current_lpo)
+        f = f * b
+        f = np.round(f / df) * df
+
+        if f > freqs[-1]:   # prevent duplicates due to rounding
+            freqs.append(f)
+
+    return np.array(freqs)
 
 
 def compute_mt_phases(num_frequencies: int) -> npt.NDArray[np.floating]:

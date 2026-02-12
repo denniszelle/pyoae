@@ -1,5 +1,6 @@
 """Module providing functions for file handling."""
 
+import csv
 import json
 import os
 from pathlib import Path
@@ -87,6 +88,85 @@ def load_micro_calib(file_path: str | Path) -> calib_storage.MicroCalibData | No
                 micro_calib_data[key] = d[key]
 
     return micro_calib_data
+
+
+def load_csv_output_calib(
+    file_path: str
+) -> protocols.CalibMsrmtDef | None:
+    """Load the output calibration measurement definition from a csv file"""
+
+    meta = {}
+    data_rows = []
+
+    with open(file_path, 'r', newline='', encoding='utf-8-sig') as f:
+        reader = csv.reader(f)
+
+        # --- Read metadata ---
+        for row in reader:
+            if not row:  # empty line -> end of metadata
+                break
+            key, value = row
+            meta[key] = value
+
+        # --- Read header ---
+        _ = next(reader)
+        # ['frequencies', 'phases', 'amplitudes', 'cluster_idx']
+        # TODO: Check for valid headers.
+
+        # --- Read data ---
+        for row in reader:
+            if row:  # skip possible empty lines
+                data_rows.append(row)
+
+    # Convert to numpy array with correct types
+    data = np.array(data_rows)
+
+    # Convert metadata to proper types
+    meta['block_duration'] = float(meta['block_duration'])
+    meta['num_averaging_blocks'] = int(meta['num_averaging_blocks'])
+
+    msrmt_params: protocols.CalibMsrmtDef = {
+        'block_duration': float(meta['block_duration']),
+        'num_averaging_blocks': int(meta['num_averaging_blocks']),
+        'frequencies': data[:, 0].astype(float),
+        'phases': data[:, 1].astype(float),
+        'amplitudes': data[:, 2].astype(float),
+        'cluster_idc': data[:, 3].astype(int)
+    }
+
+    return msrmt_params
+
+def load_output_calib_protocol(file_path: str
+) -> (
+    protocols.CalibMsrmtParams
+    | protocols.CalibMsrmtDef
+    | None
+):
+    """Loads the output calibration protocol"""
+    path = Path(file_path)
+
+    if not path.exists():
+        log.error('Could not find calibration protocol file.')
+        return None
+
+    if not path.is_file():
+        log.error('Given path is not a file.')
+        return None
+
+    suffix = path.suffix.lower()
+
+    if suffix == '.csv':
+        return load_csv_output_calib(file_path)
+
+    elif suffix == '.json':
+        prtcl_data = load_json_file(file_path)
+        return protocols.get_custom_calib_msrmt_params(prtcl_data)
+    else:
+        log.error(
+            'Invalid file format. Only .csv or .json are valid as '
+            'output calib protocol'
+        )
+        return None
 
 
 def load_output_calib(file_path: str) -> calib_storage.SpeakerCalibData:

@@ -74,8 +74,7 @@ def main(
 
     if protocol:
         logger.info('Loading speaker calibration protocol from %s.', protocol)
-        prtcl_data = files.load_json_file(protocol)
-        msrmt_params = protocols.get_custom_calib_msrmt_params(prtcl_data)
+        msrmt_params = files.load_output_calib_protocol(protocol)
         if msrmt_params is None:
             logger.error('Stopping: Output calibration protocol is invalid.')
             return

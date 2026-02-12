@@ -1,7 +1,7 @@
 {
-    "block_duration": 1.0,
+    "block_duration": 2.0,
     "num_averaging_blocks": 1,
-    "num_clusters": 5,
+    "num_clusters": 20,
     "f_start": 200.0,
     "f_stop": 20000.0,
     "lines_per_octave": 18.1,

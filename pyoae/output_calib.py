@@ -433,7 +433,7 @@ class OutputCalibRecorder:
     msrmt_ctx: MsrmtContext
     """Instance to perform a synchronized OAE measurement."""
 
-    msrmt: SyncMsrmt
+    msrmt: SyncMsrmt | None
     """Instance to perform a synchronized measurement."""
 
     results: SpeakerCalibData | None
@@ -526,11 +526,15 @@ class OutputCalibRecorder:
         self.results = None
 
         self.signals = []
-        self.generate_output_signals(
+
+        is_generated = self.generate_output_signals(
             msrmt_params,
             num_block_samples,
             hw_data
         )
+        if not is_generated:
+            self.msrmt = None
+            return
 
         self.msrmt = SyncMsrmt(
             rec_data,
@@ -543,6 +547,9 @@ class OutputCalibRecorder:
         """Starts the calibration."""
 
         if self.ready_to_record is False:
+            return
+
+        if self.msrmt is None:
             return
 
         self.logger.info('Starting output calibration...')
@@ -569,6 +576,9 @@ class OutputCalibRecorder:
 
     def compute_calib_results(self) -> None:
         """Computes the output-channel transfer functions."""
+        if self.msrmt is None:
+            return
+
         if self.msrmt.state != MsrmtState.FINISHED:
             return
 
@@ -609,8 +619,10 @@ class OutputCalibRecorder:
         msrmt_params: CalibMsrmtParams | CalibMsrmtDef,
         num_block_samples: int,
         hw_data: HardwareData
-    ) -> None:
-        """Generates the output signals for playback."""
+    ) -> bool:
+        """Generates the output signals for playback.
+
+        Returns True when finished successfully"""
         mt_samples = int(np.round(
             num_block_samples
             / len(hw_data.output_channels)
@@ -618,44 +630,20 @@ class OutputCalibRecorder:
 
         # For CalibMsrmtParams
         if 'num_clusters' in msrmt_params:
-            df = DeviceConfig.sample_rate/mt_samples*msrmt_params['num_clusters']
-            mt_frequencies = mt_generator.compute_mt_frequencies(
-                msrmt_params['f_start'],
-                msrmt_params['f_stop'],
-                msrmt_params['lines_per_octave'],
-                df,
-                extra_density=40.0
-            )
-            # Remove redundant frequencies
-            mt_frequencies = np.unique(mt_frequencies)
-            num_mt_frequencies = len(mt_frequencies)
-            mt_phases = mt_generator.compute_mt_phases(num_mt_frequencies)
-            mt_amplitudes = (
-                np.ones_like(mt_frequencies)
-                * msrmt_params['amplitude_per_line']
-            ).astype(np.float32)
-            mt_amplitudes[mt_frequencies<1000] *= 2
-            mt_amplitudes[mt_frequencies>4000] *= 4
-            cluster_idc = np.arange(num_mt_frequencies)
-            cluster_idc = cluster_idc % msrmt_params['num_clusters']
+            calib_def = mt_generator.generate_mt_def(msrmt_params)
 
         elif 'frequencies' in msrmt_params:
-            mt_frequencies = msrmt_params['frequencies']
-            mt_phases = msrmt_params['phases']
-            mt_amplitudes = msrmt_params['amplitudes']
-            cluster_idc = msrmt_params['cluster_idc']
+            calib_def = msrmt_params
 
         else:
             self.logger.error('Invalid protocol type.')
-            # TODO: cancel properly
-            self.msrmt = None
-            return
+            return False
 
         self.mt_definition = mt_generator.MultiToneDefinition(
-            mt_frequencies,
-            mt_phases,
-            mt_amplitudes,
-            cluster_idc.astype(np.int32)
+            calib_def['frequencies'],
+            calib_def['phases'],
+            calib_def['amplitudes'],
+            calib_def['cluster_idc']
         )
 
         mt_signal = self.mt_definition.generate_mt_signal(
@@ -691,3 +679,4 @@ class OutputCalibRecorder:
                 self.signals.append(
                     PeriodicSignal()
                 )
+        return True

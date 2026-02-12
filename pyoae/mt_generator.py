@@ -10,6 +10,7 @@ from pyoae import get_logger
 from pyoae import generator
 from pyoae.device.device_config import DeviceConfig
 from pyoae.calib_storage import MicroTransferFunction
+from pyoae import protocols
 
 
 def ramp_envelope(n_samples: int, ramp_samples: int) -> np.ndarray:
@@ -168,18 +169,6 @@ class MultiToneDefinition:
         n_clusters = self.get_n_clusters()
         return n_samples_recorded // n_clusters
 
-    def get_cluster_segment(self, recorded_signal, cluster_idx: int) -> np.ndarray:
-        """Get a cluster segment"""
-
-        clusters = self.get_unique_cluster_indices()
-        i = np.where(clusters == cluster_idx)[0][0]
-        # i = clusters.index(cluster_idx)
-
-        n = self._samples_per_cluster(len(recorded_signal))
-        start = i * n
-        stop = start + n
-
-        return recorded_signal[start:stop]
 
 
 class MultiToneAnalyzer:
@@ -278,9 +267,6 @@ class MultiToneAnalyzer:
                 axis=0
             )
 
-            # for i, freq_i in enumerate(cluster_freqs):
-
-            # idx = np.argmin(np.abs(freqs - freq_i))
             raw_amps = np.abs(spectrum[freq_idc])
             if self.mt.ramp_correction is None:
                 amps = raw_amps/cluster_amps
@@ -345,3 +331,35 @@ def compute_mt_phases(num_frequencies: int) -> npt.NDArray[np.floating]:
     for i in range(num_frequencies):
         phi[i] = np.random.uniform(0, 2 * np.pi)
     return phi
+
+def generate_mt_def(msrmt_params: protocols.CalibMsrmtParams
+) -> protocols.CalibMsrmtDef:
+    """Generate multitone definition"""
+    df = 1/msrmt_params['block_duration']*msrmt_params['num_clusters']
+    mt_frequencies = compute_mt_frequencies(
+        msrmt_params['f_start'],
+        msrmt_params['f_stop'],
+        msrmt_params['lines_per_octave'],
+        df,
+        extra_density=20.0
+    )
+    # Remove redundant frequencies
+    mt_frequencies = np.unique(mt_frequencies)
+    num_mt_frequencies = len(mt_frequencies)
+    mt_phases = compute_mt_phases(num_mt_frequencies)
+    mt_amplitudes = (
+        np.ones_like(mt_frequencies)
+        * msrmt_params['amplitude_per_line']
+    ).astype(np.float32)
+    cluster_idc = np.arange(num_mt_frequencies, dtype=np.int32)
+    cluster_idc = cluster_idc % msrmt_params['num_clusters']
+
+    calib_def: protocols.CalibMsrmtDef = {
+        'block_duration': msrmt_params['block_duration'],
+        'num_averaging_blocks': msrmt_params['num_averaging_blocks'],
+        'frequencies': mt_frequencies,
+        'phases': mt_phases,
+        'amplitudes': mt_amplitudes,
+        'cluster_idc': cluster_idc
+    }
+    return calib_def

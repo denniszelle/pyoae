@@ -467,12 +467,16 @@ class OutputCalibRecorder:
         )
 
         # Set to false if major problem occured during calibration
-        self.ready_to_record = True
         self.results = None
 
-        if block_duration != msrmt_params['block_duration']:
+        if block_duration == msrmt_params['block_duration'] * len(output_channels):
+            self.logger.info(
+                'Block duration adjusted to %.2f ms.',
+                block_duration * 1E3
+            )
+        else:
             self.logger.warning(
-                'Block duration adjusted to {%.2f} ms.',
+                'Block duration set to %.2f ms.',
                 block_duration * 1E3
             )
 
@@ -501,7 +505,7 @@ class OutputCalibRecorder:
                 for trans_fun_i in mic_trans_fun:
                     mic_transfer_functions.append(trans_fun_i)
             else:
-                self.ready_to_record = False
+                self.msrmt = None
                 self.logger.error(
                     'Invalid number of microphone transfer functions'
                 )
@@ -545,9 +549,6 @@ class OutputCalibRecorder:
 
     def record(self) -> None:
         """Starts the calibration."""
-
-        if self.ready_to_record is False:
-            return
 
         if self.msrmt is None:
             return

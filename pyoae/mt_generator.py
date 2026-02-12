@@ -316,11 +316,14 @@ def compute_mt_frequencies(
         current_lpo = lines_per_octave + extra_density * t
 
         b = 2 ** (1 / current_lpo)
-        f = f * b
-        f = np.round(f / df) * df
+        f_next = f * b
+        f_next = np.round(f_next / df) * df
 
-        if f > freqs[-1]:   # prevent duplicates due to rounding
-            freqs.append(f)
+        if f_next <= f:
+            f_next = f + df
+
+        f = f_next
+        freqs.append(f)
 
     return np.array(freqs)
 

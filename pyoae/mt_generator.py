@@ -79,7 +79,7 @@ class MultiToneDefinition:
         amplitudes: npt.NDArray[np.float32],
         cluster_idc: npt.NDArray[np.int32],
         log: Logger | None = None
-        ):
+    ):
 
         self.logger = log or get_logger()
         self.frequencies = frequencies
@@ -118,12 +118,8 @@ class MultiToneDefinition:
         return frequencies, amplitudes, phases
 
     def generate_mt_signal(
-        self,
-        num_samples: int,
-        sample_rate: float,
-        ramp_duration: float
+        self, num_samples: int, sample_rate: float, ramp_duration: float
     ) -> npt.NDArray[np.float32]:
-
         """Create a multi-tone signal used for output calibration."""
 
         time_vec = generator.get_time_vector(num_samples, sample_rate)
@@ -142,7 +138,7 @@ class MultiToneDefinition:
             else:
                 end = num_samples
 
-            t_segment = time_vec[: end - start]
+            t_segment = time_vec[:end - start]
             segment = np.zeros_like(t_segment)
 
             cluster_freqs, cluster_amps, cluster_phases = (
@@ -160,7 +156,7 @@ class MultiToneDefinition:
 
             signal[start:end] += segment
 
-            self.ramp_correction = 1/np.mean(env**2)
+            self.ramp_correction = 1 / np.mean(env**2)
 
         return signal
 
@@ -168,7 +164,6 @@ class MultiToneDefinition:
         """Get the number of samples per cluster"""
         n_clusters = self.get_n_clusters()
         return n_samples_recorded // n_clusters
-
 
 
 class MultiToneAnalyzer:
@@ -217,15 +212,13 @@ class MultiToneAnalyzer:
         n = len(segment)
 
         ramp_samples = int(
-            DeviceConfig.ramp_duration
-            * 1E-3
-            * DeviceConfig.sample_rate
+            DeviceConfig.ramp_duration * 1E-3 * DeviceConfig.sample_rate
         )
         ramp = ramp_envelope(n, ramp_samples)
         windowed = segment * ramp
 
         freqs = np.fft.rfftfreq(n, 1 / self.sample_rate)
-        spectrum = 2* np.fft.rfft(windowed) / len(segment)
+        spectrum = 2 * np.fft.rfft(windowed) / len(segment)
         np.divide(spectrum, np.sqrt(2), spectrum)
         spectrum = spectrum.astype(np.complex64)
 
@@ -248,7 +241,7 @@ class MultiToneAnalyzer:
         all_amplitudes = []
         all_raw_amplitudes = []
         all_phases = []
-        freqs = np.ndarray(0,np.float32)
+        freqs = np.ndarray(0, np.float32)
 
         for cluster_idx in cluster_indices:
             segment = self._get_cluster_segment(cluster_idx)
@@ -257,21 +250,18 @@ class MultiToneAnalyzer:
             segments.append(segment)
 
             cluster_freqs, cluster_amps, cluster_phases = (
-                self.mt.get_cluster_signals(
-                    cluster_idx
-                )
+                self.mt.get_cluster_signals(cluster_idx)
             )
 
             freq_idc = np.argmin(
-                np.abs(freqs[:, None] - cluster_freqs[None, :]),
-                axis=0
+                np.abs(freqs[:, None] - cluster_freqs[None, :]), axis=0
             )
 
             raw_amps = np.abs(spectrum[freq_idc])
             if self.mt.ramp_correction is None:
-                amps = raw_amps/cluster_amps
+                amps = raw_amps / cluster_amps
             else:
-                amps = raw_amps/cluster_amps*self.mt.ramp_correction
+                amps = raw_amps / cluster_amps * self.mt.ramp_correction
             phases = np.angle(spectrum[freq_idc]) - cluster_phases
 
             all_frequencies = np.r_[all_frequencies, cluster_freqs]
@@ -315,7 +305,7 @@ def compute_mt_frequencies(
         t = (f - f_start) / (f_stop - f_start)
         current_lpo = lines_per_octave + extra_density * t
 
-        b = 2 ** (1 / current_lpo)
+        b = 2**(1 / current_lpo)
         f_next = f * b
         f_next = np.round(f_next / df) * df
 
@@ -335,10 +325,12 @@ def compute_mt_phases(num_frequencies: int) -> npt.NDArray[np.floating]:
         phi[i] = np.random.uniform(0, 2 * np.pi)
     return phi
 
-def generate_mt_def(msrmt_params: protocols.CalibMsrmtParams
+
+def generate_mt_def(
+    msrmt_params: protocols.CalibMsrmtParams
 ) -> protocols.CalibMsrmtDef:
     """Generate multitone definition"""
-    df = 1/msrmt_params['block_duration']*msrmt_params['num_clusters']
+    df = 1 / msrmt_params['block_duration'] * msrmt_params['num_clusters']
     mt_frequencies = compute_mt_frequencies(
         msrmt_params['f_start'],
         msrmt_params['f_stop'],
@@ -351,8 +343,7 @@ def generate_mt_def(msrmt_params: protocols.CalibMsrmtParams
     num_mt_frequencies = len(mt_frequencies)
     mt_phases = compute_mt_phases(num_mt_frequencies)
     mt_amplitudes = (
-        np.ones_like(mt_frequencies)
-        * msrmt_params['amplitude_per_line']
+        np.ones_like(mt_frequencies) * msrmt_params['amplitude_per_line']
     ).astype(np.float32)
     cluster_idc = np.arange(num_mt_frequencies, dtype=np.int32)
     cluster_idc = cluster_idc % msrmt_params['num_clusters']

@@ -176,7 +176,10 @@ class PeriodicRampSignal(PeriodicSignal):
             effective_len = min(ramp_len, available_len)
             offset = end_idx-self.num_total_samples
 
-            buffer_slice = signal_buffer[-offset - effective_len : -offset]
+            if offset == 0:
+                buffer_slice = signal_buffer[-offset - effective_len :]
+            else:
+                buffer_slice = signal_buffer[-offset - effective_len : -offset]
             ramp_slice = self.ramp[::-1][k : k + effective_len]
             buffer_slice *= ramp_slice
 

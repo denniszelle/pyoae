@@ -319,7 +319,7 @@ class MicroTransferFunction:
             f: frequency at which transfer function should be sampled
         """
 
-        if f < np.min(self.frequencies) or f > np.max(self.frequencies):
+        if f < np.min(self.raw_freqs) or f > np.max(self.raw_freqs):
             self.logger.warning(
                 '%s Hz outside microphone calibrated boundaries.',
                 f
@@ -329,7 +329,8 @@ class MicroTransferFunction:
         # (alternatively, we could store the frequency resolution
         # in order to calculate the frequency-bin index)
         idx = np.argmin(np.abs(self.frequencies - f))
-        return self.amplitudes[idx]
+        amp = self.get_interp_transfer_function(np.asarray([f]))
+        return abs(amp[0])
 
     def get_interp_transfer_function(
         self,

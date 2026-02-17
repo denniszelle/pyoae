@@ -106,7 +106,7 @@ class PeriodicSignal(Signal):
         start_mod = start_idx % self.num_signal_samples
         end_mod = (start_mod + length) % self.num_signal_samples
 
-        if start_mod + length <= self.num_signal_samples:
+        if start_mod + length < self.num_signal_samples:
             # Single slice, no wraparound
             signal_buffer[:] = self.signal_data[start_mod:start_mod + length]
             return False

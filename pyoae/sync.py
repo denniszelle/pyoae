@@ -565,7 +565,7 @@ class SyncMsrmt(Generic[SignalT]):
                 for i, signal_i in enumerate(
                     self.live_msrmt_data.output_signals
                 ):
-                    is_finished, _ = signal_i.get_data(
+                    _, is_finished = signal_i.get_data(
                         start_idx,
                         end_idx,
                         signal_buffer=chunks[:,i]

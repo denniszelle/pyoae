@@ -325,10 +325,6 @@ class MicroTransferFunction:
                 f
             )
 
-        # find frequency-bin index
-        # (alternatively, we could store the frequency resolution
-        # in order to calculate the frequency-bin index)
-        idx = np.argmin(np.abs(self.frequencies - f))
         amp = self.get_interp_transfer_function(np.asarray([f]))
         return abs(amp[0])
 

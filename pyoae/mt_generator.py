@@ -1,4 +1,4 @@
-"""Module that contains classes and functions for multitone generation."""
+"""Module that contains classes and functions for multi-tone generation."""
 
 from dataclasses import dataclass
 from logging import Logger
@@ -27,32 +27,32 @@ def ramp_envelope(n_samples: int, ramp_samples: int) -> np.ndarray:
 
 @dataclass
 class MultiToneResult:
-    """Class to define results for multitone measurements."""
+    """Class to define results for multi-tone measurements."""
 
     spectra: list[npt.NDArray[np.float32]]
-    """List of spectra for each multitone cluster"""
+    """List of spectra for each multi-tone cluster"""
 
     freq_spectra: npt.NDArray[np.float32]
     """Frequency values of spectra"""
 
     frequencies: npt.NDArray[np.float32]
-    """Frequencies of the multitones"""
+    """Frequencies of the multi-tones"""
 
     freq_idc: npt.NDArray[np.int32]
     """Indices of frequencies"""
 
     amplitude: npt.NDArray[np.float32]
-    """Amplitudes at multitone frequencies corrected by input amplitude"""
+    """Amplitudes at multi-tone frequencies corrected by input amplitude"""
 
     raw_amplitude: npt.NDArray[np.float32]
-    """Amplitudes of multitones without input correction"""
+    """Amplitudes of multi-tones without input correction"""
 
     phase: npt.NDArray[np.float32]
-    """Phase at multitone frequencies"""
+    """Phase at multi-tone frequencies"""
 
 
 class MultiToneDefinition:
-    """Class for multitone definition and generation"""
+    """Class for multi-tone definition and generation"""
 
     logger: Logger
     """Class logger for debug, info, warning and error messages"""
@@ -79,8 +79,7 @@ class MultiToneDefinition:
         amplitudes: npt.NDArray[np.float32],
         cluster_idc: npt.NDArray[np.int32],
         log: Logger | None = None
-    ):
-
+    ) -> None:
         self.logger = log or get_logger()
         self.frequencies = frequencies
         self.phases = phases
@@ -96,7 +95,7 @@ class MultiToneDefinition:
         return np.unique(self.cluster_idc)
 
     def get_n_clusters(self):
-        """Return the number of clusters for the multitone definition."""
+        """Return the number of clusters for the multi-tone definition."""
         return len(self.get_unique_cluster_indices())
 
     def get_frequencies(self) -> npt.NDArray[np.float32]:
@@ -107,7 +106,14 @@ class MultiToneDefinition:
         """Return the phases of the spectral tones."""
         return self.phases
 
-    def get_cluster_signals(self, cluster_idx: int):
+    def get_cluster_signals(
+        self,
+        cluster_idx: int
+    ) -> tuple[
+        npt.NDArray[np.float32],
+        npt.NDArray[np.float32],
+        npt.NDArray[np.float32]
+    ]:
         """Return frequencies, amplitudes and phases for one cluster."""
         mask = self.cluster_idc == cluster_idx
 
@@ -167,10 +173,10 @@ class MultiToneDefinition:
 
 
 class MultiToneAnalyzer:
-    """Analyze a recorded multitone signal relative to its definition."""
+    """Analyze a recorded multi-tone signal relative to its definition."""
 
     mt_definition: MultiToneDefinition
-    """Definition of the multitone set"""
+    """Definition of the multi-tone set"""
 
     recorded_signal: npt.NDArray[np.float32]
     """Recorded signal"""
@@ -183,7 +189,7 @@ class MultiToneAnalyzer:
         mt_definition: MultiToneDefinition,
         recorded_signal: npt.NDArray[np.float32],
         sample_rate: float
-    ):
+    ) -> None:
         self.mt = mt_definition
         self.recorded_signal = recorded_signal
         self.sample_rate = sample_rate
@@ -193,7 +199,10 @@ class MultiToneAnalyzer:
         n_clusters = self.mt.get_n_clusters()
         return len(self.recorded_signal) // n_clusters
 
-    def _get_cluster_segment(self, cluster_idx: int):
+    def _get_cluster_segment(
+        self,
+        cluster_idx: int
+    ) -> npt.NDArray[np.float32]:
         """Get signal segment assigned to a cluster"""
         clusters = sorted(self.mt.get_unique_cluster_indices())
         i = clusters.index(cluster_idx)
@@ -207,7 +216,7 @@ class MultiToneAnalyzer:
         self,
         segment: npt.NDArray[np.float32],
         micro_tf: MicroTransferFunction | None
-    ):
+    ) -> tuple[npt.NDArray[np.float32], npt.NDArray[np.complex64]]:
         """Compute spectrum of a signal and apply a transfer function"""
         n = len(segment)
 

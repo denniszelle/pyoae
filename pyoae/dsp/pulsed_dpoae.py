@@ -2,11 +2,13 @@
 
 from logging import Logger
 from pathlib import Path
+from typing import cast
 
 from matplotlib import pyplot as plt
 from matplotlib.axes import Axes
 import numpy as np
 import numpy.typing as npt
+import scipy.signal as sig
 
 from pyoae import files
 from pyoae import generator
@@ -40,7 +42,7 @@ def _msrmt_to_pulse_recording(
 
 
 def _get_roi_length(f2: float) -> float:
-    """Retrieves the length of analysis segment for a pulsed DPOAE.
+    """Retrieves the length of analysis segment for a short-pulsed DPOAE.
 
     The DPOAE latency depends on the specified f2 frequency with
     lower frequencies resulting in longer latencies (specified in ms).
@@ -60,6 +62,38 @@ def _get_roi_length(f2: float) -> float:
     if f2 < ROI_BOUNDARIES[1]:
         return ROI_LENGTHS[1]
     return ROI_LENGTHS[2]
+
+
+def calculate_pulsed_dpoae_signal(
+    averaged_signal: np.ndarray,
+    samplerate: float,
+    cutoff: np.ndarray,
+    fdp: float,
+    t_block: np.ndarray,
+    ramp_size: int = 0,
+    num_taps: int | None = None
+) -> tuple[
+    npt.NDArray[np.float64],
+    npt.NDArray[np.float64],
+    npt.NDArray[np.float64]
+]:
+    """Filtered DPOAE signal, envelope, and instantaneous phase from average."""
+    if num_taps is None:
+        # use default filter order
+        num_taps = filters.scale_filter_order(filters.BP_ORDER, samplerate)
+
+    avg_filtered = filters.bp_pass_filter(
+        averaged_signal,
+        num_taps,
+        samplerate,
+        cutoff,
+        ramp_size=ramp_size
+    )
+    analytic_signal = cast(np.ndarray, sig.hilbert(avg_filtered))
+    envelope = np.abs(analytic_signal)
+    phi_raw = np.angle(analytic_signal)
+    phi = np.unwrap(phi_raw) - 2*np.pi*fdp*(t_block*1E-3)
+    return (avg_filtered, envelope, phi)
 
 
 class PulseDpoaeResult:

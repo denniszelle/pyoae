@@ -312,11 +312,14 @@ class MicroTransferFunction:
         self.raw_amps /= abs_calib['sensitivity']
 
 
-    def get_sensitivity(self, f: float) -> Complex:
+    def get_sensitivity(self, f: float) -> float:
         """Returns the output sensitivity in DFS/muPa.
 
         Args:
             f: frequency at which transfer function should be sampled
+
+        Returns:
+            Sensitivity of the microphone at the given frequency in DFS/muPa.
         """
 
         if f < np.min(self.raw_freqs) or f > np.max(self.raw_freqs):
@@ -326,7 +329,7 @@ class MicroTransferFunction:
             )
 
         amp = self.get_interp_transfer_function(np.asarray([f]))
-        return abs(amp[0])
+        return float(np.abs(amp[0]))
 
     def get_interp_transfer_function(
         self,

@@ -65,7 +65,7 @@ def low_pass_filter(
 ) -> npt.NDArray[np.float64]:
     """FIR low-pass with causal phase; same length as input."""
     if num_taps % 2 == 0:
-        # HP linear-phase FIRs should use odd taps for Type-I symmetry
+        # LP linear-phase FIRs should use odd taps for Type-I symmetry
         num_taps += 1
     b = sig.firwin(
         num_taps,
@@ -87,9 +87,9 @@ def bp_pass_filter(
     cutoff_hz: npt.NDArray,
     ramp_size: int = 0
 ) -> npt.NDArray[np.float64]:
-    """FIR high-pass with causal phase; same length as input."""
+    """FIR band-pass with causal phase; same length as input."""
     if num_taps % 2 == 0:
-        # HP linear-phase FIRs should use odd taps for Type-I symmetry
+        # BP linear-phase FIRs should use odd taps for Type-I symmetry
         num_taps += 1
     b = sig.firwin(
         num_taps,

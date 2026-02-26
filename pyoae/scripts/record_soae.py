@@ -27,7 +27,7 @@ Note:
 import argparse
 
 from pyoae import files
-from pyoae.calib import MicroTransferFunction
+from pyoae.calib_storage import MicroTransferFunction
 from pyoae.device.device_config import DeviceConfig
 from pyoae.soae import SoaeRecorder
 import pyoae.pyoae_logger as pyoae_logger

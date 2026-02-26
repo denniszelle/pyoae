@@ -16,12 +16,10 @@ Command-line arguments:
 
 import argparse
 
-import matplotlib
-
-from pyoae import calibrator
+from pyoae import output_calib
 from pyoae import files
 from pyoae import pyoae_logger
-from pyoae.calib import OutputCalibration
+from pyoae.calib_storage import OutputCalibration
 
 try:
     matplotlib.use('qtagg')
@@ -49,7 +47,7 @@ def main(file: str = '') -> None:
     if output_calib_fun is None:
         logger.error('Failed to load output calibration.')
         return
-    calibrator.plot_result_file(output_calib_fun)
+    output_calib.plot_result_file(output_calib_fun)
 
 
 parser = argparse.ArgumentParser(description='PyOAE Multi-Tone Calibration Results')

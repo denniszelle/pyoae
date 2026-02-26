@@ -6,10 +6,14 @@ from typing import (
     Final
 )
 
+import numpy as np
+import numpy.typing as npt
+
 
 OUTPUT_CALIB_KEYS: Final[list[str]] = [
     'block_duration',
     'num_averaging_blocks',
+    'num_clusters',
     'f_start',
     'f_stop',
     'lines_per_octave',
@@ -57,10 +61,37 @@ class PulseDpoaeMsrmtParams(DpoaeMsrmtParams):
 
 class CalibMsrmtParams(MsrmtParams):
     """Measurement parameters for multi-tone measurements."""
+
+    num_clusters: int
+    """Number of clusters the spectral tones are distributed on."""
+
     f_start: float
+    """Start frequency"""
+
     f_stop: float
+    """Stop frequency"""
+
     lines_per_octave: float
+    """Spectral signals per octave"""
+
     amplitude_per_line: float
+    """Amplitude of each spectral signal"""
+
+
+class CalibMsrmtDef(MsrmtParams):
+    """Measurement definition for custom multi-tone protocols"""
+
+    frequencies: npt.NDArray[np.float32]
+    """Frequencies of the multi-tones"""
+
+    phases: npt.NDArray[np.float32]
+    """Phases of the multi-tones"""
+
+    amplitudes: npt.NDArray[np.float32]
+    """Amplitudes of the multi-tones"""
+
+    cluster_idc: npt.NDArray[np.int32]
+    """Cluster indices of the multi tones"""
 
 
 def get_default_soae_msrmt_params() -> MsrmtParams:
@@ -77,6 +108,7 @@ def get_default_calib_msrmt_params() -> CalibMsrmtParams:
     d: CalibMsrmtParams = {
         'block_duration': 1.0,
         'num_averaging_blocks': 1,
+        'num_clusters': 1,
         'f_start': 200.0,
         'f_stop': 10000.0,
         'lines_per_octave': 9.1,
@@ -97,6 +129,7 @@ def get_custom_calib_msrmt_params(
     d: CalibMsrmtParams = {
         'block_duration': calib_params['block_duration'],
         'num_averaging_blocks': calib_params['num_averaging_blocks'],
+        'num_clusters': calib_params['num_clusters'],
         'f_start': calib_params['f_start'],
         'f_stop': calib_params['f_stop'],
         'lines_per_octave': calib_params['lines_per_octave'],

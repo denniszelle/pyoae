@@ -16,10 +16,17 @@ Command-line arguments:
 
 import argparse
 
+import matplotlib
+
 from pyoae import calibrator
 from pyoae import files
 from pyoae import pyoae_logger
 from pyoae.calib import OutputCalibration
+
+try:
+    matplotlib.use('qtagg')
+except ImportError:
+    print('No Qt Bindings found. Using default backend instead.')
 
 
 logger = pyoae_logger.get_pyoae_logger('PyOAE Output Calibration Data')

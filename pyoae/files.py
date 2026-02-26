@@ -3,8 +3,16 @@
 import json
 import os
 from pathlib import Path
-from typing import Any
-
+from typing import (
+    Any,
+    cast,
+    get_args,
+    get_origin,
+    get_type_hints,
+    Union,
+    Type
+)
+import types
 import numpy as np
 
 from pyoae import calib
@@ -147,6 +155,42 @@ def load_pulsed_dpoae_protocol(
     return []
 
 
+def allows_none(tp) -> bool:
+    """Check whether a type field allows None."""
+    origin = get_origin(tp)
+    # handle both classic Union and PEP 604 |
+    if origin in (Union, types.UnionType):
+        return type(None) in get_args(tp)
+    return False
+
+
+def load_typed_dict(schema: Type[Any], data: dict[str, Any]) -> dict[str, Any]:
+    """Load a TypedDict and automatically cast int/float fields."""
+    result: dict[str, Any] = {}
+    hints = get_type_hints(schema)
+
+    for field, field_type in hints.items():
+        if field in data:
+            value = data[field]
+            if value is not None:
+                origin = get_origin(field_type)
+                # Cast int and floats to python values
+                if origin is None:
+                    if field_type is int:
+                        value = int(value)
+                    elif field_type is float:
+                        value = float(value)
+            result[field] = value
+
+        # Check whether None is allowed for this type
+        elif allows_none(field_type):
+            result[field] = None
+        else:
+            raise KeyError(f"Missing required field: {field}")
+
+    return result
+
+
 def load_cdpoae_recording(file_path: str | Path) -> ContDpoaeRecording | None:
     """Loads measurement data of a cont. DPOAE recording from binary file."""
     try:
@@ -155,16 +199,10 @@ def load_cdpoae_recording(file_path: str | Path) -> ContDpoaeRecording | None:
         print(e)
         return None
 
-    recording: DpoaeMsrmtData = {
-        'recorded_signal': data['recorded_signal'],
-        'samplerate': float(data['samplerate']),
-        'f1': float(data['f1']),
-        'f2': float(data['f2']),
-        'level1': float(data['level1']),
-        'level2': float(data['level2']),
-        'num_block_samples': int(data['num_block_samples']),
-        'recorded_sync': data['recorded_sync'],
-    }
+    recording = cast(
+        DpoaeMsrmtData,
+        load_typed_dict(DpoaeMsrmtData, data),
+    )
 
     if 'average' in data:
         average = data['average']
@@ -191,16 +229,10 @@ def load_pdpoae_recording(file_path: str | Path) -> PulseDpoaeRecording | None:
         print(e)
         return None
 
-    recording: DpoaeMsrmtData = {
-        'recorded_signal': data['recorded_signal'],
-        'samplerate': float(data['samplerate']),
-        'f1': float(data['f1']),
-        'f2': float(data['f2']),
-        'level1': float(data['level1']),
-        'level2': float(data['level2']),
-        'num_block_samples': int(data['num_block_samples']),
-        'recorded_sync': data['recorded_sync'],
-    }
+    recording = cast(
+        DpoaeMsrmtData,
+        load_typed_dict(DpoaeMsrmtData, data),
+    )
 
     if 'raw_average' in data:
         raw_avg = data['raw_average']

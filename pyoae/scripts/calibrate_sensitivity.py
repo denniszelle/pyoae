@@ -43,8 +43,9 @@ def main(
     logger.info('Sensitivity calibration.')
     if save:
         logger.info('Recording will be saved.')
-    if input_ch is None:
+    if not input_ch:
         input_ch = 0
+    logger.info('Use input channel: %s', input_ch)
 
     logger.info('Loading global configuration from %s.', DEVICE_CONFIG_FILE)
     files.load_device_config(DEVICE_CONFIG_FILE)
@@ -58,6 +59,11 @@ def main(
 
 
 parser = argparse.ArgumentParser(description='PyOAE Sensitivity Calibration')
+parser.add_argument(
+    '--input_ch',
+    default=argparse.SUPPRESS,
+    type=int
+)
 parser.add_argument(
     '--save',
     action=argparse.BooleanOptionalAction,

@@ -262,9 +262,10 @@ class SoaeRecorder:
             recorded_signal, spectrum = self.get_results(i)
             np.savez(
                 file_save_path,
-                spectrum=spectrum,
-                recorded_signal=recorded_signal,
-                samplerate=DeviceConfig.sample_rate
+                spectrum = spectrum,
+                recorded_signal = recorded_signal,
+                samplerate = DeviceConfig.sample_rate,
+                in_ch = input_channel_i
             )
             self.logger.info("Measurement saved to %s.", file_save_path)
 

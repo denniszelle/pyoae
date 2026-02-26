@@ -118,7 +118,7 @@ def create_ptpv_signals(
     amplitude: float,
     phase_shift: float,
     num_block_samples: int,
-    num_segments: int = 4
+    num_segments: int = NUM_PTPV_SEGMENTS
 ) -> list[npt.NDArray[np.float32]]:
     """Creates a list with PTPV signals."""
     # Generate output signals

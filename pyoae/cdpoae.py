@@ -103,8 +103,6 @@ class DpoaeRecorder:
     ) -> None:
         """Creates a DPOAE recorder for given measurement parameters."""
 
-        # TODO: verify that lists msrmt_params and mic_trans_functions have same lengths
-
         self.logger = log or get_logger()
         self.subject = subject
         self.signals = []
@@ -273,6 +271,9 @@ class DpoaeRecorder:
             input_channel = (
                 self.msrmt.hardware_data.get_unique_input_channels()[i]
             )
+            output_channels_i = (
+                self.msrmt.hardware_data.get_output_msrmt_channels(i)
+            )
             recorded_signal = self.msrmt.get_recorded_signal(input_channel)
             if not recorded_signal.size:
                 continue
@@ -285,7 +286,10 @@ class DpoaeRecorder:
                 'level1': msrmt_info_i.stimulus.level1,
                 'level2': msrmt_info_i.stimulus.level2,
                 'num_block_samples': msrmt_info_i.msrmt_ctx.block_size,
-                'recorded_sync': self.msrmt.live_msrmt_data.sync_recorded
+                'recorded_sync': self.msrmt.live_msrmt_data.sync_recorded,
+                'out_ch': output_channels_i,
+                'in_ch': input_channel,
+                'msrmt_idx': i
             }
 
             self.msrmt_info[i].dpoae_processor = ContDpoaeProcessor(
@@ -319,12 +323,11 @@ class DpoaeRecorder:
         time_stamp = cur_time.strftime('%y%m%d-%H%M%S')
         for i, msrmt_info_i in enumerate(self.msrmt_info):
             side_id = helpers.sanitize_filename_part(msrmt_info_i.ear)
+            output_channels_i = (
+                self.msrmt.hardware_data.get_output_msrmt_channels(i)
+            )
             if len(side_id) == 0:
-                output_channels_i = (
-                    self.msrmt.hardware_data.get_output_msrmt_channels(i)
-                )
                 side_id = f'out_{output_channels_i[0]}_{output_channels_i[1]}'
-
             parts = [
                 'cdpoae_msrmt',
                 time_stamp,
@@ -346,17 +349,21 @@ class DpoaeRecorder:
             else:
                 averaged = np.array(0,np.float64)
                 spectrum = np.array(0,np.float64)
-            np.savez(file_save_path,
-                average=averaged,
-                spectrum=spectrum,
-                recorded_signal=recorded_signal,
-                samplerate=DeviceConfig.sample_rate,
-                f1=msrmt_info_i.stimulus.f1,
-                f2=msrmt_info_i.stimulus.f2,
-                level1=msrmt_info_i.stimulus.level1,
-                level2=msrmt_info_i.stimulus.level2,
+            np.savez(
+                file_save_path,
+                average = averaged,
+                spectrum = spectrum,
+                recorded_signal = recorded_signal,
+                samplerate = DeviceConfig.sample_rate,
+                f1 = msrmt_info_i.stimulus.f1,
+                f2 = msrmt_info_i.stimulus.f2,
+                level1 = msrmt_info_i.stimulus.level1,
+                level2 = msrmt_info_i.stimulus.level2,
                 num_block_samples = msrmt_info_i.msrmt_ctx.block_size,
-                recorded_sync=self.msrmt.live_msrmt_data.sync_recorded
+                recorded_sync = self.msrmt.live_msrmt_data.sync_recorded,
+                out_ch = output_channels_i,
+                in_ch = input_channel,
+                msrmt_idx = i
             )
             self.logger.info('Saved measurement to %s.npz', file_save_path)
 

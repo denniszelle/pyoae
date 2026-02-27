@@ -16,6 +16,8 @@ Command-line arguments:
 
 import argparse
 
+import matplotlib
+
 from pyoae import output_calib
 from pyoae import files
 from pyoae import pyoae_logger

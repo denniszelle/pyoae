@@ -214,19 +214,22 @@ class PulseDpoaeProcessor(PulseDpoaeResult):
             samplerate
         )
         fdp = 2 * self.recording['f1'] - self.recording['f2']
-        if self.mic_trans_fun is None:
-            self.log.warning(
-                'Microphone data missing. Falling back to unity conversion.'
-            )
-            s = 1
-        else:
-            s = self.mic_trans_fun.get_sensitivity(fdp)
-
         self.raw_averaged = self.process_raw_data(
             self.filtered_recording,
             self.recording['num_block_samples']
         )
-        self.raw_averaged /= s  # convert to muPa
+        if self.mic_trans_fun is None:
+            self.log.warning(
+                'Microphone data missing. Falling back to unity conversion.'
+            )
+        else:
+            raw_spec = np.fft.rfft(self.raw_averaged)
+            raw_spec_freqs = np.fft.rfftfreq(
+                len(self.raw_averaged), 1/samplerate
+            )
+            raw_spec /= self.mic_trans_fun.get_interp_transfer_function(raw_spec_freqs)
+            self.raw_averaged = np.real(np.fft.irfft(raw_spec))
+
 
         # apply ramp at edges to avoid edge effects
         ramp_len = int(

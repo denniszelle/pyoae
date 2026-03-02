@@ -263,7 +263,9 @@ class ContDpoaeProcessor(ContDpoaeResult):
         if self.mic_trans_fun is None:
             spectrum = 20 * np.log10(spectrum)
         else:
-            spectrum /= self.mic_trans_fun.amplitudes
+            spectrum /= np.abs(self.mic_trans_fun.get_interp_transfer_function(
+                num_samples=len(self.raw_averaged)
+            ))
             spectrum = 20 * np.log10(spectrum/20)
         self.dpoae_spectrum = spectrum
 

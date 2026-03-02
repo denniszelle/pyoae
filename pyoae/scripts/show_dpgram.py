@@ -29,8 +29,6 @@ except ImportError:
 
 logger = pyoae_logger.get_pyoae_logger('PyOAE DPOAE Results')
 
-NUM_NOISE_BINS_PER_SIDE = 5
-
 
 def show_dp_gram(results: list[ContDpoaeResult], label: str = '') -> None:
     """Creates a DP gram from the list of DPOAE results."""
@@ -41,30 +39,11 @@ def show_dp_gram(results: list[ContDpoaeResult], label: str = '') -> None:
     primary1_levels = []
 
     for result in results:
-        samplerate = result.recording['samplerate']
-        num_samples = result.recording['num_block_samples']
-        df = samplerate/num_samples
-
-        f1 = result.recording['f1']
-        f2 = result.recording['f2']
-        fdp = 2*f1 - f2
-        idx_dp = int(fdp/df)
-        level_dp = result.dpoae_spectrum[idx_dp]
-
-        noise_idx = np.concatenate(
-            [
-                np.arange(idx_dp-NUM_NOISE_BINS_PER_SIDE,idx_dp),
-                np.arange(idx_dp+1, idx_dp+NUM_NOISE_BINS_PER_SIDE+1)
-            ],
-        )
-
-        level_noise = np.mean(result.dpoae_spectrum[noise_idx])
-
         primary1_levels.append(result.recording['level1'])
         primary2_levels.append(result.recording['level2'])
-        dp_levels.append(level_dp)
-        noise_levels.append(level_noise)
-        primary2_frequencies.append(f2)
+        dp_levels.append(result.get_dpoae_level())
+        noise_levels.append(result.get_noise_level())
+        primary2_frequencies.append(result.recording['f2'])
 
     # convert to NumPy array
     dp_levels = np.array(dp_levels)

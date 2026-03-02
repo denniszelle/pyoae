@@ -255,18 +255,21 @@ class ContDpoaeProcessor(ContDpoaeResult):
         )
 
         # compute spectrum
-        spectrum = 2*np.abs(np.fft.rfft(self.raw_averaged)) / num_block_samples
-        # dBFS and dB SPL represent RMS values
-        # assume FFT bins represent sine waves and estimate
-        # RMS by dividing by sqrt(2)
-        spectrum /= np.sqrt(2)
         if self.mic_trans_fun is None:
+            spectrum = 2*np.abs(np.fft.rfft(self.raw_averaged)) / num_block_samples
+            # dBFS and dB SPL represent RMS values
+            # assume FFT bins represent sine waves and estimate
+            # RMS by dividing by sqrt(2)
+            spectrum /= np.sqrt(2)
             spectrum = 20 * np.log10(spectrum)
         else:
-            spectrum /= np.abs(self.mic_trans_fun.get_interp_transfer_function(
+            raw_spec = np.fft.rfft(self.raw_averaged)
+            mic_tf = self.mic_trans_fun.get_interp_transfer_function(
                 num_samples=len(self.raw_averaged)
-            ))
-            spectrum = 20 * np.log10(spectrum/20)
+            )
+            raw_spec /= mic_tf
+            spectrum = 2 * np.abs(raw_spec) / (num_block_samples * np.sqrt(2))
+            spectrum = 20 * np.log10(spectrum/20)  # dB SPL
         self.dpoae_spectrum = spectrum
 
     def process_raw_data(

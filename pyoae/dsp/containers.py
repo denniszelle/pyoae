@@ -7,7 +7,7 @@ import numpy.typing as npt
 
 
 class DpoaeMsrmtData(TypedDict):
-    """A general container for raw DPOAE measurement data."""
+    """Typed dictionary for raw DPOAE measurement data."""
 
     recorded_signal: npt.NDArray[np.float32]
     """Raw recorded time signal"""
@@ -44,7 +44,7 @@ class DpoaeMsrmtData(TypedDict):
 
 
 class ContDpoaeRecording(TypedDict):
-    """Structured content from a DPOAE recording file."""
+    """Typed dictionary from a DPOAE recording file."""
 
     recording: DpoaeMsrmtData
     """Data of continuos DPOAE recording"""
@@ -57,7 +57,7 @@ class ContDpoaeRecording(TypedDict):
 
 
 class PulseDpoaeRecording(TypedDict):
-    """Structured content from a pulsed DPOAE recording file."""
+    """Typed dictionary from a pulsed DPOAE recording file."""
 
     recording: DpoaeMsrmtData
     """Data of pulsed DPOAE recording"""

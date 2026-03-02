@@ -3,12 +3,14 @@
         "cdsp",
         "dpgram",
         "fontsize",
+        "gridspec",
         "intp",
         "linestyle",
         "lowpass",
         "markerfacecolor",
         "markersize",
         "qtagg",
+        "suptitle",
         "xticks",
         "yticks"
     ]

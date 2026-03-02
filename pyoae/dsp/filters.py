@@ -61,7 +61,7 @@ def low_pass_filter(
     y: npt.NDArray[np.float32] | npt.NDArray[np.float64],
     num_taps: int,
     samplerate: float,
-    cutoff_hz: float = 200.0,
+    cutoff_hz: float = 10000.0,
 ) -> npt.NDArray[np.float64]:
     """FIR low-pass with causal phase; same length as input."""
     if num_taps % 2 == 0:

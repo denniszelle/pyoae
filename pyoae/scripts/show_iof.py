@@ -19,7 +19,7 @@ import numpy as np
 
 from pyoae import files
 from pyoae import pyoae_logger
-from pyoae.dsp.continuous_dpoae import ContDpoaeResult
+from pyoae.dsp.cdsp import ContDpoaeResult
 
 try:
     matplotlib.use('qtagg')

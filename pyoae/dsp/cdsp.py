@@ -12,7 +12,7 @@ from pyoae import files
 from pyoae import get_logger
 from pyoae.calib_storage import MicroTransferFunction
 from pyoae.dsp import filters
-from pyoae.dsp import processing
+from pyoae.dsp import noise
 from pyoae.dsp.containers import (
     DpoaeMsrmtData,
     ContDpoaeRecording,
@@ -69,15 +69,16 @@ class ContDpoaeResult:
         # plot recording overview
         t_rec = np.arange(num_recording_samples) / samplerate
         axes[0].plot(t_rec, self.recording['recorded_signal'], linewidth=0.5)
-        # axes[0].plot(t_rec, self.filtered_recording, linewidth=0.5)
-        # axes[0].plot([0.1], [0], 'rx')
 
-        frequencies = np.fft.rfftfreq(num_block_samples, 1 / samplerate)
+        frequencies = (
+            np.fft.rfftfreq(num_block_samples, 1 / samplerate)
+        ).astype(np.float64)
         t_avg = np.arange(num_block_samples) / samplerate * 1E3
         if self.raw_averaged.size:
             axes[1].plot(t_avg, self.raw_averaged, linewidth=0.5)
         if self.dpoae_spectrum.size:
             axes[2].plot(frequencies, self.dpoae_spectrum, linewidth=0.5)
+            self.plot_markers(axes[2], frequencies)
 
         fdp = 2 * self.recording['f1'] - self.recording['f2']
 
@@ -91,10 +92,7 @@ class ContDpoaeResult:
         axes[1].set_ylabel('Amp. (full scale)')
         axes[2].set_ylabel('L (dB SPL)')
         axes[2].set_xlabel('f (Hz)')
-        # axes[2].set_xscale('log')
 
-        # rec_lim = axes[0].get_ylim()
-        # axes[1].set_ylim(rec_lim)
         axes[0].set_title(
             f'L1: {self.recording["level1"]} dB SPL, '
             f'L2: {self.recording["level2"]} dB SPL, '
@@ -103,6 +101,75 @@ class ContDpoaeResult:
         axes[1].set_title('DPOAE Spectrum')
         fig.tight_layout()
         plt.show(block=block_loop)
+
+    def plot_markers(
+        self,
+        axes: Axes,
+        frequencies: npt.NDArray[np.float64]
+    ) -> None:
+        """Plots markers for f1, f2, and fdp."""
+        if self.recording is None:
+            return
+
+        f1 = self.recording['f1']
+        f2 = self.recording['f2']
+        fdp = 2 * f1 - f2
+
+        idx_dp = int(np.argmin(np.abs(frequencies - fdp)))
+        idx_f1 = int(np.argmin(np.abs(frequencies - f1)))
+        idx_f2 = int(np.argmin(np.abs(frequencies- f2)))
+
+        noise_bin_idx = noise.cdpoae_noise_bins(idx_dp, len(frequencies))
+
+        noise_level = np.mean(self.dpoae_spectrum[noise_bin_idx])
+        dp_level = self.dpoae_spectrum[idx_dp]
+        snr = dp_level - noise_level
+
+        if snr >= noise.MIN_SNR:
+            marker_face_color = 'r'
+        else:
+            marker_face_color = 'w'
+
+        axes.plot(
+            frequencies[noise_bin_idx],
+            self.dpoae_spectrum[noise_bin_idx],
+            linestyle='',
+            marker='.',
+            markersize=2,
+            color=[0.5, 0.5, 0.5],
+            markerfacecolor=[0.5, 0.5, 0.5]
+        )
+        axes.plot(
+            np.array([frequencies[noise_bin_idx[0]], frequencies[noise_bin_idx[-1]]]),
+            np.array([noise_level, noise_level]),
+            linewidth=1.0,
+            linestyle='-',
+            color=[0.2, 0.2, 0.2]
+        )
+
+        axes.plot(
+            fdp,
+            dp_level,
+            'ro',
+            markersize=3,
+            linewidth=0.5,
+            markerfacecolor=marker_face_color,
+            label='fdp'
+        )
+        axes.plot(
+            f1,
+            self.dpoae_spectrum[idx_f1],
+            'kx',
+            markersize=4,
+            label='f1'
+        )
+        axes.plot(
+            f2,
+            self.dpoae_spectrum[idx_f2],
+            'bx',
+            markersize=4,
+            label='f2'
+        )
 
 
 class ContDpoaeProcessor(ContDpoaeResult):
@@ -200,7 +267,7 @@ class ContDpoaeProcessor(ContDpoaeResult):
         num_blocks = total_blocks - 2
         block_noise = np.zeros(num_blocks)
         for i in range(num_blocks):
-            block_noise[i] = processing.estimate_spectral_noise(
+            block_noise[i] = noise.estimate_cdpoae_spectral_noise(
                 blocks[i,:],
                 block_size,
                 fdp,

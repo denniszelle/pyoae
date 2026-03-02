@@ -28,7 +28,7 @@ from matplotlib import pyplot as plt
 
 from pyoae import files
 from pyoae import pyoae_logger
-from pyoae.dsp.continuous_dpoae import ContDpoaeResult
+from pyoae.dsp.cdsp import ContDpoaeResult
 
 
 logger = pyoae_logger.get_pyoae_logger('PyOAE DPOAE Results')

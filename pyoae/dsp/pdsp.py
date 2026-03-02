@@ -15,7 +15,7 @@ from pyoae import generator
 from pyoae import get_logger
 from pyoae.calib_storage import MicroTransferFunction
 from pyoae.dsp import filters
-from pyoae.dsp import processing
+from pyoae.dsp import math
 from pyoae.dsp.containers import (
     DpoaeMsrmtData,
     PulseDpoaeRecording
@@ -282,7 +282,7 @@ class PulseDpoaeProcessor(PulseDpoaeResult):
 
         ensemble_power = np.zeros(num_ensembles)
         for i in range(num_ensembles):
-            ensemble_power[i] = processing.estimate_power(ensembles[i,:])
+            ensemble_power[i] = math.rms(ensembles[i,:])
 
         self.averager.setup(num_ensembles)
         self.averager.noise_values = ensemble_power.astype(np.float32)

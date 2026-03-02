@@ -12,7 +12,7 @@ from pyoae import converter
 from pyoae import get_logger
 from pyoae.calib_storage import OutputCalibration
 from pyoae.device.device_config import DeviceConfig
-from pyoae.dsp import processing
+from pyoae.dsp import math
 from pyoae.protocols import DpoaeMsrmtParams, PulseDpoaeMsrmtParams, PulseStimulus
 
 
@@ -198,7 +198,7 @@ def compute_pulse_amplitude(
         # Add RMS of steady state to signal amplitudes
         else:
             signal_amplitudes.append(
-                processing.estimate_power(speaker_sig_i[bounds_ss[0]:bounds_ss[1]])
+                math.rms(speaker_sig_i[bounds_ss[0]:bounds_ss[1]])
             )
 
     return np.mean(signal_amplitudes)*np.sqrt(2)

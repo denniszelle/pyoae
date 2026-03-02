@@ -1,6 +1,7 @@
 """Module with various averaging functions in time and spectral domain.
 """
 
+from enum import IntEnum, auto
 from typing import Literal
 
 import numpy as np
@@ -8,6 +9,16 @@ import numpy.typing as npt
 import scipy.signal
 
 from pyoae.dsp.opt_avg import OptAverage
+
+
+class AveragingStrategy(IntEnum):
+    """Enumeration to identify the averaging strategy."""
+
+    ENSEMBLE = auto()
+    """Perform noise estimation and optimized averaging on PTPV ensembles."""
+
+    BLOCK = auto()
+    """Perform noise estimation on blocks and average for each phase shift."""
 
 
 def welch_spectrum(

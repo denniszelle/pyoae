@@ -58,3 +58,55 @@ def coherence_spectrum(
         )
         b[i] = bin_coherence(h[0])
     return b
+
+
+def block_cplx_spectrum(
+    blocks: np.ndarray,
+    apply_ramp: bool = True,
+    ramp_size: int = 0,
+) -> npt.NDArray[np.complex128]:
+    """Convert measurement blocks to complex spectra via rFFT.
+
+    Args:
+        blocks: 2D array of shape (n_blocks, n_samples).
+        apply_ramp: If True, apply cosine-shaped ramps at
+          start and end of each block.
+        ramp_size: Length of the rising/falling edges in samples.
+          Must be > 0 if apply_ramp is True.
+    """
+    blocks = np.asarray(blocks)
+    if blocks.ndim != 2:
+        raise ValueError("blocks must be a 2D array of shape (n_blocks, n_samples).")
+
+    n_samples = blocks.shape[1]
+
+    if apply_ramp:
+        if ramp_size <= 0:
+            raise ValueError("ramp_size must be > 0 when apply_ramp is True.")
+        if 2 * ramp_size > n_samples:
+            raise ValueError(
+                "ramp_size is too large: 2 * ramp_size must be <= number of samples."
+            )
+
+        # Create cosine ramp from 0 -> 1
+        t = np.linspace(0.0, np.pi, ramp_size, endpoint=True)
+        rise = 0.5 - 0.5 * np.cos(t)    # 0 .. 1
+        fall = rise[::-1]               # 1 .. 0
+
+        window = np.ones(n_samples, dtype=float)
+        window[:ramp_size] *= rise
+        window[-ramp_size:] *= fall
+
+        # Broadcast window over blocks
+        blocks = blocks * window[np.newaxis, :]
+
+    cplx_spectra = np.fft.rfft(blocks, axis=1)
+    return cplx_spectra
+
+
+def block_abs_spectrum(
+    cplx_spectra: np.ndarray,
+    num_block_samples: int
+) -> np.ndarray:
+    """Compute amplitude spectra from complex spectra."""
+    return 2*np.abs(cplx_spectra) / num_block_samples

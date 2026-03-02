@@ -1,22 +1,46 @@
 """Module with functions to implement filters."""
 
-from typing import cast
+from typing import cast, TypedDict
 
 import numpy as np
 import numpy.typing as npt
 import scipy.signal as sig
 
+from pyoae import generator
+
 HP_ORDER = 1201
-"""Order of the high-pass filter"""
+"""Default filter order of the high-pass filter"""
+
+LP_ORDER = 1201
+"""Default filter order for low-pass filter."""
 
 BP_ORDER = 1201
-"""Order of the band-pass filter"""
+"""Default filter order of the band-pass filter"""
 
 REFERENCE_SAMPLING_RATE = 96000
 """Reference sampling frequency for filter order."""
 
 RAMP_DURATION = 2
 """Duration of the ramp applied to averaged signal in ms"""
+
+
+class FilterOptions(TypedDict):
+    """Typed dictionary with parameters to control FIR filtering."""
+
+    enable: bool
+    """If True, filter is enabled. False otherwise."""
+
+    num_taps: int
+    """Filter order of the FIR filter."""
+
+    cutoff_hz: float | tuple[float, float]
+    """Cutoff frequency in Hz."""
+
+    ramp_size: int
+    """Size of cosine-shaped rising and falling edges for windowing.
+
+    If ramp size is 0, no windowing before filtering will be applied.
+    """
 
 
 def scale_filter_order(order: int, fs: float) -> int:
@@ -32,6 +56,48 @@ def scale_filter_order(order: int, fs: float) -> int:
         new_order += 1 if new_order < scaled_order else -1
 
     return max(1, new_order)
+
+
+def default_high_pass_options(samplerate: float) -> FilterOptions:
+    """Returns default options for high-pass filtering."""
+    return {
+        'enable': True,
+        'num_taps': scale_filter_order(HP_ORDER, samplerate),
+        'cutoff_hz': 200.0,
+        'ramp_size': 0
+    }
+
+
+def default_low_pass_options(samplerate: float) -> FilterOptions:
+    """Returns default options for low-pass filtering."""
+    return {
+        'enable': True,
+        'num_taps': scale_filter_order(LP_ORDER, samplerate),
+        'cutoff_hz': 200.0,
+        'ramp_size': 0
+    }
+
+
+def default_band_pass_options (
+    samplerate: float,
+    fdp: float,
+    f2: float
+) -> FilterOptions:
+    """Returns default options for band-pass filtering."""
+
+    t_hw_sp = generator.short_pulse_half_width(f2) * 1E-3
+    bw = 2 / t_hw_sp
+    df = int(0.5*bw)
+    cutoff = (fdp - df, fdp + df)
+
+    ramp_size = int(RAMP_DURATION * 1E-3 * samplerate)
+
+    return {
+        'enable': True,
+        'num_taps': scale_filter_order(BP_ORDER, samplerate),
+        'cutoff_hz': cutoff,
+        'ramp_size': ramp_size
+    }
 
 
 def high_pass_filter(

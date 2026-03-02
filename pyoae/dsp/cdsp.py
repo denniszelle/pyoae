@@ -102,6 +102,33 @@ class ContDpoaeResult:
         fig.tight_layout()
         plt.show(block=block_loop)
 
+    def get_fdp(self) -> float:
+        """Returns the distortion product frequency at 2f1-f2."""
+        f1 = self.recording['f1']
+        f2 = self.recording['f2']
+        return 2 * f1 - f2
+
+    def get_dp_idx(self) -> int:
+        """Returns the index of the distortion-product bin."""
+        samplerate = self.recording['samplerate']
+        num_samples = self.recording['num_block_samples']
+        df = samplerate/num_samples
+
+        fdp = self.get_fdp()
+        return int(fdp/df)
+
+    def get_dpoae_level(self) -> float:
+        """Returns the DPOAE level at 2f1-f2."""
+        idx_dp = self.get_dp_idx()
+        return self.dpoae_spectrum[idx_dp]
+
+    def get_noise_level(self) -> float:
+        """Returns the mean level of noise in dB SPL"""
+        idx_dp = self.get_dp_idx()
+        num_bins = len(self.dpoae_spectrum)
+        noise_bin_idx = noise.cdpoae_noise_bins(idx_dp, num_bins)
+        return float(np.mean(self.dpoae_spectrum[noise_bin_idx]))
+
     def plot_markers(
         self,
         axes: Axes,

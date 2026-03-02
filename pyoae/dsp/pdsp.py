@@ -338,10 +338,14 @@ class PulseDpoaeProcessor(PulseDpoaeResult):
             )
         else:
             raw_spec = np.fft.rfft(self.raw_averaged)
-            raw_spec_freqs = np.fft.rfftfreq(
-                len(self.raw_averaged), 1/samplerate
+            raw_spec_frequencies = np.fft.rfftfreq(
+                len(self.raw_averaged),
+                1 / samplerate
             )
-            raw_spec /= self.mic_trans_fun.get_interp_transfer_function(raw_spec_freqs)
+            mic_tf = self.mic_trans_fun.get_interp_transfer_function(
+                raw_spec_frequencies
+            )
+            raw_spec /= mic_tf
             self.raw_averaged = np.real(np.fft.irfft(raw_spec))
 
 

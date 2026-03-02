@@ -1,5 +1,6 @@
 """Module with classes and functions to process and visualize recordings."""
 
+from dataclasses import dataclass
 from logging import Logger
 from pathlib import Path
 from typing import cast
@@ -16,18 +17,13 @@ from pyoae import get_logger
 from pyoae.calib_storage import MicroTransferFunction
 from pyoae.dsp import filters
 from pyoae.dsp import math
+from pyoae.dsp.averaging import AveragingStrategy
 from pyoae.dsp.containers import (
     DpoaeMsrmtData,
     PulseDpoaeRecording
 )
+from pyoae.dsp.filters import FilterOptions
 from pyoae.dsp.opt_avg import OptAverage
-
-
-ROI_BOUNDARIES = [1750.0, 3500.0]
-"""f2 frequency boundaries for region of interest lengths."""
-
-ROI_LENGTHS = [50.0, 40.0, 30.0]
-"""Durations of regions of interest in milliseconds."""
 
 
 def _msrmt_to_pulse_recording(
@@ -41,59 +37,44 @@ def _msrmt_to_pulse_recording(
     }
 
 
-def _get_roi_length(f2: float) -> float:
-    """Retrieves the length of analysis segment for a short-pulsed DPOAE.
+@dataclass
+class StimulusTimeMarkers:
+    """Time markers of the evoking pulsed stimulus."""
 
-    The DPOAE latency depends on the specified f2 frequency with
-    lower frequencies resulting in longer latencies (specified in ms).
+    t_on: float
+    """Time stamp of the start of the stimulus pulse"""
 
-    For a region of interest (ROI) centered around the pulsed DPOAE,
-    different minimum lengths are required to capture the complete
-    DPOAE response.
+    pulse_duration: float
+    """Total duration of the stimulus pulse"""
 
-    Args:
-        f2: frequency of second primary tone in Hz
+    t_rise: float
+    """Duration of the rising ramp of the stimulus"""
 
-    Returns:
-        - length of region of interest in ms
-    """
-    if f2 < ROI_BOUNDARIES[0]:
-        return ROI_LENGTHS[0]
-    if f2 < ROI_BOUNDARIES[1]:
-        return ROI_LENGTHS[1]
-    return ROI_LENGTHS[2]
+    t_fall: float
+    """Duration of the falling ramp of the stimulus"""
+
+    pulse_hw: float
+    """Pulse half-width"""
+
+    sp_rise_interval: npt.NDArray[np.float64]
+    """Time stamps of the rising ramp interval"""
+
+    sp_ss_interval: npt.NDArray[np.float64]
+    """Time stamps of the steady-state interval"""
+
+    sp_fall_interval: npt.NDArray[np.float64]
+    """Time stamps of the falling ramp interval"""
 
 
-def calculate_pulsed_dpoae_signal(
-    averaged_signal: np.ndarray,
-    samplerate: float,
-    cutoff: np.ndarray,
-    fdp: float,
-    t_block: np.ndarray,
-    ramp_size: int = 0,
-    num_taps: int | None = None
-) -> tuple[
-    npt.NDArray[np.float64],
-    npt.NDArray[np.float64],
-    npt.NDArray[np.float64]
-]:
-    """Filtered DPOAE signal, envelope, and instantaneous phase from average."""
-    if num_taps is None:
-        # use default filter order
-        num_taps = filters.scale_filter_order(filters.BP_ORDER, samplerate)
+@dataclass
+class PulseDpoaeProcessOptions:
+    """Options for the processing of pulse DPOAEs."""
 
-    avg_filtered = filters.bp_pass_filter(
-        averaged_signal,
-        num_taps,
-        samplerate,
-        cutoff,
-        ramp_size=ramp_size
-    )
-    analytic_signal = cast(np.ndarray, sig.hilbert(avg_filtered))
-    envelope = np.abs(analytic_signal)
-    phi_raw = np.angle(analytic_signal)
-    phi = np.unwrap(phi_raw) - 2*np.pi*fdp*(t_block*1E-3)
-    return (avg_filtered, envelope, phi)
+    high_pass_options: FilterOptions
+
+    band_pass_options: FilterOptions
+
+    averaging_strategy: AveragingStrategy
 
 
 class PulseDpoaeResult:
@@ -101,14 +82,22 @@ class PulseDpoaeResult:
 
     log: Logger
 
+    time_markers: StimulusTimeMarkers | None
+
     recording: DpoaeMsrmtData
 
     raw_averaged: npt.NDArray[np.float64]
 
     dpoae_signal: npt.NDArray[np.float64]
 
+    dpoae_envelope: npt.NDArray[np.float64]
+
+    dpoae_phase: npt.NDArray[np.float64]
+
     def __init__(self, pulsed_recording: PulseDpoaeRecording) -> None:
         self.log = get_logger(__class__.__name__)
+        self.time_markers = None
+
         self.recording = pulsed_recording['recording']
         if pulsed_recording['average'] is None:
             self.raw_averaged = np.empty(0, dtype=np.float64)
@@ -118,6 +107,30 @@ class PulseDpoaeResult:
             self.dpoae_signal = np.empty(0, dtype=np.float64)
         else:
             self.dpoae_signal = pulsed_recording['signal']
+
+    def get_fdp(self) -> float:
+        """Returns the DPOAE frequency."""
+        return 2 * self.recording['f1'] - self.recording['f2']
+
+    def get_frequency_ratio(self) -> float:
+        """Returns the stimulus-frequency ratio."""
+        return self.recording['f2'] / self.recording['f1']
+
+    def set_analytic_results(self) -> None:
+        """Derives envelope and instantaneous phase form analytic signal."""
+        if self.dpoae_signal is None:
+            self.log.error(
+                'Failed to calculate analytic signal. '
+                'No filtered DPOAE signal available.'
+            )
+            return
+        analytic_signal = cast(np.ndarray, sig.hilbert(self.dpoae_signal))
+        self.dpoae_envelope = np.abs(analytic_signal)
+        phi_raw = np.angle(analytic_signal)
+        fdp = self.get_fdp()
+        samplerate = self.recording['samplerate']
+        t = np.arange(self.recording['num_block_samples']) / samplerate
+        self.dpoae_phase = np.unwrap(phi_raw) - 2 * np.pi * fdp * t
 
     def plot(self, block_loop: bool = True) -> None:
         """Plots the pulsed DPOAE data."""
@@ -158,13 +171,96 @@ class PulseDpoaeResult:
             f'L1: {self.recording["level1"]} dB SPL, '
             f'L2: {self.recording["level2"]} dB SPL, '
             f'f2: {self.recording["f2"]} Hz, '
-            f'f2/f1: {self.recording["f2"]/self.recording["f1"]}'
+            f'f2/f1: {self.get_frequency_ratio()}'
         )
         axes[1].set_title('Raw Average')
         dpoae_max = np.max(self.dpoae_signal)
         axes[2].set_title(
             f'Filtered Average - DPOAE Signal (Max: {dpoae_max:.2f})'
         )
+        fig.tight_layout()
+        plt.show(block=block_loop)
+
+    def plot_envelope(
+        self,
+        block_loop: bool = True,
+        show_stimulus: bool = True,
+        show_title: bool = True,
+        data_color: tuple[float, float, float] = (0.3, 0.3, 0.3),
+        stimulus_color: tuple[float, float, float] = (0.9, 0.1, 0.1)
+    ) -> None:
+        """Plots the envelope and instantaneous phase of the pulsed DPOAE data."""
+        if self.dpoae_envelope is None or self.dpoae_phase is None:
+            return
+
+        samplerate = self.recording['samplerate']
+        fig, axes = plt.subplots(
+            2, 1,
+            figsize=(10, 6),
+            gridspec_kw={'height_ratios': [2, 1]}
+        )
+        axes: list[Axes]
+        ax_signal = axes[0]
+        ax_phase = axes[1]
+
+        t = np.arange(self.recording['num_block_samples']) / samplerate * 1E3
+
+        ax_signal.plot(
+            t,
+            self.dpoae_signal,
+            linewidth=0.5,
+            color=data_color
+        )
+        ax_signal.plot(
+            t,
+            self.dpoae_envelope,
+            linewidth=1.0,
+            color=data_color
+        )
+
+        ax_signal.set_ylabel('p (muPa)')
+        y_max = np.max(np.abs(self.dpoae_signal))
+        y_max = max(np.ceil(y_max / 50), 3) * 50
+
+        if show_stimulus and self.time_markers is not None:
+            ax_signal.plot(
+                self.time_markers.sp_rise_interval,
+                np.array([-y_max+5, -y_max+5]),
+                color=stimulus_color,
+                linestyle='--'
+            )
+            ax_signal.plot(
+                self.time_markers.sp_ss_interval,
+                np.array([-y_max+5, -y_max+5]),
+                color=stimulus_color
+            )
+            ax_signal.plot(
+                self.time_markers.sp_fall_interval,
+                np.array([-y_max+5, -y_max+5]),
+                color=stimulus_color,
+                linestyle='--'
+            )
+        ax_signal.set_xlim(t[0], t[-1])
+        ax_signal.set_ylim(-y_max, y_max)
+
+        ax_phase.plot(
+            t,
+            self.dpoae_phase,
+            linewidth=1.0,
+            color=data_color
+        )
+        ax_phase.set_xlabel('t (ms)')
+        ax_phase.set_ylabel('phi (rad)')
+        ax_phase.set_xlim(t[0], t[-1])
+
+        if show_title:
+            fig.suptitle(
+                f'L1={self.recording["level1"]} dB SPL,'
+                f'L2={self.recording["level1"]} dB SPL,'
+                f'\nf2/f1={self.get_frequency_ratio()}, '
+                f'fdp: {self.get_fdp():.1f} Hz', fontsize=10
+            )
+
         fig.tight_layout()
         plt.show(block=block_loop)
 
@@ -178,6 +274,8 @@ class PulseDpoaeProcessor(PulseDpoaeResult):
 
     mic_trans_fun: MicroTransferFunction | None
 
+    opt_params: PulseDpoaeProcessOptions
+
     def __init__(
         self,
         msrmt_data: DpoaeMsrmtData,
@@ -187,6 +285,22 @@ class PulseDpoaeProcessor(PulseDpoaeResult):
         """Initialize processor and load recording."""
         pulsed_recording = _msrmt_to_pulse_recording(msrmt_data)
         super().__init__(pulsed_recording)
+
+        high_pass_options = filters.default_high_pass_options(
+            self.recording['samplerate']
+        )
+        band_pass_options = filters.default_band_pass_options(
+            self.recording['samplerate'],
+            self.get_fdp(),
+            self.recording['f2']
+        )
+
+        self.opt_params = PulseDpoaeProcessOptions(
+            high_pass_options=high_pass_options,
+            band_pass_options=band_pass_options,
+            averaging_strategy=AveragingStrategy.ENSEMBLE
+        )
+
         self.averager = OptAverage()
         self.filtered_recording = np.empty(0, dtype=np.float64)
         if mic_path:

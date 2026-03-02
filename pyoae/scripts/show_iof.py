@@ -33,7 +33,7 @@ NUM_NOISE_BINS_PER_SIDE = 5
 
 
 def show_iof(results: list[ContDpoaeResult], label: str = '') -> None:
-    """Creates a DP gram from the list of DPOAE results."""
+    """Creates an Input/Output function from the list of DPOAE results."""
     primary2_frequencies = []
     dp_levels = []
     noise_levels = []
@@ -108,9 +108,9 @@ def show_iof(results: list[ContDpoaeResult], label: str = '') -> None:
 
 
 def main(d: str = '') -> None:
-    """Main function visualizing a cDP gram."""
+    """Main function visualizing the IOF."""
 
-    logger.info('Display DP gram from continuous DPOAE recordings.')
+    logger.info('Display input/output functions from continuous DPOAE recordings.')
 
     _, d_name = os.path.split(d)
     logger.info('Directory name: %s', d_name)
@@ -140,7 +140,7 @@ def main(d: str = '') -> None:
     show_iof(results, label=d_name)
 
 
-parser = argparse.ArgumentParser(description='PyOAE Cont. DP Gram')
+parser = argparse.ArgumentParser(description='PyOAE Cont. Input/Output Function')
 parser.add_argument(
     '--d',
     default=argparse.SUPPRESS,

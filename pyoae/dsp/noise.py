@@ -1,8 +1,11 @@
 """Module with noise-estimation functions."""
 
+from typing import TypedDict
+
 import numpy as np
 import numpy.typing as npt
 
+from pyoae import generator
 from pyoae.dsp import math
 
 
@@ -11,6 +14,44 @@ NUM_NOISE_BINS_PER_SIDE = 5
 
 MIN_SNR = 10
 """Minimum signal-to-noise ratio in dB to accept a DPOAE."""
+
+
+class PulseDpoaeNoiseOptions(TypedDict):
+    """Typed dictionary with parameters for pDPOAE noise estimation."""
+
+    f_signal: float
+    """Center frequency of broad-band signal in Hz."""
+
+    signal_bw: float
+    """Signal bandwidth in Hz."""
+
+    num_noise_bins: int
+    """Number of noise bins per side used for noise estimation."""
+
+    ramp_size: int
+    """Size of cosine-shaped rising and falling edges for windowing.
+
+    If ramp size is 0, no windowing before filtering will be applied.
+    """
+
+
+def default_pdpoae_noise_options(
+    samplerate: float,
+    fdp: float,
+    f2: float,
+    ramp_duration: float = 2.0
+) -> PulseDpoaeNoiseOptions:
+    """Returns default options for pDPOAE spectral noise estimation."""
+    t_hw_sp = generator.short_pulse_half_width(f2) * 1E-3
+    bw = round(1 / t_hw_sp)
+    ramp_size = int(ramp_duration * 1E-3 * samplerate)
+
+    return {
+        'f_signal': fdp,
+        'signal_bw': bw,
+        'num_noise_bins': NUM_NOISE_BINS_PER_SIDE,
+        'ramp_size': ramp_size
+    }
 
 
 def cdpoae_noise_bins(
@@ -84,7 +125,7 @@ def pdpoae_noise_bins(
 
 
 def estimate_cdpoae_spectral_noise(
-    y: npt.NDArray[np.floating],
+    y: npt.NDArray[np.float64],
     num_samples: int,
     f_signal: float,
     samplerate: float
@@ -97,6 +138,8 @@ def estimate_cdpoae_spectral_noise(
     # Detrend (remove DC) to reduce leakage into neighbors
     y = np.asarray(y, dtype=np.float64)
     y = y - y.mean()
+
+    # TODO: add ramp?
 
     # FFT (one-sided), explicit size
     Y = np.fft.rfft(y, n=num_samples)
@@ -127,3 +170,24 @@ def estimate_cdpoae_spectral_noise(
 
     noise_bins = cdpoae_noise_bins(idx_signal, mag_rms.shape[0])
     return math.rms(mag_rms[noise_bins])
+
+
+def batch_pdpoae_spectral_noise(
+    y: npt.NDArray[np.float64],
+    num_samples: int,
+    f_signal: float,
+    signal_bw: float,
+    samplerate: float,
+    num_noise_bins: int
+) -> npt.NDArray[np.float64]:
+    """Narrow-band noise around broad band signal for multiple spectra."""
+    idx_signal = int(round(f_signal * num_samples / samplerate))
+    df = samplerate / num_samples
+    noise_bins = pdpoae_noise_bins(
+        idx_signal,
+        df,
+        signal_bw,
+        y.shape[1],
+        num_noise_bins=num_noise_bins
+    )
+    return math.rms_2d(y[:, noise_bins], axis=1)

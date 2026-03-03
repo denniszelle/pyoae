@@ -17,7 +17,8 @@ from pyoae import get_logger
 from pyoae.calib_storage import MicroTransferFunction
 from pyoae.dsp import averaging
 from pyoae.dsp import filters
-from pyoae.dsp import math
+from pyoae.dsp import noise
+from pyoae.dsp import spectral
 from pyoae.dsp.averaging import AveragingStrategy
 from pyoae.dsp.containers import (
     DpoaeMsrmtData,
@@ -76,6 +77,8 @@ class PulseDpoaeProcessOptions:
     band_pass_options: BpFilterOptions
 
     averaging_strategy: AveragingStrategy
+
+    noise_options: noise.PulseDpoaeNoiseOptions
 
 
 class PulseDpoaeResult:
@@ -295,11 +298,17 @@ class PulseDpoaeProcessor(PulseDpoaeResult):
             self.get_fdp(),
             self.recording['f2']
         )
+        noise_options = noise.default_pdpoae_noise_options(
+            self.recording['samplerate'],
+            self.get_fdp(),
+            self.recording['f2']
+        )
 
         self.options = PulseDpoaeProcessOptions(
             high_pass_options=high_pass_options,
             band_pass_options=band_pass_options,
-            averaging_strategy=AveragingStrategy.ENSEMBLE
+            averaging_strategy=AveragingStrategy.ENSEMBLE,
+            noise_options=noise_options
         )
 
         self.averager = OptAverage()
@@ -363,11 +372,11 @@ class PulseDpoaeProcessor(PulseDpoaeResult):
         Returns:
             Array of floats containing the averaged signal.
         """
-
+        num_block_samples = self.recording['num_block_samples']
         if self.options.averaging_strategy is AveragingStrategy.ENSEMBLE:
             blocks = averaging.calculate_ptpv_ensembles(
                 self.filtered_recording,
-                self.recording['num_block_samples'],
+                num_block_samples,
                 generator.NUM_PTPV_SEGMENTS
             )
         else:
@@ -376,16 +385,29 @@ class PulseDpoaeProcessor(PulseDpoaeResult):
             )
 
         num_blocks = blocks.shape[0]
-        ensemble_power = np.zeros(num_blocks)
-        for i in range(num_blocks):
-            ensemble_power[i] = math.rms(blocks[i,:])
 
+        noise_options = self.options.noise_options
+        # estimate noise in spectral domain for each block
+        cplx_spectra = spectral.block_cplx_spectrum(
+            blocks,
+            ramp_size=noise_options['ramp_size']
+        )
+        amp_spectra = spectral.block_abs_spectrum(cplx_spectra, num_block_samples)
+
+        block_noise = noise.batch_pdpoae_spectral_noise(
+            amp_spectra,
+            num_block_samples,
+            noise_options['f_signal'],
+            noise_options['signal_bw'],
+            self.recording['samplerate'],
+            noise_options['num_noise_bins']
+        )
 
         self.averager.setup(num_blocks)
-        self.averager.noise_values = ensemble_power.astype(np.float32)
+        self.averager.noise_values = block_noise.astype(np.float32)
+
         self.averager.i_received = num_blocks
         self.averager.evaluate_averaging()
-
 
         if len(self.averager.accepted_idx):
             avg = blocks[self.averager.accepted_idx, :].mean(axis=0)

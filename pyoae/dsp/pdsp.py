@@ -22,7 +22,7 @@ from pyoae.dsp.containers import (
     DpoaeMsrmtData,
     PulseDpoaeRecording
 )
-from pyoae.dsp.filters import FilterOptions
+from pyoae.dsp.filters import BpFilterOptions, FilterOptions
 from pyoae.dsp.opt_avg import OptAverage
 
 
@@ -72,7 +72,7 @@ class PulseDpoaeProcessOptions:
 
     high_pass_options: FilterOptions
 
-    band_pass_options: FilterOptions
+    band_pass_options: BpFilterOptions
 
     averaging_strategy: AveragingStrategy
 
@@ -274,7 +274,7 @@ class PulseDpoaeProcessor(PulseDpoaeResult):
 
     mic_trans_fun: MicroTransferFunction | None
 
-    opt_params: PulseDpoaeProcessOptions
+    options: PulseDpoaeProcessOptions
 
     def __init__(
         self,
@@ -295,7 +295,7 @@ class PulseDpoaeProcessor(PulseDpoaeResult):
             self.recording['f2']
         )
 
-        self.opt_params = PulseDpoaeProcessOptions(
+        self.options = PulseDpoaeProcessOptions(
             high_pass_options=high_pass_options,
             band_pass_options=band_pass_options,
             averaging_strategy=AveragingStrategy.ENSEMBLE
@@ -318,61 +318,46 @@ class PulseDpoaeProcessor(PulseDpoaeResult):
         if self.recording is None:
             return
 
-        samplerate = self.recording['samplerate']
-        recorded_signal = self.recording['recorded_signal']
-        recorded_signal -= np.mean(recorded_signal)  # remove DC
-        # perform high-pass filtering
-        self.filtered_recording = filters.high_pass_filter(
-            recorded_signal,
-            filters.scale_filter_order(filters.HP_ORDER, samplerate),
-            samplerate
-        )
-        fdp = 2 * self.recording['f1'] - self.recording['f2']
-        self.raw_averaged = self.process_raw_data(
+        self.prepare_recording()
+
+        self.raw_averaged = self.average_raw_data(
             self.filtered_recording,
             self.recording['num_block_samples']
         )
-        if self.mic_trans_fun is None:
-            self.log.warning(
-                'Microphone data missing. Falling back to unity conversion.'
+
+        self.apply_micro_calibration()
+
+        bp_options = self.options.band_pass_options
+        if bp_options['enable']:
+            self.dpoae_signal = filters.bp_pass_filter(
+                self.raw_averaged,
+                bp_options['num_taps'],
+                self.recording['samplerate'],
+                bp_options['cutoff_hz'],
+                ramp_size=bp_options['ramp_size']
             )
         else:
-            raw_spec = np.fft.rfft(self.raw_averaged)
-            raw_spec_frequencies = np.fft.rfftfreq(
-                len(self.raw_averaged),
-                1 / samplerate
+            self.dpoae_signal = np.empty(0, dtype=np.float64)
+
+    def prepare_recording(self) -> None:
+        """Performs basic signal conditioning of raw recording."""
+        samplerate = self.recording['samplerate']
+        recorded_signal = self.recording['recorded_signal']
+        recorded_signal -= np.mean(recorded_signal)  # remove DC
+
+        hp_options = self.options.high_pass_options
+        if hp_options['enable']:
+            # perform high-pass filtering
+            self.filtered_recording = filters.high_pass_filter(
+                recorded_signal,
+                hp_options['num_taps'],
+                samplerate,
+                cutoff_hz=hp_options['cutoff_hz']
             )
-            mic_tf = self.mic_trans_fun.get_interp_transfer_function(
-                raw_spec_frequencies
-            )
-            raw_spec /= mic_tf
-            self.raw_averaged = np.real(np.fft.irfft(raw_spec))
+        else:
+            self.filtered_recording = recorded_signal.astype(np.float64)
 
-
-        # apply ramp at edges to avoid edge effects
-        ramp_len = int(
-            filters.RAMP_DURATION * 1E-3 * samplerate
-        )
-        ramp = 0.5*(1 - np.cos(2*np.pi*np.arange(ramp_len)/(2*ramp_len)))
-        ramp = ramp.astype(np.float32)
-        win = np.ones_like(self.raw_averaged)
-        win[:ramp_len] = ramp
-        win[-ramp_len:] = ramp[::-1]
-        self.raw_averaged *= win
-
-        t_hw_sp = generator.short_pulse_half_width(self.recording['f2']) * 1E-3
-        bw = 2 / t_hw_sp
-        df = int(0.5*bw)
-
-        cutoff = fdp + np.array([-df, df],)
-        self.dpoae_signal = filters.bp_pass_filter(
-            self.raw_averaged,
-            filters.BP_ORDER,
-            samplerate,
-            cutoff
-        )
-
-    def process_raw_data(
+    def average_raw_data(
         self,
         recorded_signal: npt.NDArray[np.float64],
         block_size: int,
@@ -423,6 +408,26 @@ class PulseDpoaeProcessor(PulseDpoaeResult):
             avg = ensembles.mean(axis=0)
 
         return avg
+
+    def apply_micro_calibration(self) -> None:
+        """Applies the microphone calibration."""
+        if self.mic_trans_fun is None:
+            self.log.warning(
+                'Microphone data missing. Falling back to unity conversion.'
+            )
+            return
+
+        samplerate = self.recording['samplerate']
+        raw_spec = np.fft.rfft(self.raw_averaged)
+        raw_spec_frequencies = np.fft.rfftfreq(
+            len(self.raw_averaged),
+            1 / samplerate
+        )
+        mic_tf = self.mic_trans_fun.get_interp_transfer_function(
+            raw_spec_frequencies
+        )
+        raw_spec /= mic_tf
+        self.raw_averaged = np.real(np.fft.irfft(raw_spec))
 
     def save_data(self, file_name: str) -> None:
         """Saves data to json."""

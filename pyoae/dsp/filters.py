@@ -33,7 +33,26 @@ class FilterOptions(TypedDict):
     num_taps: int
     """Filter order of the FIR filter."""
 
-    cutoff_hz: float | tuple[float, float]
+    cutoff_hz: float
+    """Cutoff frequency in Hz."""
+
+    ramp_size: int
+    """Size of cosine-shaped rising and falling edges for windowing.
+
+    If ramp size is 0, no windowing before filtering will be applied.
+    """
+
+
+class BpFilterOptions(TypedDict):
+    """Typed dictionary with parameters to control FIR band-pass filtering."""
+
+    enable: bool
+    """If True, filter is enabled. False otherwise."""
+
+    num_taps: int
+    """Filter order of the FIR filter."""
+
+    cutoff_hz: npt.NDArray[np.float64]
     """Cutoff frequency in Hz."""
 
     ramp_size: int
@@ -73,7 +92,7 @@ def default_low_pass_options(samplerate: float) -> FilterOptions:
     return {
         'enable': True,
         'num_taps': scale_filter_order(LP_ORDER, samplerate),
-        'cutoff_hz': 200.0,
+        'cutoff_hz': 10000.0,
         'ramp_size': 0
     }
 
@@ -82,13 +101,13 @@ def default_band_pass_options (
     samplerate: float,
     fdp: float,
     f2: float
-) -> FilterOptions:
+) -> BpFilterOptions:
     """Returns default options for band-pass filtering."""
 
     t_hw_sp = generator.short_pulse_half_width(f2) * 1E-3
     bw = 2 / t_hw_sp
     df = int(0.5*bw)
-    cutoff = (fdp - df, fdp + df)
+    cutoff = np.array((fdp - df, fdp + df), dtype=np.float64)
 
     ramp_size = int(RAMP_DURATION * 1E-3 * samplerate)
 

@@ -15,6 +15,7 @@ from pyoae import files
 from pyoae import generator
 from pyoae import get_logger
 from pyoae.calib_storage import MicroTransferFunction
+from pyoae.dsp import averaging
 from pyoae.dsp import filters
 from pyoae.dsp import math
 from pyoae.dsp.averaging import AveragingStrategy
@@ -319,12 +320,7 @@ class PulseDpoaeProcessor(PulseDpoaeResult):
             return
 
         self.prepare_recording()
-
-        self.raw_averaged = self.average_raw_data(
-            self.filtered_recording,
-            self.recording['num_block_samples']
-        )
-
+        self.raw_averaged = self.average_raw_data()
         self.apply_micro_calibration()
 
         bp_options = self.options.band_pass_options
@@ -357,11 +353,7 @@ class PulseDpoaeProcessor(PulseDpoaeResult):
         else:
             self.filtered_recording = recorded_signal.astype(np.float64)
 
-    def average_raw_data(
-        self,
-        recorded_signal: npt.NDArray[np.float64],
-        block_size: int,
-    ) -> npt.NDArray[np.float64]:
+    def average_raw_data(self) -> npt.NDArray[np.float64]:
         """Processes recorded signal to obtain an optimized average.
 
         Args:
@@ -372,32 +364,31 @@ class PulseDpoaeProcessor(PulseDpoaeResult):
             Array of floats containing the averaged signal.
         """
 
-        # Obtain an integer number of recorded blocks
-        total_blocks = int(len(recorded_signal)/block_size)
-        block_data = recorded_signal[:total_blocks*block_size]
-        blocks = block_data.reshape(-1, block_size)
+        if self.options.averaging_strategy is AveragingStrategy.ENSEMBLE:
+            blocks = averaging.calculate_ptpv_ensembles(
+                self.filtered_recording,
+                self.recording['num_block_samples'],
+                generator.NUM_PTPV_SEGMENTS
+            )
+        else:
+            raise NotImplementedError(
+                'BLOCK Averaging Strategy is not implemented yet.'
+            )
 
-        # perform PTPV averaging
-        num_ensembles = int(total_blocks / generator.NUM_PTPV_SEGMENTS)
-        ensembles_size = (num_ensembles, block_size)
-        ensembles = np.zeros(ensembles_size, dtype=np.float32)
-        for i in range(num_ensembles):
-            idx_start = i * generator.NUM_PTPV_SEGMENTS
-            idx_stop = (i + 1) * generator.NUM_PTPV_SEGMENTS
-            ensembles[i, :] = np.mean(blocks[idx_start:idx_stop], axis=0)
+        num_blocks = blocks.shape[0]
+        ensemble_power = np.zeros(num_blocks)
+        for i in range(num_blocks):
+            ensemble_power[i] = math.rms(blocks[i,:])
 
-        ensemble_power = np.zeros(num_ensembles)
-        for i in range(num_ensembles):
-            ensemble_power[i] = math.rms(ensembles[i,:])
 
-        self.averager.setup(num_ensembles)
+        self.averager.setup(num_blocks)
         self.averager.noise_values = ensemble_power.astype(np.float32)
-        self.averager.i_received = num_ensembles
+        self.averager.i_received = num_blocks
         self.averager.evaluate_averaging()
 
 
         if len(self.averager.accepted_idx):
-            avg = ensembles[self.averager.accepted_idx, :].mean(axis=0)
+            avg = blocks[self.averager.accepted_idx, :].mean(axis=0)
             self.log.info(
                 'Optimized averaging: accepted blocks %d/%d.',
                 self.averager.stats.num_accepted_blocks,
@@ -405,7 +396,7 @@ class PulseDpoaeProcessor(PulseDpoaeResult):
             )
         else:
             self.log.error('Optimized averaging failed.')
-            avg = ensembles.mean(axis=0)
+            avg = blocks.mean(axis=0)
 
         return avg
 

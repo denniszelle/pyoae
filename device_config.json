@@ -1,15 +1,18 @@
 {
-    "input_device": "Scarlett 2i2 USB",
-    "output_device": "Scarlett 2i2 USB",
-    "sample_rate": 96000.0,
+    "input_device": 28,
+    "output_device": 25,
+    "sample_rate": 48000.0,
     "device_buffer_size": 4096,
     "use_ramp": true,
     "ramp_duration": 5.0,
     "max_digital_output": 0.5,
     "update_interval": 100.0,
+    "enable_output_phase_calib": false,
     "sync_channels": [0, 1],
     "output_input_mapping":[
         [0, 0],
-        [1, 0]
+        [1, 0],
+        [2, 1],
+        [3, 1]
     ]
 }

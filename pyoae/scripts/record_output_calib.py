@@ -23,9 +23,9 @@ import argparse
 from pyoae import files
 from pyoae import input_validation
 from pyoae import protocols
-from pyoae.calib import MicroTransferFunction
+from pyoae.calib_storage import MicroTransferFunction
 from pyoae.device.device_config import DeviceConfig
-from pyoae.calibrator import OutputCalibRecorder
+from pyoae.output_calib import OutputCalibRecorder
 import pyoae.pyoae_logger as pyoae_logger
 
 DEVICE_CONFIG_FILE = 'device_config.json'
@@ -74,8 +74,7 @@ def main(
 
     if protocol:
         logger.info('Loading speaker calibration protocol from %s.', protocol)
-        prtcl_data = files.load_json_file(protocol)
-        msrmt_params = protocols.get_custom_calib_msrmt_params(prtcl_data)
+        msrmt_params = files.load_output_calib_protocol(protocol)
         if msrmt_params is None:
             logger.error('Stopping: Output calibration protocol is invalid.')
             return

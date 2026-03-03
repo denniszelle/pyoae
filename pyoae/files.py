@@ -1,5 +1,6 @@
 """Module providing functions for file handling."""
 
+import csv
 import json
 import os
 from pathlib import Path
@@ -15,7 +16,7 @@ from typing import (
 import types
 import numpy as np
 
-from pyoae import calib
+from pyoae import calib_storage
 from pyoae import get_logger
 from pyoae import protocols
 from pyoae.device.device_config import DeviceConfig
@@ -71,7 +72,7 @@ def load_device_config(file_path: str) -> None:
         log.error('Failed to load device configuration from %s', file_path)
 
 
-def load_micro_calib(file_path: str | Path) -> calib.MicroCalibData | None:
+def load_micro_calib(file_path: str | Path) -> calib_storage.MicroCalibData | None:
     """Loads the microphone calibration data from JSON."""
     d = {}
     if file_path:
@@ -79,7 +80,7 @@ def load_micro_calib(file_path: str | Path) -> calib.MicroCalibData | None:
     if not d:
         log.error('Micro calibration %s not found.', file_path)
         return None
-    micro_calib_data = calib.get_empty_micro_calib_data()
+    micro_calib_data = calib_storage.get_empty_micro_calib_data()
 
     if d:
         for key in micro_calib_data:
@@ -89,7 +90,86 @@ def load_micro_calib(file_path: str | Path) -> calib.MicroCalibData | None:
     return micro_calib_data
 
 
-def load_output_calib(file_path: str) -> calib.SpeakerCalibData:
+def load_csv_output_calib(
+    file_path: str
+) -> protocols.CalibMsrmtDef | None:
+    """Load the output calibration measurement definition from a csv file"""
+
+    meta = {}
+    data_rows = []
+
+    with open(file_path, 'r', newline='', encoding='utf-8-sig') as f:
+        reader = csv.reader(f)
+
+        # --- Read metadata ---
+        for row in reader:
+            if not row:  # empty line -> end of metadata
+                break
+            key, value = row
+            meta[key] = value
+
+        # --- Read header ---
+        _ = next(reader)
+        # ['frequencies', 'phases', 'amplitudes', 'cluster_idx']
+        # TODO: Check for valid headers.
+
+        # --- Read data ---
+        for row in reader:
+            if row:  # skip possible empty lines
+                data_rows.append(row)
+
+    # Convert to numpy array with correct types
+    data = np.array(data_rows)
+
+    # Convert metadata to proper types
+    meta['block_duration'] = float(meta['block_duration'])
+    meta['num_averaging_blocks'] = int(meta['num_averaging_blocks'])
+
+    msrmt_params: protocols.CalibMsrmtDef = {
+        'block_duration': float(meta['block_duration']),
+        'num_averaging_blocks': int(meta['num_averaging_blocks']),
+        'frequencies': data[:, 0].astype(float),
+        'phases': data[:, 1].astype(float),
+        'amplitudes': data[:, 2].astype(float),
+        'cluster_idc': data[:, 3].astype(int)
+    }
+
+    return msrmt_params
+
+def load_output_calib_protocol(file_path: str
+) -> (
+    protocols.CalibMsrmtParams
+    | protocols.CalibMsrmtDef
+    | None
+):
+    """Loads the output calibration protocol"""
+    path = Path(file_path)
+
+    if not path.exists():
+        log.error('Could not find calibration protocol file.')
+        return None
+
+    if not path.is_file():
+        log.error('Given path is not a file.')
+        return None
+
+    suffix = path.suffix.lower()
+
+    if suffix == '.csv':
+        return load_csv_output_calib(file_path)
+
+    elif suffix == '.json':
+        prtcl_data = load_json_file(file_path)
+        return protocols.get_custom_calib_msrmt_params(prtcl_data)
+    else:
+        log.error(
+            'Invalid file format. Only .csv or .json are valid as '
+            'output calib protocol'
+        )
+        return None
+
+
+def load_output_calib(file_path: str) -> calib_storage.SpeakerCalibData:
     """Loads the output calibration from a JSON."""
     d = {}
     if file_path:
@@ -97,7 +177,7 @@ def load_output_calib(file_path: str) -> calib.SpeakerCalibData:
 
     if not d:
         log.error('Output calibration %s not found.', file_path)
-    out_calib_data = calib.get_empty_speaker_calib_data()
+    out_calib_data = calib_storage.get_empty_speaker_calib_data()
 
     if d:
         for key in out_calib_data:
@@ -253,7 +333,7 @@ def load_pdpoae_recording(file_path: str | Path) -> PulseDpoaeRecording | None:
 
 
 def save_output_calibration(
-    out_calib: calib.SpeakerCalibData
+    out_calib: calib_storage.SpeakerCalibData
 ) -> None:
     """Saves output calibration results to JSON."""
     file_path = os.path.join(

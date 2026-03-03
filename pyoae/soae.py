@@ -34,7 +34,7 @@ import numpy.typing as npt
 
 from pyoae import get_logger
 from pyoae import helpers
-from pyoae.calib import MicroTransferFunction
+from pyoae.calib_storage import MicroTransferFunction
 from pyoae.dsp import averaging
 from pyoae.device.device_config import DeviceConfig
 from pyoae.msrmt_context import MsrmtContext
@@ -366,7 +366,7 @@ class SoaeRecorder:
     def process_spectrum(
         self,
         recorded_signal: npt.NDArray[np.float32],
-        correction_tf: MicroTransferFunction | None = None,
+        micro_tf: MicroTransferFunction | None = None,
         window: str = 'hann'
     ) -> npt.NDArray[np.float32]:
         """Processes recorded signal and obtains spectrum from averaged data.
@@ -391,12 +391,12 @@ class SoaeRecorder:
                 # pylint: disable=no-member
                 spectrum[:] = np.finfo(np.float32).eps
                 # pylint: enable=no-member
-            if correction_tf is None:
+            if micro_tf is None:
                 spectrum = 20 * np.log10(spectrum)
             else:
-                spectrum /= correction_tf.get_interp_transfer_function(
+                spectrum /= np.abs(micro_tf.get_interp_transfer_function(
                     frequencies
-                )
+                ))
                 spectrum = 20 * np.log10(spectrum/20)
 
         else:

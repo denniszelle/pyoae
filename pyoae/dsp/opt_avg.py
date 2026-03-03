@@ -13,12 +13,16 @@ excessive noise from the averaging process.
 """
 
 from dataclasses import dataclass
+from logging import Logger
 
 import numpy as np
 import numpy.typing as npt
 
+from pyoae import get_logger
+
 
 NUM_MIN_OPT_AVG_BLOCKS = 3
+
 
 @dataclass
 class OptAvgStats:
@@ -48,21 +52,29 @@ class OptAvgStats:
 
 
 class OptAverage:
-    """Class to get indices for optimized averaging."""
+    """Class to select block indices for an SNR-improving average.
 
-    id: int
-    """ID used as primary key for database entry."""
+    Workflow:
+        1) call ``setup(num_max_blocks)``
+        2) provide per-block noise metrics via ``set_noise_value()``
+        3) call ``evaluate_averaging()``
+        4) read ``accepted_idx`` (sorted best→worst by noise)
+
+    ``accepted_idx`` always refers to indices of the *original* blocks.
+    """
+
+    log: Logger
 
     noise_values: npt.NDArray[np.float32]
     """1D array with noise values for each block."""
 
-    block_idx: npt.NDArray[np.int_]
+    block_idx: npt.NDArray[np.intp]
     """1D array with block indices to be sorted."""
 
     i_received: int
     """Counter of received blocks."""
 
-    accepted_idx: npt.NDArray[np.int_]
+    accepted_idx: npt.NDArray[np.intp]
     """1D array with indices of accepted blocks."""
 
     stats: OptAvgStats
@@ -71,10 +83,11 @@ class OptAverage:
     def __init__(self) -> None:
         """Initialize optimized averager instance."""
         super().__init__()
+        self.log = get_logger(__class__.__name__)
         self.noise_values = np.empty(0, np.float32)
-        self.block_idx = np.empty(0, np.int_)
+        self.block_idx = np.empty(0, np.intp)
         self.i_received = 0
-        self.accepted_idx = np.empty(0, np.int_)
+        self.accepted_idx = np.empty(0, np.intp)
         self.stats = OptAvgStats(
             np.empty(0, np.float32),
             np.empty(0, np.float32),
@@ -84,15 +97,19 @@ class OptAverage:
 
     def setup(self, num_max_blocks: int) -> None:
         """Reset the class"""
+        self.i_received = 0
+        self.accepted_idx = np.empty(0, dtype=np.intp)
         self.noise_values = np.full(num_max_blocks, fill_value=np.inf)
-        self.block_idx = np.arange(0, num_max_blocks, 1, dtype=np.int_)
+        self.block_idx = np.arange(0, num_max_blocks, 1, dtype=np.intp)
         self.stats.eval_fun = np.zeros(num_max_blocks, dtype=np.float32)
         self.stats.gain_fun = np.zeros(num_max_blocks, dtype=np.float32)
 
     def evaluate_averaging(self) -> None:
         """Evaluate the averaging for the current data blocks."""
         if not self.noise_values.size:
-            print('Evaluate averaging called without noise values.')
+            self.log.error(
+                'Evaluate averaging called without noise values.'
+            )
             return
 
         self.sort_noise_values()
@@ -108,14 +125,16 @@ class OptAverage:
             self.stats.num_accepted_blocks = self.i_received
             self.stats.num_excluded_blocks = 0
             if n1 == 0:
-                print('Cannot evaluate averaging: baseline noise is zero.')
+                self.log.error(
+                    'Cannot evaluate averaging: baseline noise is zero.'
+                )
             return
 
         received_slice = slice(0, self.i_received)
         if np.any(np.isnan(self.noise_values[received_slice])):
-            print('Invalid noise values (NaN) provided.')
+            self.log.warning('Invalid noise values (NaN) provided.')
         if np.any(self.noise_values[received_slice] == 0):
-            print('Invalid noise values (0) provided.')
+            self.log.warning('Invalid noise values (0) provided.')
 
         delta_noise = self.noise_values - n1
         delta_noise_squared = delta_noise ** 2
@@ -133,8 +152,8 @@ class OptAverage:
             self.stats.gain_fun[m-1] = np.sqrt(m / (1 + s/(m*n1**2)) )
 
         # Find boundary index
-        is_accepted = delta_noise <= self.stats.eval_fun
-        self.accepted_idx = self.block_idx[is_accepted]
+        is_accepted = delta_noise <= self.stats.eval_fun[received_slice]
+        self.accepted_idx = self.block_idx[received_slice][is_accepted]
         self.stats.num_accepted_blocks = len(self.accepted_idx)
         self.stats.num_excluded_blocks = self.i_received - self.stats.num_accepted_blocks
 
@@ -145,6 +164,11 @@ class OptAverage:
         """
         self.noise_values[pos] = noise_val
         self.i_received += 1
+
+    def set_noise_values(self, noise_values: npt.NDArray[np.float32]) -> None:
+        """Sets all noise values at once."""
+        self.noise_values = noise_values
+        self.i_received = len(self.noise_values)
 
     def sort_noise_values(self) -> None:
         """Sort the received blocks by their noise values."""

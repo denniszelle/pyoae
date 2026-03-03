@@ -30,10 +30,10 @@ import numpy as np
 from pyoae import generator
 from pyoae import get_logger
 from pyoae import helpers
-from pyoae.calib import MicroTransferFunction, OutputCalibration
+from pyoae.calib_storage import MicroTransferFunction, OutputCalibration
 from pyoae.device.device_config import DeviceConfig
 from pyoae.dsp.containers import DpoaeMsrmtData
-from pyoae.dsp.processing import PulseDpoaeProcessor
+from pyoae.dsp.pdsp import PulseDpoaeProcessor
 from pyoae.generator import PulseDpoaeStimulus
 from pyoae.msrmt_context import DpoaeMsrmtContext
 from pyoae.protocols import PulseDpoaeMsrmtParams
@@ -156,7 +156,9 @@ class PulseDpoaeRecorder:
                 msrmt_params_i['block_duration'] * DeviceConfig.sample_rate
             )
             num_total_recording_samples = (
-                msrmt_params_i['num_averaging_blocks'] * num_block_samples * 4
+                msrmt_params_i['num_averaging_blocks']
+                * num_block_samples
+                * generator.NUM_PTPV_SEGMENTS
             )
             block_duration = num_block_samples / DeviceConfig.sample_rate
             recording_duration = (
@@ -164,9 +166,6 @@ class PulseDpoaeRecorder:
             )
 
             if mic_trans_fun:
-                mic_trans_fun[i].num_samples = num_block_samples
-                mic_trans_fun[i].sample_rate = DeviceConfig.sample_rate
-                mic_trans_fun[i].interpolate_transfer_fun()
                 mic_trans_fun_i = mic_trans_fun[i]
             else:
                 mic_trans_fun_i = None
@@ -380,7 +379,8 @@ class PulseDpoaeRecorder:
         stimulus.create_stimulus_mask(block_duration, msrmt_params)
         stimulus1, stimulus2 = stimulus.generate_stimuli(
             num_block_samples,
-            output_calibration=out_calib
+            output_channels,
+            output_calibration=out_calib,
         )
         self.signals[output_channels[0]] = PeriodicSignal(
             stimulus1,

@@ -106,12 +106,12 @@ def get_default_soae_msrmt_params() -> MsrmtParams:
 def get_default_calib_msrmt_params() -> CalibMsrmtParams:
     """Returns default parameters for output calibration."""
     d: CalibMsrmtParams = {
-        'block_duration': 1.0,
+        'block_duration': 2.0,
         'num_averaging_blocks': 1,
-        'num_clusters': 1,
+        'num_clusters': 20,
         'f_start': 200.0,
-        'f_stop': 10000.0,
-        'lines_per_octave': 9.1,
+        'f_stop': 14000.0,
+        'lines_per_octave': 18.1,
         'amplitude_per_line': 0.004
     }
     return d

@@ -93,12 +93,11 @@ class PlotBounds(TypedDict):
     """Maximum amplitude of corrected data"""
 
 
-
 def setup_offline_plot(
     frequency_range: tuple[float, float],
     output_channels: list[int],
     input_channels: list[int],
-    is_calib_available:bool=False,
+    is_calib_available: bool = False,
 ) -> list[list[Axes]]:
     """Sets up the plots.
 
@@ -185,20 +184,18 @@ def get_mt_results(
     results = []
 
     channel_segment_size = int(
-        msrmt_ctx.block_size/len(sync_msrmt.hardware_data.output_channels)
+        msrmt_ctx.block_size / len(sync_msrmt.hardware_data.output_channels)
     )
     block_size = msrmt_ctx.block_size
 
     for i, _ in enumerate(sync_msrmt.hardware_data.output_channels):
 
         input_channel = sync_msrmt.hardware_data.input_channels[i]
-        recorded_signal = sync_msrmt.get_recorded_signal(
-            input_channel
-        )
+        recorded_signal = sync_msrmt.get_recorded_signal(input_channel)
 
         # Obtain an integer number of recorded blocks
-        total_blocks = int(len(recorded_signal)/block_size)
-        block_data = recorded_signal[:total_blocks*block_size]
+        total_blocks = int(len(recorded_signal) / block_size)
+        block_data = recorded_signal[:total_blocks * block_size]
         blocks = block_data.reshape(-1, block_size)
 
         if input_channel not in sync_msrmt.hardware_data.input_channels:
@@ -221,27 +218,21 @@ def get_mt_results(
 
         analyzer = mt_generator.MultiToneAnalyzer(
             mt_definition,
-            block_avg[i*channel_segment_size:(i+1)*channel_segment_size],
+            block_avg[i * channel_segment_size:(i + 1) * channel_segment_size],
             DeviceConfig.sample_rate,
         )
 
-        results.append(
-            analyzer.compute_result(input_tf)
-        )
+        results.append(analyzer.compute_result(input_tf))
 
     return results
 
 
-def get_log_frequency_ticks(
-    f_min,
-    f_max,
-    bases=(1,3,5)
-):
+def get_log_frequency_ticks(f_min, f_max, bases=(1, 3, 5)):
     """Return frequency ticks for x-axis plotting with log x-scale."""
     decade_min = int(np.floor(np.log10(f_min)))
     decade_max = int(np.ceil(np.log10(f_max)))
 
-    decades = 10 ** np.arange(decade_min, decade_max + 1)
+    decades = 10**np.arange(decade_min, decade_max + 1)
     ticks = np.array([b * d for d in decades for b in bases])
 
     return ticks[(ticks >= f_min) & (ticks <= f_max)]
@@ -282,6 +273,7 @@ def _prepare_plot_config(
         'ax_cmp_max': 120.0,
     }
 
+
 def _compute_bounds(
     mt_results: list[mt_generator.MultiToneResult],
     config: PlotConfig
@@ -305,8 +297,14 @@ def _compute_bounds(
     amp_min = converter.rms_mupa_to_db_spl(amp_min) - padding
     amp_max = converter.rms_mupa_to_db_spl(amp_max) + padding
 
-    raw_y_min = min(converter.rms_mupa_to_db_spl(raw_y_min), config['ax_cmp_min'])
-    raw_y_max = max(converter.rms_mupa_to_db_spl(raw_y_max), config['ax_cmp_max'])
+    raw_y_min = min(
+        converter.rms_mupa_to_db_spl(raw_y_min),
+        config['ax_cmp_min']
+    )
+    raw_y_max = max(
+        converter.rms_mupa_to_db_spl(raw_y_max),
+        config['ax_cmp_max']
+    )
 
     phase_min -= config['phase_padding']
     phase_max += config['phase_padding']
@@ -320,6 +318,7 @@ def _compute_bounds(
         'amp_max': amp_max,
     }
 
+
 def _get_output_index(config, i, j):
     input_channels = config['input_channels']
     sorted_input_channels = config['sorted_input_channels']
@@ -332,6 +331,7 @@ def _get_output_index(config, i, j):
         return output_idc[i]
 
     return None
+
 
 def _apply_axis_formatting(
     ax: Axes,
@@ -421,7 +421,6 @@ def plot_offline(
     amplitudes in a single plot, the last one all (corrected phases) in one.
     """
 
-
     if sync_msrmt.state != MsrmtState.FINISHED:
         return
 
@@ -442,7 +441,8 @@ def plot_offline(
             _plot_single_channel(
                 ax,
                 axes,
-                i, j,
+                i,
+                j,
                 mt_results[output_idx],
                 config,
                 bounds
@@ -473,18 +473,18 @@ def plot_result_file(results: OutputCalibration) -> None:
     line_styles = ['b.-', 'rx-', 'gd-']
 
     f_min = np.floor((results.raw_freqs.min() - 20) / 20) * 20
-    f_max = np.ceil((results.raw_freqs.max() + 500)/ 1000) * 1000
+    f_max = np.ceil((results.raw_freqs.max() + 500) / 1000) * 1000
     f_min = max(20, f_min)
 
-    y_max = np.ceil(np.max(
-        converter.peak_mupa_to_db_spl(results.raw_amps)
-    )) + 10
+    y_max = np.ceil(
+        np.max(converter.peak_mupa_to_db_spl(results.raw_amps))
+    ) + 10
     if y_max <= 0:
-        y_min = y_max-100
+        y_min = y_max - 100
     else:
         y_min = 0
-    phase_max = np.ceil(np.max(results.raw_phases))+2
-    phase_min = np.floor(np.min(results.raw_phases))-2
+    phase_max = np.ceil(np.max(results.raw_phases)) + 2
+    phase_min = np.floor(np.min(results.raw_phases)) - 2
 
     for i, input_channel_i in enumerate(sorted_input_channels):
 
@@ -498,12 +498,9 @@ def plot_result_file(results: OutputCalibration) -> None:
         ax_i_phase = axes[1][i]
         ax_i_amp.set_xlim(f_min, f_max)
         ax_i_phase.set_xscale('log')
-        ax_i_phase.set_title(
-            f'Speaker Phase - Mic Channel {input_channel_i}'
-        )
+        ax_i_phase.set_title(f'Speaker Phase - Mic Channel {input_channel_i}')
         ax_i_phase.set_xlabel('Frequency (Hz)')
         ax_i_phase.set_ylabel('Phase (rad)')
-
 
         output_idc = np.where(
             np.asarray(results.input_channels) == input_channel_i
@@ -511,7 +508,7 @@ def plot_result_file(results: OutputCalibration) -> None:
         for j, output_idx_j in enumerate(output_idc):
             output_channel_j = results.output_channels[output_idx_j]
 
-            p_out_max = results.raw_amps[output_idx_j,:]
+            p_out_max = results.raw_amps[output_idx_j, :]
             out_max_db_spl = converter.peak_mupa_to_db_spl(p_out_max)
             if i < len(line_styles):
                 ax_i_amp.plot(
@@ -594,8 +591,7 @@ class OutputCalibRecorder:
             * DeviceConfig.sample_rate
         )
         num_total_recording_samples = (
-            num_block_samples
-            * msrmt_params['num_averaging_blocks']
+            num_block_samples * msrmt_params['num_averaging_blocks']
         )
         block_duration = num_block_samples / DeviceConfig.sample_rate
         recording_duration = (
@@ -605,7 +601,10 @@ class OutputCalibRecorder:
         # Set to false if major problem occured during calibration
         self.results = None
 
-        if block_duration == msrmt_params['block_duration'] * len(output_channels):
+        if (
+            block_duration
+            == msrmt_params['block_duration'] * len(output_channels)
+        ):
             self.logger.info(
                 'Block duration adjusted to %.2f ms.',
                 block_duration * 1E3
@@ -617,14 +616,17 @@ class OutputCalibRecorder:
             )
 
         # Setup hardware data
-        active_in_channels = list({
-            b for a, b in DeviceConfig.output_input_mapping
-            if a in output_channels
-        })
+        active_in_channels = list(
+            {
+                b for a, b in DeviceConfig.output_input_mapping
+                if a in output_channels
+            }
+        )
 
         n_in_channels = max(
-            *active_in_channels, DeviceConfig.sync_channels[1]
-        )+1
+            *active_in_channels,
+            DeviceConfig.sync_channels[1]
+        ) + 1
         n_out_channels = max(output_channels) + 1
         hw_data = HardwareData(
             n_in_channels,
@@ -676,12 +678,7 @@ class OutputCalibRecorder:
             self.msrmt = None
             return
 
-        self.msrmt = SyncMsrmt(
-            rec_data,
-            hw_data,
-            self.signals,
-            block_duration
-        )
+        self.msrmt = SyncMsrmt(rec_data, hw_data, self.signals, block_duration)
 
     def record(self) -> None:
         """Starts the calibration."""
@@ -705,11 +702,7 @@ class OutputCalibRecorder:
             self.logger.info(
                 'Showing offline results. Please close window to continue.'
             )
-            plot_offline(
-                self.msrmt,
-                self.msrmt_ctx,
-                self.mt_results
-            )
+            plot_offline(self.msrmt, self.msrmt_ctx, self.mt_results)
 
     def compute_calib_results(self) -> None:
         """Computes the output-channel transfer functions."""
@@ -730,7 +723,7 @@ class OutputCalibRecorder:
 
         for result_i in self.mt_results:
             max_out.append(
-                (result_i.amplitude*np.sqrt(2)).astype(float).tolist()
+                (result_i.amplitude * np.sqrt(2)).astype(float).tolist()
             )
             phase.append(result_i.phase.astype(float).tolist())
 
@@ -760,10 +753,9 @@ class OutputCalibRecorder:
         """Generates the output signals for playback.
 
         Returns True when finished successfully"""
-        mt_samples = int(np.round(
-            num_block_samples
-            / len(hw_data.output_channels)
-        ))
+        mt_samples = int(
+            np.round(num_block_samples / len(hw_data.output_channels))
+        )
 
         # For CalibMsrmtParams
         if 'num_clusters' in msrmt_params:
@@ -796,24 +788,22 @@ class OutputCalibRecorder:
                 max_amplitude,
                 DeviceConfig.max_digital_output
             )
-            self.logger.warning(
-                'Output calibration results might be invalid.'
-            )
+            self.logger.warning('Output calibration results might be invalid.')
 
-        n_total_samples = num_block_samples * msrmt_params['num_averaging_blocks']
+        n_total_samples = (
+            num_block_samples * msrmt_params['num_averaging_blocks']
+        )
 
         counter = 0
         for i in range(hw_data.get_stream_output_channels()):
             if i in hw_data.output_channels:
                 stimulus = np.zeros(num_block_samples, dtype=np.float32)
                 stimulus[
-                    counter*len(mt_signal):(counter+1)*len(mt_signal)
+                    counter * len(mt_signal):(counter + 1) *len(mt_signal)
                 ] = mt_signal
                 signal = PeriodicSignal(stimulus, n_total_samples)
                 self.signals.append(signal)
                 counter += 1
             else:
-                self.signals.append(
-                    PeriodicSignal()
-                )
+                self.signals.append(PeriodicSignal())
         return True

@@ -5,10 +5,13 @@ import multiprocessing as mp
 from multiprocessing.shared_memory import SharedMemory
 from multiprocessing.sharedctypes import Synchronized
 from multiprocessing.synchronize import Event
-from typing import Any
 
+from matplotlib.axes import Axes
+from matplotlib.figure import Figure
+from matplotlib.lines import Line2D
 import matplotlib.pyplot as plt
 import numpy as np
+import numpy.typing as npt
 
 from pyoae.device.device_config import DeviceConfig
 
@@ -32,23 +35,53 @@ class MsrmtEvents:
 class ProcessPlotter:
     """Plot in a separate process."""
 
-    # TODO: add proper annotation of class attributes here
+    record_idx_share: Synchronized
+    """Shared integer value also accessed in the measurement callback"""
+
+    num_samples: int
+    """Number of total samples of the measurement"""
+
+    samplerate: float
+    """Sampling rate of the measurement"""
+
+    display_samples: int
+    """Samples displayed in the live measurement plot"""
+
+    time_vec: npt.NDArray[np.float32]
+    """Time vector for the measurement plot"""
+
+    is_running: bool
+    """Flag whether the measurement is still running"""
+
+    msrmt_events: MsrmtEvents
+    """Events that may be triggered during measurement"""
+
+    data: list[npt.NDArray[np.floating]]
+    """Vectors of raw measurement data for each input"""
+
+    shm: list[SharedMemory]
+    """List of shared memory objects for each input"""
+
+    fig: Figure | None
+    """Handle to figure of the plot"""
+
+    lines: list[Line2D]
+    """List of lines that display raw data"""
 
     def __init__(
         self,
         record_idx_share: Synchronized,
         num_samples: int,
-        fs: float,
+        samplerate: float,
         msrmt_events: MsrmtEvents,
         interval_length: float=0.08,
     ) -> None:
         self.record_idx_share = record_idx_share
         self.num_samples = num_samples
-        self.fs = fs
-        self.display_samples = int(interval_length*fs)
-        self.time_vec = np.arange(self.display_samples) / self.fs *1E3
-        self.running = True
-        self.display_interval = interval_length  # in seconds
+        self.fs = samplerate
+        self.display_samples = int(interval_length*samplerate)
+        self.time_vec = np.arange(self.display_samples, dtype=np.float32) / self.fs *1E3
+        self.is_running = True
         self.msrmt_events = msrmt_events
 
         self.data = []
@@ -58,7 +91,7 @@ class ProcessPlotter:
 
     def terminate(self) -> None:
         """Terminates the plot window."""
-        self.running = False
+        self.is_running = False
         plt.close('all')
 
     def update_plot(self) -> bool:
@@ -96,15 +129,20 @@ class ProcessPlotter:
                 print('Plotting error: ', e)
                 self.terminate()
                 return False
-        return self.running
+        return self.is_running
 
     def run(self, shared_memories: list[SharedMemory]) -> None:
         """Runs the plot process."""
 
-        self.fig, axes = plt.subplots(len(shared_memories), 1, figsize=(10, 6))
+        self.fig, _axes = plt.subplots(len(shared_memories), 1, figsize=(10, 6))
 
+        # Convert to 1D list
         if len(shared_memories) == 1:
-            axes = [axes]  # TODO: add typing
+            axes: list[Axes] = [_axes]
+        else:
+            axes = []
+            for i in range(len(shared_memories)):
+                axes.append(_axes[i])
 
         self.lines = []
 
@@ -143,17 +181,22 @@ class ProcessPlotter:
 class LivePlotProcess:
     """Controller for live plotting."""
 
-    # TODO: add annotations for class attributes here
+    plotter: ProcessPlotter
+    """Process plotter that is run in a separate process"""
+
+    plot_process: mp.Process
+    """Process for running the plot"""
 
     def __init__(
         self,
         shm: list[SharedMemory],
-        record_idx_share: Any,
+        record_idx_share: Synchronized,
         num_samples: int,
         fs: float,
         msrmt_events: MsrmtEvents,
         interval: float=0.08
     ) -> None:
+
         self.plotter = ProcessPlotter(
             record_idx_share,
             num_samples,

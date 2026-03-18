@@ -6,10 +6,12 @@ This module is not intended to be run directly.
 from collections import Counter
 from datetime import datetime
 from logging import Logger
+from typing import TypedDict
 
 from matplotlib import pyplot as plt
 from matplotlib.axes import Axes
 import numpy as np
+import numpy.typing as npt
 
 from pyoae import files
 from pyoae import get_logger
@@ -36,6 +38,60 @@ from pyoae.sync import (
 )
 
 logger = get_logger(__name__)
+
+
+class PlotConfig(TypedDict):
+    """Configuration of plotting"""
+
+    axes: list[list[Axes]]
+    """2D list of axes objects for plot grid"""
+
+    frequencies: npt.NDArray[np.floating]
+    """Frequencies of axes"""
+
+    input_channels: list[int]
+    """Input channels for speakers to calibrate"""
+
+    sorted_input_channels: list[int]
+    """Sorted input channels for speakers to calibrate"""
+
+    line_vecs: list[str]
+    """Line plot options for different speaker channels on the same input"""
+
+    padding: float
+    """Distances between data- and plot boundaries for amplitude plots"""
+
+    phase_padding: float
+    """Distances between data- and plot boundaries for phase plots"""
+
+    ax_cmp_min: float
+    """Maximum value for lower boundaries of raw plots"""
+
+    ax_cmp_max: float
+    """Minimum value for upper boundaries of raw plots"""
+
+
+class PlotBounds(TypedDict):
+    """Boundary information of plots"""
+
+    raw_y_min: float
+    """Minimum amplitude of raw data plots"""
+
+    raw_y_max: float
+    """Maximum amplitude of raw data plots"""
+
+    phase_min: float
+    """Minimum phase of raw data plots"""
+
+    phase_max: float
+    """Maximum phase of raw data plots"""
+
+    amp_min: float
+    """Minimum amplitude of corrected data"""
+
+    amp_max: float
+    """Maximum amplitude of corrected data"""
+
 
 
 def setup_offline_plot(
@@ -71,7 +127,7 @@ def setup_offline_plot(
         rows,
         cols,
         figsize=(10, 8),
-        sharex='all',
+        sharex='col',
         squeeze=False
     ) # type: ignore
     axes: list[list[Axes]]
@@ -191,23 +247,19 @@ def get_log_frequency_ticks(
     return ticks[(ticks >= f_min) & (ticks <= f_max)]
 
 
-def plot_offline(  # TODO: split into several functions
+def _prepare_plot_config(
     sync_msrmt: SyncMsrmt,
     msrmt_ctx: MsrmtContext,
     mt_results: list[mt_generator.MultiToneResult]
-) -> None:
-    """Plots the final results in a non-updating plot.
+) -> PlotConfig:
+    """Create plot config containing meta information of the recorded data."""
 
-    This function obtains the results from the measurement object, creates a
-    plot and shows the complete measurement as well as the spectral estimate.
-    """
-    if sync_msrmt.state != MsrmtState.FINISHED:
-        return
+    has_input_calib = msrmt_ctx.input_trans_fun is not None
 
-    has_input_calib =  msrmt_ctx.input_trans_fun is not None
     f_min = np.floor((mt_results[0].frequencies.min() - 20) / 20) * 20
-    f_max = np.ceil((mt_results[0].frequencies.max() + 500)/ 1000) * 1000
+    f_max = np.ceil((mt_results[0].frequencies.max() + 500) / 1000) * 1000
     f_min = max(20, f_min)
+
     axes = setup_offline_plot(
         (f_min, f_max),
         sync_msrmt.hardware_data.output_channels,
@@ -215,102 +267,186 @@ def plot_offline(  # TODO: split into several functions
         has_input_calib
     )
 
-    padding = 15  # dB of padding on top and bottom
-    phase_padding = 3 # rad of padding on top and bottom
-    line_vecs = ['b-', 'r-', 'g-']
-    ax_cmp_min = 80
-    ax_cmp_max = 120
-
     input_channels = sync_msrmt.hardware_data.input_channels
-    counter = Counter(input_channels)
-    sorted_input_channels = list(counter.keys())
+    sorted_input_channels = list(Counter(input_channels).keys())
 
-    # Get boundaries
-    raw_y_min = np.inf
-    raw_y_max = -np.inf
-    phase_min = np.inf
-    phase_max = -np.inf
-    amp_min = np.inf
-    amp_max = -np.inf
-    for result_i in mt_results:
-        raw_y_min = min(raw_y_min, np.abs(result_i.spectra).min())
-        raw_y_max = max(raw_y_max, np.abs(result_i.spectra).max())
-        phase_min = min(phase_min, result_i.phase.min())
-        phase_max = max(phase_max, result_i.phase.max())
-        amp_min = min(amp_min, result_i.amplitude.min())
-        amp_max = max(amp_max, result_i.amplitude.max())
+    return {
+        'axes': axes,
+        'frequencies': mt_results[0].frequencies,
+        'input_channels': input_channels,
+        'sorted_input_channels': sorted_input_channels,
+        'line_vecs': ['b-', 'r-', 'g-'],
+        'padding': 15.0,
+        'phase_padding': 3.0,
+        'ax_cmp_min': 80.0,
+        'ax_cmp_max': 120.0,
+    }
+
+def _compute_bounds(
+    mt_results: list[mt_generator.MultiToneResult],
+    config: PlotConfig
+) -> PlotBounds:
+    """Compute x- and y-value boundaries for plots"""
+
+    raw_y_min, raw_y_max = np.inf, -np.inf
+    phase_min, phase_max = np.inf, -np.inf
+    amp_min, amp_max = np.inf, -np.inf
+
+    for r in mt_results:
+        raw_y_min = min(raw_y_min, np.abs(r.spectra).min())
+        raw_y_max = max(raw_y_max, np.abs(r.spectra).max())
+        phase_min = min(phase_min, r.phase.min())
+        phase_max = max(phase_max, r.phase.max())
+        amp_min = min(amp_min, r.amplitude.min())
+        amp_max = max(amp_max, r.amplitude.max())
+
+    padding = config['padding']
+
     amp_min = converter.rms_mupa_to_db_spl(amp_min) - padding
     amp_max = converter.rms_mupa_to_db_spl(amp_max) + padding
-    raw_y_min = min(converter.rms_mupa_to_db_spl(raw_y_min), ax_cmp_min)
-    raw_y_max = max(converter.rms_mupa_to_db_spl(raw_y_max), ax_cmp_max)
-    phase_min -= phase_padding
-    phase_max += phase_padding
 
-    mt_frequencies = mt_results[0].frequencies
+    raw_y_min = min(converter.rms_mupa_to_db_spl(raw_y_min), config['ax_cmp_min'])
+    raw_y_max = max(converter.rms_mupa_to_db_spl(raw_y_max), config['ax_cmp_max'])
 
-    for i, ax_i in enumerate(axes):
-        # i is the row in the plot
-        for j, ax_ij in enumerate(ax_i):
-            # j is the column in the plot
-            if i < len(axes) - 2:
+    phase_min -= config['phase_padding']
+    phase_max += config['phase_padding']
 
-                output_idc = np.where(
-                    np.asarray(input_channels) == sorted_input_channels[j]
-                )[0]
-                if len(output_idc) > i:
-                    output_idx = output_idc[i]
-                else:
-                    continue
-                # Plot measurement of channel ij
-                out_db_spl = converter.rms_mupa_to_db_spl(mt_results[output_idx].raw_amplitude)
-                phases = mt_results[output_idx].phase
+    return {
+        'raw_y_min': raw_y_min,
+        'raw_y_max': raw_y_max,
+        'phase_min': phase_min,
+        'phase_max': phase_max,
+        'amp_min': amp_min,
+        'amp_max': amp_max,
+    }
 
-                # p_out_peak = mt_results[output_idx].raw_amplitude*np.sqrt(2)
-                p_out_max = mt_results[output_idx].amplitude*np.sqrt(2)
-                out_max_db_spl = converter.peak_mupa_to_db_spl(p_out_max)
+def _get_output_index(config, i, j):
+    input_channels = config['input_channels']
+    sorted_input_channels = config['sorted_input_channels']
 
-                # Plot raw spectrum
-                for spec_k in mt_results[output_idx].spectra:
-                    ax_ij.plot(
-                        mt_results[output_idx].freq_spectra,
-                        converter.rms_mupa_to_db_spl(abs(spec_k)),
-                        linewidth=0.5,
-                        color='k'
-                    )
+    output_idc = np.where(
+        np.asarray(input_channels) == sorted_input_channels[j]
+    )[0]
 
-                # Add markers to raw spectrum
-                ax_ij.plot(mt_frequencies, out_db_spl, 'ro', markersize=2)
+    if len(output_idc) > i:
+        return output_idc[i]
 
-                # Add markers to raw spectrum plot with amplitude correction
-                ax_ij.plot(
-                    mt_frequencies,
-                    out_max_db_spl,
-                    'ko',
-                    markersize=3,
-                )
+    return None
 
-                # Add corrected values to amplitude and phase plot
-                if len(line_vecs) > i:
-                    axes[-2][j].plot(
-                        mt_frequencies, out_max_db_spl, line_vecs[i]
-                    )
-                    axes[-1][j].plot(mt_frequencies, phases, line_vecs[i])
-                    ax_ij.plot(mt_frequencies, out_max_db_spl, line_vecs[i])
-                else:
-                    axes[-2][j].plot(mt_frequencies, out_max_db_spl)
-                    axes[-1][j].plot(mt_frequencies, phases)
-                    ax_ij.plot(mt_frequencies, out_max_db_spl)
+def _apply_axis_formatting(
+    ax: Axes,
+    axes: list[list[Axes]],
+    j: int,
+    config: PlotConfig,
+    bounds: PlotBounds
+):
+    """Apply axis formatting for plots."""
+    ax.set_ylim(bounds['raw_y_min'], bounds['raw_y_max'] + config['padding'])
 
-                ax_ij.set_ylim(raw_y_min, raw_y_max + padding)
-                axes[-2][j].grid(True, which='both')
-                axes[-1][j].grid(True, which='both')
-                ticks = get_log_frequency_ticks(
-                    min(mt_frequencies), max(mt_frequencies)
-                )
-                axes[-1][j].set_xticks(ticks)
-                axes[-1][j].set_xticklabels([str(int(t)) for t in ticks])
-                axes[-2][j].set_ylim(amp_min, amp_max)
-                axes[-1][j].set_ylim(phase_min, phase_max)
+    axes[-2][j].grid(True, which='both')
+    axes[-1][j].grid(True, which='both')
+
+    ticks = get_log_frequency_ticks(
+        min(config['frequencies']),
+        max(config['frequencies'])
+    )
+
+    axes[-1][j].set_xticks(ticks)
+    axes[-1][j].set_xticklabels([str(int(t)) for t in ticks])
+
+    axes[-2][j].set_ylim(bounds['amp_min'], bounds['amp_max'])
+    axes[-1][j].set_ylim(bounds['phase_min'], bounds['phase_max'])
+
+
+def _plot_single_channel(
+    ax: Axes,
+    axes: list[list[Axes]],
+    i: int,
+    j: int,
+    result: mt_generator.MultiToneResult,
+    config: PlotConfig,
+    bounds: PlotBounds
+):
+    """Add plots for a single channel of an output calibration."""
+
+    freqs = config['frequencies']
+    line_vecs = config['line_vecs']
+
+    out_db_spl = converter.rms_mupa_to_db_spl(result.raw_amplitude)
+    phases = result.phase
+
+    p_out_max = result.amplitude * np.sqrt(2)
+    out_max_db_spl = converter.peak_mupa_to_db_spl(p_out_max)
+
+    # Add raw data to own raw-data plot
+    for spec in result.spectra:
+        ax.plot(
+            result.freq_spectra,
+            converter.rms_mupa_to_db_spl(abs(spec)),
+            linewidth=0.5,
+            color='k'
+        )
+
+    # Add markers to raw data plot
+    ax.plot(freqs, out_db_spl, 'ro', markersize=2)
+    ax.plot(freqs, out_max_db_spl, 'ko', markersize=3)
+
+    # Define style of plots in comparison plots
+    style = line_vecs[i] if i < len(line_vecs) else None
+
+    # Add results to amplitude comparison(-2) and phase comparison(-1) plots
+    if style:
+        axes[-2][j].plot(freqs, out_max_db_spl, style)
+        axes[-1][j].plot(freqs, phases, style)
+        ax.plot(freqs, out_max_db_spl, style)
+    else:
+        axes[-2][j].plot(freqs, out_max_db_spl)
+        axes[-1][j].plot(freqs, phases)
+        ax.plot(freqs, out_max_db_spl)
+
+    # Format axes
+    _apply_axis_formatting(ax, axes, j, config, bounds)
+
+
+def plot_offline(
+    sync_msrmt: SyncMsrmt,
+    msrmt_ctx: MsrmtContext,
+    mt_results: list[mt_generator.MultiToneResult]
+) -> None:
+    """Create offline plot after a output calibration measurement.
+
+    Measurements for each input that are assigned to an output channel that
+    is calibrated, one row is created. The first plots display raw data for
+    each speaker recording. The second last plot plots all (corrected)
+    amplitudes in a single plot, the last one all (corrected phases) in one.
+    """
+
+
+    if sync_msrmt.state != MsrmtState.FINISHED:
+        return
+
+    config = _prepare_plot_config(sync_msrmt, msrmt_ctx, mt_results)
+    bounds = _compute_bounds(mt_results, config)
+
+    axes = config["axes"]
+
+    for i, ax_row in enumerate(axes):
+        for j, ax in enumerate(ax_row):
+            if i >= len(axes) - 2:
+                continue
+
+            output_idx = _get_output_index(config, i, j)
+            if output_idx is None:
+                continue
+
+            _plot_single_channel(
+                ax,
+                axes,
+                i, j,
+                mt_results[output_idx],
+                config,
+                bounds
+            )
 
     plt.tight_layout()
     plt.show()

@@ -129,12 +129,13 @@ def create_ptpv_signals(
     idx_on = int(pulse_mask['t_on'] * DeviceConfig.sample_rate)
     num_pulse_samples = int(pulse_mask['duration'] * DeviceConfig.sample_rate)
 
+    maximum = -1.0
     # create stimuli with phase shift
     for i in range(num_segments):
         pulse_pattern = create_pulse_pattern(
             pulse_mask,
             frequency,
-            i*phase_shift
+            i * phase_shift
         )
 
         # move to appropriate position in signal template
@@ -154,12 +155,19 @@ def create_ptpv_signals(
                 freqs,
                 num_block_samples
             )
-            signal_template = np.real(np.fft.irfft(signal_spec/corr_spec))
-            signal_template = signal_template/max(signal_template)
+            signal_template = np.real(np.fft.irfft(signal_spec/corr_spec)).astype(np.float32)
+            maximum = max(maximum, max(signal_template))
+
 
         stimuli.append(signal_template)
-    return stimuli
 
+    # Correct full-scale value for largest template.
+    for i, _ in enumerate(stimuli):
+        if maximum < 0:
+            raise ValueError('No positive signals.')
+        stimuli[i] = stimuli[i]/maximum
+
+    return stimuli
 
 def compute_pulse_amplitude(
     signals: list[npt.NDArray[np.float32]],
@@ -218,10 +226,6 @@ def compute_speaker_signal(
         freqs
     )
     speaker_spec = raw_spec*calib_spec
-    np.save(
-        'interp_speaker.npy',
-        calib_spec
-    )
     return np.real(np.fft.irfft(speaker_spec))
 
 

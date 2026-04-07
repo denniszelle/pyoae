@@ -120,7 +120,8 @@ def create_ptpv_signals(
     num_block_samples: int,
     num_segments: int = NUM_PTPV_SEGMENTS,
     output_calibration: OutputCalibration | None = None,
-    output_channel: int | None = None
+    output_channel: int | None = None,
+    phase_offset: float = 0.0
 ) -> list[npt.NDArray[np.float32]]:
     """Creates a list with PTPV signals."""
     # Generate output signals
@@ -135,7 +136,7 @@ def create_ptpv_signals(
         pulse_pattern = create_pulse_pattern(
             pulse_mask,
             frequency,
-            i * phase_shift
+            i * phase_shift + phase_offset
         )
 
         # move to appropriate position in signal template

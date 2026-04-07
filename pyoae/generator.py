@@ -157,11 +157,13 @@ def create_ptpv_signals(
             )
             signal_template = np.real(np.fft.irfft(signal_spec/corr_spec)).astype(np.float32)
             maximum = max(maximum, max(signal_template))
+        else:
+            maximum = 1.0
 
 
         stimuli.append(signal_template)
 
-    # Correct full-scale value for largest template.
+    # Correct all full-scale values for largest template.
     for i, _ in enumerate(stimuli):
         if maximum < 0:
             raise ValueError('No positive signals.')

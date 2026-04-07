@@ -78,9 +78,9 @@ class ProcessPlotter:
     ) -> None:
         self.record_idx_share = record_idx_share
         self.num_samples = num_samples
-        self.fs = samplerate
+        self.samplerate = samplerate
         self.display_samples = int(interval_length * samplerate)
-        time_vec = np.arange(self.display_samples) / self.fs *1E3
+        time_vec = np.arange(self.display_samples) / self.samplerate *1E3
         self.time_vec = time_vec.astype(np.float32)
         self.is_running = True
         self.msrmt_events = msrmt_events
@@ -116,7 +116,7 @@ class ProcessPlotter:
             time_vec = None
         else:
             interval = [0, record_idx]
-            time_vec = np.arange(record_idx)/self.fs*1E3
+            time_vec = np.arange(record_idx)/self.samplerate*1E3
 
         for i in range(len(self.shm)):
             try:
@@ -154,7 +154,7 @@ class ProcessPlotter:
             )
 
             self.lines.append(axes[i].plot([], [])[0])
-            axes[i].set_xlim(0, self.display_samples/self.fs*1E3)
+            axes[i].set_xlim(0, self.display_samples/self.samplerate*1E3)
             axes[i].set_ylim(-1.0, 1.0)
             axes[i].set_ylabel('Amplitude (full scale)')
 

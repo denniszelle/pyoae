@@ -79,8 +79,9 @@ class ProcessPlotter:
         self.record_idx_share = record_idx_share
         self.num_samples = num_samples
         self.fs = samplerate
-        self.display_samples = int(interval_length*samplerate)
-        self.time_vec = np.arange(self.display_samples, dtype=np.float32) / self.fs *1E3
+        self.display_samples = int(interval_length * samplerate)
+        time_vec = np.arange(self.display_samples) / self.fs *1E3
+        self.time_vec = time_vec.astype(np.float32)
         self.is_running = True
         self.msrmt_events = msrmt_events
 

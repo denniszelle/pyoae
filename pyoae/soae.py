@@ -295,12 +295,12 @@ class SoaeRecorder:
         ax_time.set_xlim(0, self.msrmt.recording_data.msrmt_duration)
         ax_time.set_xlabel("Recording Time (s)")
 
-        spec_min = np.floor((min(spectrum[1:]) / 5)) * 5
-        spec_max = np.ceil(max(spectrum) / 5) * 5
+        spec_min = np.floor((min(spectrum[1:]) / 10)) * 10
+        spec_max = np.ceil(max(spectrum) / 10) * 10
         # set y limits with padding
         ax_spec.set_ylim(
-            spec_min - SPECTRAL_PLOT_PADDING,
-            spec_max + SPECTRAL_PLOT_PADDING
+            spec_min,  # - SPECTRAL_PLOT_PADDING,
+            spec_max  # + SPECTRAL_PLOT_PADDING
         )
         line_spec.set_ydata(spectrum)
 

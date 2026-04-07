@@ -197,6 +197,7 @@ class ContDpoaeResult:
             markersize=4,
             label='f2'
         )
+        axes.set_title(f'DP: {dp_level:.2f} dB SPL; NOISE: {noise_level:.2f} dB SPL')
 
 
 class ContDpoaeProcessor(ContDpoaeResult):

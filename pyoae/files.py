@@ -136,6 +136,7 @@ def load_csv_output_calib(
 
     return msrmt_params
 
+
 def load_output_calib_protocol(file_path: str
 ) -> (
     protocols.CalibMsrmtParams

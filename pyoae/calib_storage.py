@@ -18,8 +18,8 @@ from scipy import interpolate
 from pyoae import get_logger
 from pyoae.device.device_config import DeviceConfig
 
-
 TFloat = TypeVar('TFloat', bound=np.floating)
+
 
 def interpolate_tf(
     interp_freqs: npt.NDArray[TFloat],
@@ -378,10 +378,14 @@ class OutputCalibration(BaseTransferFunction):
 
         if f < np.min(self.raw_freqs) or f > np.max(self.raw_freqs):
             self.logger.warning(
-                "Stimulus frequency %.2f Hz outside calibrated boundaries.", f
+                'Stimulus frequency %.2f Hz outside calibrated boundaries.',
+                f
             )
 
-        amp = self.get_interp_transfer_function(ch, np.asarray([f], np.float32))
+        amp = self.get_interp_transfer_function(
+            ch,
+            np.asarray([f], np.float32)
+        )
         return float(np.abs(amp[0]))
 
     def pressure_to_full_scale(self, ch: int, p: float, f: float) -> float:

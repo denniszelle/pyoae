@@ -429,11 +429,35 @@ class ContDpoaeStimulus(DpoaeStimulus):
         # Generate output signals
         samples = np.arange(num_block_samples, dtype=np.float32)
         t = samples / DeviceConfig.sample_rate
+
+        # Correct phase if enabled in device config
+        if (
+            DeviceConfig.enable_output_phase_calib
+            and output_calibration is not None
+        ):
+            phase_shift1 = - np.angle(
+                output_calibration.get_interp_transfer_function(
+                    output_channels[0],
+                    np.asarray([self.f1]),
+                    num_block_samples
+                )
+            )[0]
+            phase_shift2 = - np.angle(
+                output_calibration.get_interp_transfer_function(
+                    output_channels[1],
+                    np.asarray([self.f2]),
+                    num_block_samples
+                )
+            )[0]
+        else:
+            phase_shift1 = 0.0
+            phase_shift2 = 0.0
+
         stimulus1 = (
-            amplitude1 * np.sin(2 * np.pi * self.f1 * t).astype(np.float32)
+            amplitude1 * np.sin(2 * np.pi * self.f1 * t + phase_shift1).astype(np.float32)
         )
         stimulus2 = (
-            amplitude2 * np.sin(2 * np.pi * self.f2 * t).astype(np.float32)
+            amplitude2 * np.sin(2 * np.pi * self.f2 * t + phase_shift2).astype(np.float32)
         )
         return (stimulus1, stimulus2)
 

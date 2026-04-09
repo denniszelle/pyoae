@@ -133,7 +133,17 @@ class ProcessPlotter:
         return self.is_running
 
     def run(self, shared_memories: list[SharedMemory]) -> None:
-        """Runs the plot process."""
+        """Run the live plot process for shared-memory signals.
+
+        This method sets up a matplotlib figure with one subplot per
+        shared memory buffer. It continuously reads data from each
+        shared memory segment, updates the corresponding plot line,
+        and handles interactive display until the figure window is closed.
+
+        Args:
+            shared_memories (list[SharedMemory]): List of shared memory
+                objects containing signal buffers to plot in real time.
+        """
 
         self.fig, _axes = plt.subplots(len(shared_memories), 1, figsize=(10, 6))
 

@@ -320,7 +320,13 @@ class OutputCalibration(BaseTransferFunction):
     """Interpolated loudspeaker/output transfer function."""
 
     output_channels: list[int]
-    """Output channels for which calibration data exists."""
+    """Output Channels the output calibration was performed on"""
+
+    input_channels: list[int]
+    """Input Channels the output calibration was performed on"""
+
+    date: str
+    """Time stamp of output calibration."""
 
     def __init__(
         self,
@@ -329,10 +335,14 @@ class OutputCalibration(BaseTransferFunction):
     ) -> None:
         super().__init__(log)
 
+        self.date = calib_data['date']
+
         self.raw_freqs = np.array(calib_data['frequencies'], np.float32)
         self.raw_amps = np.array(calib_data['max_out'], np.float32)
         self.raw_phases = np.array(calib_data['phase'], np.float32)
+
         self.output_channels = calib_data['output_channels']
+        self.input_channels = calib_data['input_channels']
 
     def get_interp_transfer_function(
         self,

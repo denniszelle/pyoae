@@ -228,7 +228,21 @@ def get_mt_results(
 
 
 def get_log_frequency_ticks(f_min, f_max, bases=(1, 3, 5)):
-    """Return frequency ticks for x-axis plotting with log x-scale."""
+    """Generate frequency tick positions for a logarithmic x-axis.
+
+    Creates a set of tick positions suitable for plotting frequencies
+    on a logarithmic scale, optionally including additional bases within
+    each decade.
+
+    Args:
+        f_min (float): Minimum frequency for the axis (Hz).
+        f_max (float): Maximum frequency for the axis (Hz).
+        bases (tuple of int, optional): Multipliers within each decade to
+            include as ticks. Defaults to (1, 3, 5).
+
+    Returns:
+        np.ndarray: Array of frequency tick positions within the range [f_min, f_max].
+    """
     decade_min = int(np.floor(np.log10(f_min)))
     decade_max = int(np.ceil(np.log10(f_max)))
 
@@ -557,8 +571,10 @@ class OutputCalibRecorder:
     """Class to manage a DPOAE recording."""
 
     mt_definition: mt_generator.MultiToneDefinition
+    """Definition of multitone signals"""
 
     mt_results: list[mt_generator.MultiToneResult]
+    """Results of multitone measurements"""
 
     signals: list[PeriodicSignal]
     """List of output signals for each channel."""
@@ -750,9 +766,21 @@ class OutputCalibRecorder:
         num_block_samples: int,
         hw_data: HardwareData
     ) -> bool:
-        """Generates the output signals for playback.
+        """Generate multi-tone output signals for playback.
 
-        Returns True when finished successfully"""
+        Args:
+            msrmt_params (CalibMsrmtParams | CalibMsrmtDef):
+                Measurement parameters defining frequencies, phases, amplitudes,
+                and clustering information for multi-tone calibration.
+            num_block_samples (int): Number of samples per block for each output
+                channel.
+            hw_data (HardwareData): Hardware information including active output
+                channels.
+
+        Returns:
+            bool: True if signal generation succeeded, False if an error occurred
+                (e.g., invalid protocol type).
+        """
         mt_samples = int(
             np.round(num_block_samples / len(hw_data.output_channels))
         )

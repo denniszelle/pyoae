@@ -45,7 +45,6 @@ from pyoae.sync import (
     SyncMsrmt,
 )
 
-
 logger = get_logger()
 
 
@@ -116,7 +115,7 @@ class DpoaeRecorder:
         block_duration = 0
         recording_duration = 0.0
 
-        if len(output_channels) < 2*len(msrmt_params):
+        if len(output_channels) < 2 * len(msrmt_params):
             self.logger.error(
                 'Invalid number of output channels %s '
                 'for number of measurements %s.',
@@ -126,12 +125,13 @@ class DpoaeRecorder:
             self.msrmt = None
             return
 
-
         # Setup hardware data
-        active_in_channels = list({
-            b for a, b in DeviceConfig.output_input_mapping
-            if a in output_channels
-        })
+        active_in_channels = list(
+            {
+                b for a, b in DeviceConfig.output_input_mapping
+                if a in output_channels
+            }
+        )
 
         n_in_channels = max(
             *active_in_channels,
@@ -149,7 +149,8 @@ class DpoaeRecorder:
 
         # Initialize signals
         self.signals = [
-            PeriodicRampSignal() for _ in range(hw_data.get_stream_output_channels())
+            PeriodicRampSignal()
+            for _ in range(hw_data.get_stream_output_channels())
         ]
 
         for i, msrmt_params_i in enumerate(msrmt_params):
@@ -234,12 +235,7 @@ class DpoaeRecorder:
             num_block_samples,
             DeviceConfig.device_buffer_size
         )
-        self.msrmt = SyncMsrmt(
-            rec_data,
-            hw_data,
-            self.signals,
-            block_duration
-        )
+        self.msrmt = SyncMsrmt(rec_data, hw_data, self.signals, block_duration)
 
     def record(self) -> None:
         """Starts the recording."""
@@ -304,10 +300,7 @@ class DpoaeRecorder:
         if self.msrmt is None:
             return
 
-        save_path = os.path.join(
-            os.getcwd(),
-            'measurements'
-        )
+        save_path = os.path.join(os.getcwd(), 'measurements')
         os.makedirs(save_path, exist_ok=True)
         cur_time = datetime.now()
         time_stamp = cur_time.strftime('%y%m%d-%H%M%S')
@@ -337,23 +330,23 @@ class DpoaeRecorder:
                 averaged = processor.raw_averaged
                 spectrum = processor.dpoae_spectrum
             else:
-                averaged = np.array(0,np.float64)
-                spectrum = np.array(0,np.float64)
+                averaged = np.array(0, np.float64)
+                spectrum = np.array(0, np.float64)
             np.savez(
                 file_save_path,
-                average = averaged,
-                spectrum = spectrum,
-                recorded_signal = recorded_signal,
-                samplerate = DeviceConfig.sample_rate,
-                f1 = msrmt_info_i.stimulus.f1,
-                f2 = msrmt_info_i.stimulus.f2,
-                level1 = msrmt_info_i.stimulus.level1,
-                level2 = msrmt_info_i.stimulus.level2,
-                num_block_samples = msrmt_info_i.msrmt_ctx.block_size,
-                recorded_sync = self.msrmt.live_msrmt_data.sync_recorded,
-                out_ch = output_channels_i,
-                in_ch = input_channel,
-                msrmt_idx = i
+                average=averaged,
+                spectrum=spectrum,
+                recorded_signal=recorded_signal,
+                samplerate=DeviceConfig.sample_rate,
+                f1=msrmt_info_i.stimulus.f1,
+                f2=msrmt_info_i.stimulus.f2,
+                level1=msrmt_info_i.stimulus.level1,
+                level2=msrmt_info_i.stimulus.level2,
+                num_block_samples=msrmt_info_i.msrmt_ctx.block_size,
+                recorded_sync=self.msrmt.live_msrmt_data.sync_recorded,
+                out_ch=output_channels_i,
+                in_ch=input_channel,
+                msrmt_idx=i
             )
             self.logger.info('Saved measurement to %s.npz', file_save_path)
 
@@ -367,11 +360,29 @@ class DpoaeRecorder:
         output_channels: list[int],
         out_calib: OutputCalibration | None = None,
     ) -> None:
-        """Generates the output signals for playback."""
-        stimulus.calculate_frequencies(
-            msrmt_params,
-            block_duration
-        )
+        """Generate the output signals for playback with ramps applied.
+
+        Args:
+            stimulus: Continuous DPOAE stimulus object that provides methods to
+                calculate frequencies and generate signals.
+            msrmt_params: Measurement parameters for the DPOAE protocol,
+                including levels and frequency ratios.
+            block_duration: Duration (in seconds) of a single stimulus block
+            num_block_samples: Number of samples per stimulus block
+            num_total_recording_samples: Total number of samples for the entire
+                recording session.
+            output_channels: List of 2 output channel indices to which the
+                generated signals will be assigned.
+            out_calib: Optional output calibration object that will be applied
+                to scale the stimuli according to calibrated transfer
+                functions.
+
+        Returns:
+            None. The generated signals are stored in `self.signals` indexed by
+            `output_channels`.
+
+        """
+        stimulus.calculate_frequencies(msrmt_params, block_duration)
         stimulus.level1 = generator.calculate_pt1_level(msrmt_params)
         stimulus.level2 = msrmt_params['level2']
         stimulus1, stimulus2 = stimulus.generate_stimuli(
@@ -384,16 +395,22 @@ class DpoaeRecorder:
         ramp_len = int(
             DeviceConfig.ramp_duration * 1E-3 * DeviceConfig.sample_rate
         )
-        ramp = 0.5*(1 - np.cos(2*np.pi*np.arange(ramp_len)/(2*ramp_len)))
+        ramp = 0.5 * (
+            1 - np.cos(2 * np.pi * np.arange(ramp_len) / (2 * ramp_len))
+        )
         ramp = ramp.astype(np.float32)
 
-        self.signals[output_channels[0]] = PeriodicRampSignal(
+        self.signals[
+            output_channels[0]
+        ] = PeriodicRampSignal(
             stimulus1,
             num_total_recording_samples,
             ramp
         )
 
-        self.signals[output_channels[1]] = PeriodicRampSignal(
+        self.signals[
+            output_channels[1]
+        ] = PeriodicRampSignal(
             stimulus2,
             num_total_recording_samples,
             ramp

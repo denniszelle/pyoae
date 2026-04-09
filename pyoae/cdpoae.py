@@ -214,19 +214,13 @@ class DpoaeRecorder:
             )
 
         # Check for unequal sample sizes:
-        if not (
-            all(
-            (
-                obj.num_total_recording_samples
-                == self.msrmt_info[0].num_total_recording_samples
-            ) for obj in self.msrmt_info
-            )
-            and all((
-                obj.num_block_samples
-                == self.msrmt_info[0].num_block_samples
-            ) for obj in self.msrmt_info
-            )
-        ):
+        if not (all(
+            (obj.num_total_recording_samples ==
+             self.msrmt_info[0].num_total_recording_samples)
+                for obj in self.msrmt_info
+        ) and all(
+            (obj.num_block_samples == self.msrmt_info[0].num_block_samples)
+                for obj in self.msrmt_info)):
             self.logger.error(
                 'Recording duration does not match. Skipping measurement.'
             )

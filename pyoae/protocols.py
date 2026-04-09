@@ -37,26 +37,50 @@ class MsrmtParams(TypedDict):
 
 class DpoaeMsrmtParams(MsrmtParams):
     """Measurement parameters for a single DPOAE measurement."""
+
     f2: float
+    """Frequency of the second stimulus"""
+
     level2: float
+    """Level of the second stimulus"""
+
     f1: float | None
+    """Frequency of the first stimulus"""
+
     level1: float | None
+    """Level of the first stimulus"""
+
     f2f1_ratio: float | None
+    """Frequency ratio f2 / f1"""
 
 
 class PulseStimulus(TypedDict):
     """Time markers defining a pulsed stimulus."""
+
     t_rise: float
+    """Rise duration of ramp"""
+
     t_fall: float
+    """Fall duration of ramp"""
+
     t_on: float
+    """Start time of the pulse"""
+
     duration: float
+    """Duration of the pulse"""
+
     is_short_pulse: bool
+    """Flag whether to scale pulse as short pulse"""
 
 
 class PulseDpoaeMsrmtParams(DpoaeMsrmtParams):
     """Measurement parameters for a single pulse DPOAE measurement."""
+
     f1_pulse: PulseStimulus
+    """First stimulus pulse parameters"""
+
     f2_pulse: PulseStimulus
+    """Second stimulus pulse parameters"""
 
 
 class CalibMsrmtParams(MsrmtParams):

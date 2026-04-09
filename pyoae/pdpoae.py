@@ -372,7 +372,25 @@ class PulseDpoaeRecorder:
         output_channels: list[int],
         out_calib: OutputCalibration | None = None
     ) -> None:
-        """Generates the output signals for playback."""
+        """Generate output signals for pulsed DPOAE playback.
+
+        Args:
+            stimulus (PulseDpoaeStimulus): The pulsed DPOAE stimulus object
+                containing parameters and methods for generating the tones.
+            msrmt_params (PulseDpoaeMsrmtParams): Measurement parameters
+                specifying tone levels, f1/f2 frequencies, and pulse shapes.
+            block_duration (float): Duration of one stimulus block in seconds.
+            num_block_samples (int): Number of samples per stimulus block.
+            num_total_recording_samples (int): Total number of samples
+                in the full recording.
+            output_channels (list[int]): List of two output channels to
+                assign the f1 and f2 signals.
+            out_calib (OutputCalibration | None, optional): Optional output
+                calibration object to correct signal amplitude. Defaults to None.
+
+        Returns:
+            None
+        """
         stimulus.calculate_frequencies(msrmt_params)
         stimulus.level1 = generator.calculate_pt1_level(msrmt_params)
         stimulus.level2 = msrmt_params["level2"]

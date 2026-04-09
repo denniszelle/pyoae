@@ -15,7 +15,6 @@ from pyoae.device.device_config import DeviceConfig
 from pyoae.dsp import math
 from pyoae.protocols import DpoaeMsrmtParams, PulseDpoaeMsrmtParams, PulseStimulus
 
-
 SYNC_CROSS: Final[int] = 10
 """Number of minimum zero crossings in sync signal."""
 
@@ -42,7 +41,6 @@ For default number of 4 segments, f2 short pulses have
 a 180° phase shift.
 """
 
-
 logger = get_logger()
 
 
@@ -52,7 +50,7 @@ def short_pulse_half_width(f2: float) -> float:
     Returns:
         half-width in ms.
     """
-    return max(13071.3/f2, 13071.3/4000)
+    return max(13071.3 / f2, 13071.3 / 4000)
 
 
 def create_pulse_mask(
@@ -60,11 +58,29 @@ def create_pulse_mask(
     pulse: PulseStimulus,
     t_hw_sp: float
 ) -> PulseStimulus:
-    """Creates the mask for a pulsed primary tone."""
+    """Create a mask for a pulsed primary tone.
+
+    Args:
+        block_duration: Duration of the measurement block in seconds.
+        pulse: Dictionary of type PulseStimulus describing the pulse stimulus:
+            - 't_on': Onset time in milliseconds.
+            - 't_rise': Ramp rise time in milliseconds.
+            - 't_fall': Ramp fall time in milliseconds.
+            - 'duration': Total pulse duration in milliseconds.
+            - 'is_short_pulse': Whether the pulse is automatically scaled as
+                a short pulse.
+        t_hw_sp: Half width of the short pulse
+
+    Returns:
+        PulseStimulus: Dictionary containing scaled pulse parameters.
+    """
+
     t_on = pulse['t_on'] * 1E-3
     if pulse['is_short_pulse']:
         # scale duration and ramps as short pulse
-        pulse_hw = pulse['duration'] - 0.5 * (pulse['t_fall'] + pulse['t_rise'])
+        pulse_hw = (
+            pulse['duration'] - 0.5 * (pulse['t_fall'] + pulse['t_rise'])
+        )
         pulse_scale = t_hw_sp / pulse_hw
         t_rise = pulse['t_rise'] * 1E-3 * pulse_scale
         t_fall = pulse['t_fall'] * 1E-3 * pulse_scale
@@ -75,7 +91,7 @@ def create_pulse_mask(
         duration = pulse['duration'] * 1E-3
 
     # perform some basic sanity checks
-    duration = min(block_duration-t_on, duration)
+    duration = min(block_duration - t_on, duration)
     if t_rise + t_fall > duration:
         t_rise = 0.5 * duration
         t_fall = 0.5 * duration
@@ -90,26 +106,44 @@ def create_pulse_mask(
 
 
 def create_pulse_pattern(
-        pulse: PulseStimulus,
-        f: float,
-        phi: float
-    ) -> npt.NDArray[np.float32]:
-    """Creates a pulse pattern with unity amplitude."""
+    pulse: PulseStimulus,
+    f: float,
+    phi: float
+) -> npt.NDArray[np.float32]:
+    """Generate a pulsed sinusoidal waveform with unity amplitude.
+
+    Args:
+        pulse: Dictionary of type PulseStimulus:
+            - 't_rise': Rise time in seconds.
+            - 't_fall': Fall time in seconds.
+            - 'duration': Total pulse duration in seconds.
+            - 't_on': Onset time (not used in this function but part of the struct).
+        f: Frequency of the sinusoid in Hz.
+        phi: Phase offset of the sinusoid in radians.
+
+    Returns:
+        np.ndarray[np.float32]: Array of float32 samples representing
+        the pulsed waveform with applied rise/fall ramps.
+    """
     num_samples = int(pulse['duration'] * DeviceConfig.sample_rate)
     t = np.arange(num_samples, dtype=np.float32) / DeviceConfig.sample_rate
     win = np.ones(num_samples, dtype=np.float32)
 
     num_r_samples = int(pulse['t_rise'] * DeviceConfig.sample_rate)
-    rising_ramp = 0.5*(1 - np.cos(2*np.pi*np.arange(num_r_samples)/(2*num_r_samples)))
+    rising_ramp = 0.5 * (
+        1 - np.cos(2 * np.pi * np.arange(num_r_samples) / (2 * num_r_samples))
+    )
     rising_ramp = rising_ramp.astype(np.float32)
 
     num_f_samples = int(pulse['t_fall'] * DeviceConfig.sample_rate)
-    falling_ramp = 0.5*(1 + np.cos(2*np.pi*np.arange(num_f_samples)/(2*num_f_samples)))
+    falling_ramp = 0.5 * (
+        1 + np.cos(2 * np.pi * np.arange(num_f_samples) / (2 * num_f_samples))
+    )
     falling_ramp = falling_ramp.astype(np.float32)
 
     win[:num_r_samples] = rising_ramp
     win[-num_f_samples:] = falling_ramp
-    y = np.sin(2*np.pi*f*t + phi).astype(np.float32)
+    y = np.sin(2 * np.pi * f * t + phi).astype(np.float32)
     return y * win
 
 
@@ -123,7 +157,28 @@ def create_ptpv_signals(
     output_channel: int | None = None,
     phase_offset: float = 0.0
 ) -> list[npt.NDArray[np.float32]]:
-    """Creates a list with PTPV signals."""
+    """Generate a list of PTPV signals.
+
+    Args:
+        pulse_mask: Dictionary defining the pulse parameters, including
+            't_on', 't_rise', 't_fall', and 'duration'.
+        frequency: Frequency of the pulse sinusoid in Hz.
+        phase_shift: Phase shift in radians applied incrementally per segment.
+        num_block_samples: Total number of samples in one block of the signal.
+        num_segments: Number of segments/signals to generate (default: NUM_PTPV_SEGMENTS).
+        output_calibration: Optional OutputCalibration object for phase/amplitude
+            correction (default: None).
+        output_channel: Output channel index to use for calibration (required if
+            output_calibration is provided).
+        phase_offset: Optional phase offset in radians applied to all segments
+            (default: 0.0).
+
+    Returns:
+        List[np.ndarray[np.float32]]: A list of normalized PTPV signals of length
+        `num_block_samples` with applied ramps, phases, and optional calibration.
+
+    """
+
     # Generate output signals
     stimuli: list[npt.NDArray[np.float32]] = []
 
@@ -141,7 +196,7 @@ def create_ptpv_signals(
 
         # move to appropriate position in signal template
         signal_template = np.zeros(num_block_samples, dtype=np.float32)
-        signal_template[idx_on:idx_on+num_pulse_samples] = pulse_pattern
+        signal_template[idx_on:idx_on + num_pulse_samples] = pulse_pattern
 
         if (
             DeviceConfig.enable_output_phase_calib
@@ -150,17 +205,21 @@ def create_ptpv_signals(
         ):
             # logger.info('Applying output calibration to pulsed signal.')
             signal_spec = np.fft.rfft(signal_template)
-            freqs = np.fft.rfftfreq(len(signal_template), 1/DeviceConfig.sample_rate)
+            freqs = np.fft.rfftfreq(
+                len(signal_template),
+                1 / DeviceConfig.sample_rate
+            )
             corr_spec = output_calibration.get_interp_transfer_function(
                 output_channel,
                 freqs,
                 num_block_samples
             )
-            signal_template = np.real(np.fft.irfft(signal_spec/corr_spec)).astype(np.float32)
+            signal_template = np.real(
+                np.fft.irfft(signal_spec/corr_spec)
+            ).astype(np.float32)
             maximum = max(maximum, max(signal_template))
         else:
             maximum = 1.0
-
 
         stimuli.append(signal_template)
 
@@ -168,29 +227,40 @@ def create_ptpv_signals(
     for i, _ in enumerate(stimuli):
         if maximum < 0:
             raise ValueError('No positive signals.')
-        stimuli[i] = stimuli[i]/maximum
+        stimuli[i] = stimuli[i] / maximum
 
     return stimuli
+
 
 def compute_pulse_amplitude(
     signals: list[npt.NDArray[np.float32]],
     pulse_mask: PulseStimulus,
     output_calibration: OutputCalibration,
     output_channel: int
-):
-    """Compute pulse level in dB SPL for given pulse shape"""
+) -> float:
+    """Compute the pulse energy in muPa RMS.
+
+    Args:
+        signals: List of pulsed signals as NumPy arrays.
+        pulse_mask: Dictionary of type PulseStimulus
+        output_calibration: OutputCalibration object for amplitude correction.
+        output_channel: Output channel index corresponding to the calibration.
+
+    Returns:
+        float: Average pulse amplitude across all signals, scaled to account
+        for RMS-to-peak conversion.
+    """
 
     bounds_ss = (
         int(
-            (pulse_mask['t_on']+ pulse_mask['t_rise']
-            )*DeviceConfig.sample_rate
+            (pulse_mask['t_on'] + pulse_mask['t_rise']) *
+            DeviceConfig.sample_rate
         ),
         int(
             (
-                pulse_mask['t_on']
-                + pulse_mask['duration']
-                - pulse_mask['t_fall']
-            )*DeviceConfig.sample_rate
+                pulse_mask['t_on'] + pulse_mask['duration'] -
+                pulse_mask['t_fall']
+            ) * DeviceConfig.sample_rate
         ),
     )
     signal_amplitudes = []
@@ -202,17 +272,15 @@ def compute_pulse_amplitude(
             DeviceConfig.sample_rate
         )
         # For extremely short steady states, use maximum
-        if bounds_ss[1]-bounds_ss[0] < 50:
-            signal_amplitudes.append(
-                np.max(speaker_sig_i)/np.sqrt(2)
-            )
+        if bounds_ss[1] - bounds_ss[0] < 50:
+            signal_amplitudes.append(np.max(speaker_sig_i) / np.sqrt(2))
         # Add RMS of steady state to signal amplitudes
         else:
             signal_amplitudes.append(
                 math.rms(speaker_sig_i[bounds_ss[0]:bounds_ss[1]])
             )
 
-    return np.mean(signal_amplitudes)*np.sqrt(2)
+    return np.mean(signal_amplitudes) * np.sqrt(2)
 
 
 def compute_speaker_signal(
@@ -220,16 +288,31 @@ def compute_speaker_signal(
     output_calibration: OutputCalibration,
     output_channel: int,
     sample_rate: float
-):
-    """Compute the speaker signal for a given raw signal."""
+) -> npt.NDArray[np.float32]:
+    """Apply output calibration to a raw signal to compute the speaker output.
+
+    This function transforms a time-domain signal into the frequency domain,
+    applies the calibrated transfer function for the specified output channel,
+    and converts the result back to the time domain.
+
+    Args:
+        raw_signal: Time-domain input signal as a NumPy array of float32.
+        output_calibration: OutputCalibration object containing
+            channel-specific frequency response.
+        output_channel: Index of the output channel to apply calibration.
+        sample_rate: Sampling rate of the signal in Hz.
+
+    Returns:
+        npt.NDArray[np.float32]: Calibrated speaker signal in the time domain.
+    """
     raw_spec = np.fft.rfft(raw_signal)
-    freqs = np.fft.rfftfreq(len(raw_signal), 1/sample_rate)
+    freqs = np.fft.rfftfreq(len(raw_signal), 1 / sample_rate)
     calib_spec = output_calibration.get_interp_transfer_function(
         output_channel,
         freqs
     )
-    speaker_spec = raw_spec*calib_spec
-    return np.real(np.fft.irfft(speaker_spec))
+    speaker_spec = raw_spec * calib_spec
+    return np.real(np.fft.irfft(speaker_spec)).astype(np.float32)
 
 
 @dataclass
@@ -257,7 +340,20 @@ class ContDpoaeStimulus(DpoaeStimulus):
         msrmt_params: DpoaeMsrmtParams,
         block_duration: float
     ) -> None:
-        """Calculate primary-tone frequencies f1 and f2 for cDPOAE acquisition."""
+        """Compute primary-tone frequencies f1 and f2 for cDPOAE measurements.
+
+        This method calculates the primary frequencies for a continuous DPOAE
+        acquisition. If f1 is not provided, it will be computed from f2 and the
+        f2/f1 ratio. All frequencies are corrected to align with the block duration.
+
+        Args:
+            msrmt_params: Measurement parameters dictionary of type `DpoaeMsrmtParams`:
+            block_duration: Duration of the acquisition block in seconds, used for
+                frequency correction.
+
+        Returns:
+            None: The method sets `self.f1` and `self.f2` attributes of the object.
+        """
         self.f2 = correct_frequency(msrmt_params['f2'], block_duration)
         if msrmt_params['f1'] is None:
             if msrmt_params['f2f1_ratio'] is None:
@@ -266,14 +362,14 @@ class ContDpoaeStimulus(DpoaeStimulus):
                 )
                 self.f1 = 0.0  # invalid stimulus parameters
             else:
-                self.f1 = self.f2/msrmt_params['f2f1_ratio']
+                self.f1 = self.f2 / msrmt_params['f2f1_ratio']
                 self.f1 = correct_frequency(self.f1, block_duration)
         else:
             self.f1 = correct_frequency(msrmt_params['f1'], block_duration)
 
         logger.info('Setting primary-tone frequencies:')
         logger.info('  f1: %.2f Hz | f2: %.2f Hz', self.f1, self.f2)
-        logger.info('  f2/f1 = %.3f', self.f2/self.f1)
+        logger.info('  f2/f1 = %.3f', self.f2 / self.f1)
 
     def generate_stimuli(
         self,
@@ -281,7 +377,26 @@ class ContDpoaeStimulus(DpoaeStimulus):
         output_channels: list[int],
         output_calibration: OutputCalibration | None = None
     ) -> tuple[npt.NDArray[np.float32], npt.NDArray[np.float32]]:
-        """Generates primary tones for continuous DPOAE acquisition."""
+        """Generate primary-tone signals for continuous DPOAE acquisition.
+
+        This method creates two sinusoidal signals corresponding to the primary
+        frequencies `f1` and `f2` of the DPOAE stimulus. Output amplitudes are
+        either scaled to full-scale units or adjusted according to the provided
+        speaker calibration.
+
+        Args:
+            num_block_samples: Number of time-domain samples in the output signals.
+            output_channels: List of two integers specifying the output
+                channels.
+            output_calibration: Optional `OutputCalibration` object to convert
+                target acoustic pressures to full-scale digital amplitudes. If None,
+                amplitudes are computed in full-scale units without calibration.
+
+        Returns:
+            Tuple of two `numpy.ndarray` objects:
+                - `stimulus1`: Signal corresponding to primary frequency f1.
+                - `stimulus2`: Signal corresponding to primary frequency f2.
+        """
 
         if output_calibration is None:
             # No calibration for output channels available.
@@ -314,8 +429,12 @@ class ContDpoaeStimulus(DpoaeStimulus):
         # Generate output signals
         samples = np.arange(num_block_samples, dtype=np.float32)
         t = samples / DeviceConfig.sample_rate
-        stimulus1 = amplitude1 * np.sin(2*np.pi*self.f1*t).astype(np.float32)
-        stimulus2 = amplitude2 * np.sin(2*np.pi*self.f2*t).astype(np.float32)
+        stimulus1 = (
+            amplitude1 * np.sin(2 * np.pi * self.f1 * t).astype(np.float32)
+        )
+        stimulus2 = (
+            amplitude2 * np.sin(2 * np.pi * self.f2 * t).astype(np.float32)
+        )
         return (stimulus1, stimulus2)
 
 
@@ -323,8 +442,10 @@ class PulseDpoaeStimulus(DpoaeStimulus):
     """Container for continuous DPOAE primary tones."""
 
     f1_pulse_mask: PulseStimulus | None = None
+    """Pulse mask of first primary tone stimulus"""
 
     f2_pulse_mask: PulseStimulus | None = None
+    """Pulse mask of second primary tone stimulus"""
 
     logger: Logger
 
@@ -332,7 +453,19 @@ class PulseDpoaeStimulus(DpoaeStimulus):
         self,
         msrmt_params: PulseDpoaeMsrmtParams
     ) -> None:
-        """Calculate primary-tone frequencies for pulsed DPOAE acquisition."""
+        """Calculate primary-tone frequencies for a pulsed DPOAE stimulus.
+
+        Determines the primary frequencies `f1` and `f2` for pulsed DPOAE
+        acquisition based on the measurement parameters. If `f1` is not
+        specified, it is calculated from `f2` and the `f2/f1` ratio.
+
+        Args:
+            msrmt_params: Dictionary of type PulseDpoaeMsrmtParams
+
+        Returns:
+            None: Sets `self.f1` and `self.f2` attributes to the calculated
+                frequencies.
+        """
         self.logger = get_logger()
         self.f2 = msrmt_params['f2']
         if msrmt_params['f1'] is None:
@@ -342,20 +475,30 @@ class PulseDpoaeStimulus(DpoaeStimulus):
                 )
                 self.f1 = 0.0  # invalid stimulus parameters
             else:
-                self.f1 = self.f2/msrmt_params['f2f1_ratio']
+                self.f1 = self.f2 / msrmt_params['f2f1_ratio']
         else:
             self.f1 = msrmt_params['f1']
 
         self.logger.info('Setting primary-tone frequencies:')
         self.logger.info('  f1: %.2f Hz | f2: %.2f Hz', self.f1, self.f2)
-        self.logger.info('  f2/f1 = %.3f', self.f2/self.f1)
+        self.logger.info('  f2/f1 = %.3f', self.f2 / self.f1)
 
     def create_stimulus_mask(
         self,
         block_duration: float,
         msrmt_params: PulseDpoaeMsrmtParams
     ) -> None:
-        """Creates the stimulus masks for both primary-tone pulses."""
+        """Create stimulus masks for pulsed primary-tone pulse DPOAE signals.
+
+        Args:
+            block_duration: Duration of the measurement block in seconds.
+            msrmt_params: Dictionary of type PulseDpoaeMsrmtParams
+
+        Returns:
+            None: Sets `self.f1_pulse_mask` and `self.f2_pulse_mask` attributes to the
+            computed pulse masks.
+
+        """
         t_hw_sp = short_pulse_half_width(msrmt_params['f2'])
         # create f1 pulse markers in seconds
         f1_pulse = msrmt_params['f1_pulse']
@@ -379,7 +522,19 @@ class PulseDpoaeStimulus(DpoaeStimulus):
         output_channels: list[int],
         output_calibration: OutputCalibration | None = None,
     ) -> tuple[npt.NDArray[np.float32], npt.NDArray[np.float32]]:
-        """Generates primary tones for continuous DPOAE acquisition."""
+        """Generate primary-tone signals for pulsed DPOAE acquisition.
+
+        Args:
+            num_block_samples: Number of samples in the measurement block.
+            output_channels: List of two output channel indices corresponding
+                to f1 and f2.
+            output_calibration: Optional speaker calibration object. If provided,
+                pulse amplitudes are adjusted to achieve target sound pressure levels.
+
+        Returns:
+            A tuple of NumPy arrays `(stimulus1, stimulus2)` representing the
+            generated output signals for f1 and f2 channels, respectively.
+        """
 
         if self.f1_pulse_mask is None or self.f2_pulse_mask is None:
             # TODO: Consider raising ValueError
@@ -437,8 +592,8 @@ class PulseDpoaeStimulus(DpoaeStimulus):
                 output_channels[1]
             )
 
-            amplitude1 = check_output_limit(pressure1/max_amplitude1)
-            amplitude2 = check_output_limit(pressure2/max_amplitude2)
+            amplitude1 = check_output_limit(pressure1 / max_amplitude1)
+            amplitude2 = check_output_limit(pressure2 / max_amplitude2)
 
             # # Old version with pure amplitude calibration
             # amplitude1 = output_calibration.pressure_to_full_scale(
@@ -473,14 +628,25 @@ def correct_frequency(frequency: float, block_duration: float) -> float:
         block_duration: Length of acquisition block in seconds.
           A block represents a time segment that is repeatedly
           presented and used for averaging.
+    Returns:
+        Corrected frequency as floating value
     """
-    periods = block_duration*frequency
+    periods = block_duration * frequency
     periods = round(periods)
-    return periods/block_duration
+    return periods / block_duration
 
 
 def calculate_pt1_level(msrmt_params: DpoaeMsrmtParams) -> float:
-    """Calculates the stimulus level of the first primary tone."""
+    """Calculates the stimulus level of the first primary tone.
+
+    Args:
+        msrmt_params: Measurement parameters that include info of levels
+
+    Returns:
+        Level of first stimulus in dB SPL.
+
+    """
+
     if msrmt_params['level1'] is None:
         # as first approximation, use Kummer et al. 1998
         # TODO: add other rules
@@ -500,6 +666,14 @@ def calculate_full_scale_amplitudes(
     Uses levels as dBFS (0 dBFS = digital full scale, i.e. 1).
     Applies equal stimulus level rule (L1 = L2) if L1
     was not specified
+
+    Args:
+        level2: Level of the second stimulus in dB SPL
+        level1: Either level of the first stimulus or None
+
+    Returns:
+        tuple of full scale amplitudes for stimulus 1 and 2
+
     """
     level1 = level1 or level2
 
@@ -530,7 +704,6 @@ def calculate_full_scale_amplitudes(
         )
         logger.warning('Please check protocol and calibration files.')
 
-
     amplitude1 = converter.db_to_lin(level1)
     amplitude2 = converter.db_to_lin(level2)
     amplitude1 = max(0.0, min(amplitude1, 1.0))
@@ -543,10 +716,18 @@ def calculate_full_scale_amplitudes(
 
 
 def calculate_pressure_amplitudes(
-    level2: float,
-    level1: float
-) -> tuple[float, float]:
-    """Calculates peak pressure amplitudes from dB SPL levels."""
+    level2: float, level1: float
+) -> tuple[float,
+                                                          float]:
+    """Calculates peak pressure amplitudes from dB SPL levels.
+
+    Args:
+        level2: Level of the second stimulus in dB SPL
+        level1: Either level of the first stimulus or None
+
+    Returns:
+        tuple of pressure amplitudes for stimulus 1 and 2
+    """
     amplitude1 = converter.db_spl_to_peak_mupa(level1)
     amplitude2 = converter.db_spl_to_peak_mupa(level2)
     logger.info(
@@ -558,7 +739,14 @@ def calculate_pressure_amplitudes(
 
 
 def check_output_limit(peak_amplitude: float) -> float:
-    """Verifies and limits the maximum digital output."""
+    """Verifies and limits the maximum digital output.
+
+    Args:
+        peak_amplitude: Peak amplitude in full-scale
+
+    Returns:
+        Output in full-scale for given peak amplitude
+    """
     if peak_amplitude > DeviceConfig.max_digital_output:
         logger.warning(
             'Output amplitude %.5f exceeds maximum of %.2f re FS.',
@@ -586,7 +774,7 @@ def generate_sync(sample_rate: float) -> npt.NDArray[np.float32]:
     samples_per_sync_period = 4.0 * k
     f_sync = sample_rate / samples_per_sync_period
     p = np.ceil((SYNC_CROSS + 1) / 2)
-    t_off = (p / f_sync) - 1/sample_rate
+    t_off = (p / f_sync) - 1 / sample_rate
     num_samples = int(t_off * sample_rate)
     t = np.arange(num_samples) / sample_rate
     y = np.sin(2 * np.pi * f_sync * t)
@@ -596,9 +784,15 @@ def generate_sync(sample_rate: float) -> npt.NDArray[np.float32]:
 
 
 def get_time_vector(
-    num_samples: int,
-    sample_rate: float
+    num_samples: int, sample_rate: float
 ) -> npt.NDArray[np.float32]:
-    """Computes and returns a time vector in seconds."""
+    """Computes and returns a time vector in seconds.
+
+    Args:
+        num_samples: Number of samples to compute time vector for
+        sample_rate: Sampling rate of signal
+
+    Returns:
+        Time vector as NDArray[np.float32]"""
     time_vec = np.arange(num_samples) / sample_rate
     return time_vec.astype(np.float32)

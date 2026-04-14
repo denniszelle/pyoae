@@ -328,7 +328,7 @@ class PulseDpoaeRecorder:
                 "pdpoae_msrmt",
                 time_stamp,
                 helpers.sanitize_filename_part(self.subject),
-                helpers.sanitize_filename_part(msrmt_info_i.ear),
+                side_id,
                 str(int(msrmt_info_i.stimulus.f2)),
                 str(int(msrmt_info_i.stimulus.level2)),
             ]

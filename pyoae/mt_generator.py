@@ -14,7 +14,20 @@ from pyoae import protocols
 
 
 def ramp_envelope(n_samples: int, ramp_samples: int) -> np.ndarray:
-    """Generate mask to multiply ramps to start and end of a signal."""
+    """Generate a signal envelope with cosine ramps at start and end.
+
+    This function creates an array of length `n_samples` where the first and last
+    `ramp_samples` are shaped with a half-cosine ramp. The central portion remains
+    at unity.
+
+    Args:
+        n_samples: Total number of samples in the signal.
+        ramp_samples: Number of samples used for the rising and falling ramps.
+
+    Returns:
+        A numpy array of shape `(n_samples,)` containing the envelope values ranging
+        from 0 to 1, with smooth ramps at the edges.
+    """
     env = np.ones(n_samples)
 
     if ramp_samples > 0:
@@ -124,9 +137,26 @@ class MultiToneDefinition:
         return frequencies, amplitudes, phases
 
     def generate_mt_signal(
-        self, num_samples: int, sample_rate: float, ramp_duration: float
+        self,
+        num_samples: int,
+        sample_rate: float,
+        ramp_duration: float
     ) -> npt.NDArray[np.float32]:
-        """Create a multi-tone signal used for output calibration."""
+        """Generate a multi-tone signal for output calibration.
+
+        This method synthesizes a multi-tone signal divided into clusters of frequencies.
+        Each cluster is applied sequentially over the total number of samples, with a
+        cosine ramp applied to the start and end of each cluster segment to avoid clicks.
+
+        Args:
+            num_samples: Total number of samples for the generated signal.
+            sample_rate: Sampling rate in Hz.
+            ramp_duration: Duration of the rising and falling ramps in milliseconds.
+
+        Returns:
+            A numpy array of shape `(num_samples,)` containing the multi-tone signal
+            with ramps applied to each cluster.
+        """
 
         time_vec = generator.get_time_vector(num_samples, sample_rate)
         signal = np.zeros_like(time_vec)
@@ -237,9 +267,18 @@ class MultiToneAnalyzer:
         return freqs, spectrum
 
     def compute_result(
-        self, micro_tf: MicroTransferFunction | None
+        self,
+        micro_tf: MicroTransferFunction | None
     ) -> MultiToneResult:
-        """Compute result of the measured signal relative the generated one"""
+        """Compute the measurement result relative to the generated signal.
+
+        Args:
+            micro_tf: Optional microphone transfer function used to correct the
+                measured spectrum. If `None`, the raw measurement is used.
+
+        Returns:
+            MultiToneResult object that contains the calibration results.
+        """
         cluster_indices = sorted(self.mt.get_unique_cluster_indices())
         spectra = []
         segments = []
@@ -299,11 +338,24 @@ def compute_mt_frequencies(
     df: float,
     extra_density: float = 0.0,
 ) -> np.ndarray:
-    """Computes multi-tone frequencies.
+    """Compute multi-tone frequencies for calibration or stimulus signals.
 
-    Computes frequency lines from start to stop frequency adjusted to
-    segment length with the specified lines per octave.
+    Generates a sequence of frequencies from `f_start` to `f_stop` with a
+    logarithmic spacing determined by `lines_per_octave`. The spacing can
+    gradually increase with `extra_density`. Frequencies are adjusted to
+    align with the discrete frequency resolution `df`.
 
+    Args:
+        f_start: Start frequency in Hz.
+        f_stop: Stop frequency in Hz.
+        lines_per_octave: Number of frequency lines per octave.
+        df: Frequency resolution step (Hz) to round the computed frequencies.
+        extra_density: Optional linear increase in density over the frequency
+            range (default is 0.0).
+
+    Returns:
+        np.ndarray: Array of frequencies in Hz, starting at `f_start` and
+        ending at or just above `f_stop`, rounded to the nearest multiple of `df`.
     """
 
     freqs = [f_start]
@@ -328,7 +380,15 @@ def compute_mt_frequencies(
 
 
 def compute_mt_phases(num_frequencies: int) -> npt.NDArray[np.floating]:
-    """Computes approximately equally distributed phases"""
+    """Generate random phases for multi-tone signals.
+
+    Args:
+        num_frequencies: Number of phase values to generate.
+
+    Returns:
+        npt.NDArray[np.floating]: Array of length `num_frequencies` with
+        random phase values in radians, uniformly distributed between 0 and 2π.
+    """
     phi = np.zeros(num_frequencies)
     for i in range(num_frequencies):
         phi[i] = np.random.uniform(0, 2 * np.pi)
@@ -338,7 +398,19 @@ def compute_mt_phases(num_frequencies: int) -> npt.NDArray[np.floating]:
 def generate_mt_def(
     msrmt_params: protocols.CalibMsrmtParams
 ) -> protocols.CalibMsrmtDef:
-    """Generate multitone definition"""
+    """Generate a multi-tone signal definition for calibration measurements.
+
+    Computes the frequencies, phases, amplitudes, and cluster indices
+    for a multi-tone calibration signal based on the given measurement
+    parameters.
+
+    Args:
+        msrmt_params: Dictionary of type CalibMsrmtParams:
+
+    Returns:
+        Dictionary of type CalibMsrmtDef containing the multi-tone definition
+
+    """
     df = 1 / msrmt_params['block_duration'] * msrmt_params['num_clusters']
     mt_frequencies = compute_mt_frequencies(
         msrmt_params['f_start'],

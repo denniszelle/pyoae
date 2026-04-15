@@ -20,7 +20,6 @@ from pyoae.device.device_config import DeviceConfig
 from pyoae.plotting import LivePlotProcess, MsrmtEvents
 from pyoae.signals import Signal
 
-
 SYNC_DURATION: Final[float] = 0.5
 """Duration of the sync signal (with mute) in seconds.
 
@@ -68,7 +67,6 @@ When enabling the early latency detection, a simple
 maximum-based signal detection is performed while
 compensating the expected device latency.
 """
-
 
 SignalT = TypeVar('SignalT', bound=Signal)
 
@@ -130,9 +128,7 @@ class RecordingData:
     """Block size of the measurement device."""
 
 
-def get_input_channels(
-        output_channels: list[int]
-    ):
+def get_input_channels(output_channels: list[int]):
     """Return a list of input channels"""
 
     input_channels = []
@@ -140,9 +136,7 @@ def get_input_channels(
         mapping = DeviceConfig.output_input_mapping
         for mapping_pair in mapping:
             if mapping_pair[0] == output_channel_i:
-                input_channels.append(
-                    mapping_pair[1]
-                )
+                input_channels.append(mapping_pair[1])
     return input_channels
 
 
@@ -163,19 +157,23 @@ class HardwareData:
     """Numeric ID or name of the output device."""
 
     output_channels: list[int]
+    """Output channels used for measurement"""
 
     input_channels: list[int]
+    """Input channels used for measurements"""
 
     max_in_channels: int | None = None
+    """Maximum number of input channels available on hardware"""
 
     max_out_channels: int | None = None
+    """Maximum number of output channels available on hardware"""
 
     def get_stream_input_channels(self) -> int:
         """Return input_channels suitable for sd.Stream."""
 
         if self.max_in_channels is None:
             dev = sd.query_devices(self.input_device)
-            self.max_in_channels = dev['max_input_channels'] # type: ignore
+            self.max_in_channels = dev['max_input_channels']  # type: ignore
 
         if not isinstance(self.max_in_channels, int):
             return -1
@@ -195,7 +193,7 @@ class HardwareData:
 
         if self.max_out_channels is None:
             dev = sd.query_devices(self.output_device)
-            self.max_out_channels = dev['max_output_channels'] # type: ignore
+            self.max_out_channels = dev['max_output_channels']  # type: ignore
 
         if not isinstance(self.max_out_channels, int):
             return -1
@@ -212,15 +210,17 @@ class HardwareData:
 
     def get_unique_input_channels(self) -> list[int]:
         """Return list of unique input channels"""
-        active_in_channels = list({
-            b for a, b in DeviceConfig.output_input_mapping
-            if a in self.output_channels
-        })
+        active_in_channels = list(
+            {
+                b for a, b in DeviceConfig.output_input_mapping
+                if a in self.output_channels
+            }
+        )
         return active_in_channels
 
     def get_output_msrmt_channels(self, msrmt_idx) -> list[int]:
         """Return list of output channels for a given measurement index"""
-        return self.output_channels[2*msrmt_idx:2*msrmt_idx+2]
+        return self.output_channels[2 * msrmt_idx:2 * msrmt_idx + 2]
 
 
 @dataclass
@@ -350,30 +350,27 @@ class SyncMsrmt(Generic[SignalT]):
             num_sync_samples
         )
 
-        sync_output = np.zeros(
-            num_sync_samples,
-            dtype=np.float32
-        )
-        sync_recorded = np.zeros(
-            num_sync_samples,
-            dtype=np.float32
-        )
+        sync_output = np.zeros(num_sync_samples, dtype=np.float32)
+        sync_recorded = np.zeros(num_sync_samples, dtype=np.float32)
         sync_pulse = generator.generate_sync(self.recording_data.fs)
         sync_output[:len(sync_pulse)] = sync_pulse
 
-
         self.shm = []
         recorded_signal = []
-        for i in range(hardware_data.get_stream_input_channels()-1):
+        for i in range(hardware_data.get_stream_input_channels() - 1):
             if i in hardware_data.get_unique_input_channels():
-            # Only setup shared memory for channels that are used.
+                # Only setup shared memory for channels that are used.
                 self.shm.append(
-                        shared_memory.SharedMemory(
+                    shared_memory.SharedMemory(
                         create=True,
-                        size=self.recording_data.msrmt_samples * np.float32().nbytes
+                        size=(
+                            self.recording_data.msrmt_samples
+                            * np.float32().nbytes
+                        )
                     )
                 )
-                recorded_signal.append(np.ndarray(
+                recorded_signal.append(
+                    np.ndarray(
                         (self.recording_data.msrmt_samples,),
                         dtype=np.float32,
                         buffer=self.shm[-1].buf
@@ -410,7 +407,7 @@ class SyncMsrmt(Generic[SignalT]):
         sync_max_pos = np.argmax(np.abs(self.live_msrmt_data.sync_recorded))
         sync_max = np.abs(self.live_msrmt_data.sync_recorded[sync_max_pos])
 
-        k = max(500, sync_max_pos-100)
+        k = max(500, sync_max_pos - 100)
 
         noise = np.sqrt(
             np.mean(np.square(self.live_msrmt_data.sync_recorded[:k]))
@@ -422,7 +419,7 @@ class SyncMsrmt(Generic[SignalT]):
             self.logger.warning('Zero-noise detected.')
 
         # Very simple SNR estimator
-        snr_ratio = (sync_max/np.sqrt(2))/noise
+        snr_ratio = (sync_max / np.sqrt(2)) / noise
         if snr_ratio > 0:
             snr = 20 * np.log10(snr_ratio)
         else:
@@ -453,7 +450,7 @@ class SyncMsrmt(Generic[SignalT]):
         )
         num_acq_samples = len(self.live_msrmt_data.sync_output)
         lag = np.argmax(correlation) - num_acq_samples + 1
-        latency_time = (lag/self.recording_data.fs) * 1E3
+        latency_time = (lag / self.recording_data.fs) * 1E3
 
         self.logger.info(
             'Measured latency: %.4f ms (%d samples).',
@@ -490,9 +487,12 @@ class SyncMsrmt(Generic[SignalT]):
             self.logger.error(
                 'Invalid input channel for get_recorded_signal. \n'
                 f'{input_channel} was given but options are only'
-                f'{self.hardware_data.get_unique_input_channels()}')
-            return np.zeros(0,np.float32)
-        idx = self.hardware_data.get_unique_input_channels().index(input_channel)
+                f'{self.hardware_data.get_unique_input_channels()}'
+            )
+            return np.zeros(0, np.float32)
+        idx = self.hardware_data.get_unique_input_channels().index(
+            input_channel
+        )
         if self.state in [MsrmtState.RECORDING, MsrmtState.END_RECORDING]:
             return self.live_msrmt_data.recorded_signal[idx][
                 :self.live_msrmt_data.record_idx
@@ -500,7 +500,7 @@ class SyncMsrmt(Generic[SignalT]):
         if self.state in [MsrmtState.FINISHING, MsrmtState.FINISHED]:
 
             return self.live_msrmt_data.recorded_signal[idx]
-        return np.zeros(0,np.float32)
+        return np.zeros(0, np.float32)
 
     def msrmt_callback(
         self,
@@ -582,7 +582,6 @@ class SyncMsrmt(Generic[SignalT]):
         # Handle the input data of the device buffer and the
         # control parameters of the measurement flow
 
-
         match self.state:
             case MsrmtState.SETUP:
                 # clear buffer of audio device during setup
@@ -609,7 +608,10 @@ class SyncMsrmt(Generic[SignalT]):
                     )
                     rec_end_idx = rec_start_idx + num_remaining_frames
                     self.live_msrmt_data.sync_recorded[rec_start_idx:] = (
-                        input_data[:num_remaining_frames, DeviceConfig.sync_channels[1]]
+                        input_data[
+                            :num_remaining_frames,
+                            DeviceConfig.sync_channels[1]
+                        ]
                     )
                     self.set_state(MsrmtState.COMPUTING)
                 self.live_msrmt_data.record_idx = rec_end_idx
@@ -637,7 +639,9 @@ class SyncMsrmt(Generic[SignalT]):
                     # try to detect an early measurement start
                     # (see `USE_EARLY_LATENCY_CORRECTION` for
                     # explanation)
-                    max_monitor = np.max(input_data[:, DeviceConfig.sync_channels[1]])
+                    max_monitor = np.max(
+                        input_data[:, DeviceConfig.sync_channels[1]]
+                    )
                     if self.monitoring_amp.size:
                         # compare current maximum to average in previous blocks
                         signal_thresh = 1.5 * np.mean(self.monitoring_amp)
@@ -692,7 +696,8 @@ class SyncMsrmt(Generic[SignalT]):
                     for i in range(self.hardware_data.n_in_channels):
                         if i in self.hardware_data.get_unique_input_channels():
                             self.live_msrmt_data.recorded_signal[counter][
-                                rec_start_idx:rec_start_idx+num_remaining_frames
+                                rec_start_idx
+                                :rec_start_idx + num_remaining_frames
                             ] = input_data[:num_remaining_frames, i]
                             counter += 1
                     self.set_state(MsrmtState.FINISHING)
@@ -701,7 +706,9 @@ class SyncMsrmt(Generic[SignalT]):
                     for i in range(self.hardware_data.n_in_channels):
                         if i in self.hardware_data.get_unique_input_channels():
                             self.live_msrmt_data.recorded_signal[counter][
-                                rec_start_idx:rec_end_idx] = input_data[:frames, i]
+                                rec_start_idx
+                                :rec_end_idx
+                            ] = input_data[:frames, i]
                             counter += 1
 
                 self.live_msrmt_data.record_idx = rec_end_idx
@@ -754,7 +761,6 @@ class SyncMsrmt(Generic[SignalT]):
 
                     sleep(0.01)
 
-
         finally:
             self.logger.info('Closing stream.')
 
@@ -779,9 +785,7 @@ class SyncMsrmt(Generic[SignalT]):
         if hasattr(self, 'plot_process'):
             self.plot_process.stop()
 
-        if hasattr(
-            self, 'shm'
-        ):
+        if hasattr(self, 'shm'):
             for i, shm_i in enumerate(self.shm):
                 recorded_copy = self.live_msrmt_data.recorded_signal[i][
                     :self.live_msrmt_data.record_idx

@@ -8,9 +8,8 @@ Note:
     Phase calibration will be added in future revisions of PyOAE.
 """
 
-from typing import TypedDict
+from typing import TypedDict, TypeVar
 from logging import Logger
-from numbers import Complex
 
 import numpy as np
 import numpy.typing as npt
@@ -19,13 +18,31 @@ from scipy import interpolate
 from pyoae import get_logger
 from pyoae.device.device_config import DeviceConfig
 
+TFloat = TypeVar('TFloat', bound=np.floating)
+
 
 def interpolate_tf(
-    interp_freqs,
-    raw_freqs,
-    raw_values
-):
-    """Interpolate transfer function."""
+    interp_freqs: npt.NDArray[TFloat],
+    raw_freqs: npt.NDArray[TFloat],
+    raw_values: npt.NDArray[TFloat]
+) -> npt.NDArray[TFloat]:
+    """Interpolate a transfer function onto new frequency values
+
+    Args:
+        interp_freqs: Target frequencies where the transfer function should be
+            evaluated. Must be a 1-D array of NumPy floating dtype.
+        raw_freqs: Frequencies of the known transfer function samples.
+            Must be a 1-D, strictly increasing array with the same dtype as
+            ``interp_freqs``.
+        raw_values: Transfer function values corresponding to ``raw_freqs``.
+            Must have the same shape and dtype as ``raw_freqs``.
+
+    Returns:
+        Interpolated transfer function evaluated at ``interp_freqs``.
+        The returned array has the same shape and floating dtype as
+        ``interp_freqs``.
+
+    """
 
     amp_spline = interpolate.CubicSpline(
         raw_freqs,
@@ -162,29 +179,151 @@ def get_empty_speaker_calib_data() -> SpeakerCalibData:
     return d
 
 
-class OutputCalibration:
-    """Linear scaling functions to apply output calibration."""
+class BaseTransferFunction:
+    """Base class for frequency-dependent complex transfer functions.
 
-    logger: Logger
-    """Class logger for debug, info, warning and error messages"""
+    This class provides shared functionality for interpolating amplitude and
+    phase responses onto arbitrary frequency grids and constructing complex
+    transfer functions.
 
-    raw_freqs: npt.NDArray[np.float32]
-    """Frequencies of the output sensitivity function."""
-
-    raw_amps: npt.NDArray[np.float32]
-    """Output sensitivity function (transfer function).
-
-    This is a 2D array of dimensions [num_ch, num_bins]
+    Subclasses are responsible for loading calibration data and exposing
+    user-facing APIs (e.g., channel handling or pressure conversions).
     """
 
+    logger: Logger
+    """Logger used for debug, warning and error messages."""
+
+    raw_freqs: npt.NDArray[np.float32]
+    """Frequencies of the measured transfer function in Hz."""
+
+    raw_amps: npt.NDArray[np.float32]
+    """Measured amplitudes of the transfer function."""
+
     raw_phases: npt.NDArray[np.float32]
-    """Phases of the transfer function in radiant."""
+    """Measured phase of the transfer function in radians."""
+
+    def __init__(self, log: Logger | None = None) -> None:
+        self.logger = log or get_logger()
+
+    # ------------------------------------------------------------------
+    # Helper methods used by subclasses
+    # ------------------------------------------------------------------
+
+    def _get_freq_grid(
+        self,
+        frequencies_ip: npt.NDArray[np.float32] | None,
+        num_samples: int | None
+    ) -> npt.NDArray[np.float32]:
+        """Return a frequency grid for interpolation.
+
+        If a grid is provided it is returned unchanged. Otherwise a grid is
+        generated using ``np.fft.rfftfreq``.
+
+        Args:
+            frequencies_ip: Optional frequency grid in Hz.
+            num_samples: Number of time-domain samples used to generate the FFT
+                frequency grid when ``frequencies_ip`` is ``None``.
+
+        Returns:
+            Frequency grid in Hz. Returns an empty array if neither argument
+            is provided and logs an error.
+        """
+        if frequencies_ip is not None:
+            return frequencies_ip
+
+        if num_samples is None:
+            self.logger.error(
+                "Neither frequencies nor number of samples given."
+            )
+            return np.ndarray(0, np.float32)
+
+        return np.fft.rfftfreq(num_samples, 1 / DeviceConfig.sample_rate)
+
+    def _interp_amp_phase(
+        self,
+        freqs: npt.NDArray[np.float32],
+        amps: npt.NDArray[np.float32],
+        phases: npt.NDArray[np.float32],
+    ) -> npt.NDArray[np.complex64]:
+        """Interpolate amplitude and phase and build a complex TF.
+
+        Args:
+            freqs: Frequencies where the transfer function should be evaluated.
+            amps: Amplitude response corresponding to ``self.raw_freqs``.
+            phases: Phase response corresponding to ``self.raw_freqs``.
+
+        Returns:
+            Complex transfer function evaluated at ``freqs``.
+        """
+        amp_ip = interpolate_tf(freqs, self.raw_freqs, amps)
+        phase_ip = interpolate_tf(freqs, self.raw_freqs, phases)
+
+        return (
+            np.array(amp_ip, dtype=np.complex64)
+            * np.exp(1j * phase_ip, dtype=np.complex64)
+        )
+
+
+class MicroTransferFunction(BaseTransferFunction):
+    """Interpolated microphone transfer function."""
+
+    def __init__(
+        self,
+        abs_calib: AbsCalibData,
+        trans_fun: MicroTransferFunData,
+        log: Logger | None = None
+    ) -> None:
+        super().__init__(log)
+
+        self.raw_freqs = np.array(trans_fun['frequencies'], np.float32)
+        self.raw_amps = np.array(trans_fun['amplitudes'], np.float32)
+        self.raw_phases = np.array(trans_fun['phases'], np.float32)
+
+        # Convert to DFS / µPa
+        self.raw_amps /= abs_calib['sensitivity']
+
+    def get_interp_transfer_function(
+        self,
+        frequencies_ip: npt.NDArray[np.float32] | None = None,
+        num_samples: int | None = None
+    ) -> npt.NDArray[np.complex64]:
+        """Return the interpolated microphone transfer function.
+
+        Args:
+            frequencies_ip: Frequencies in Hz where the transfer function should
+                be evaluated.
+            num_samples: Number of samples used to generate an FFT frequency
+                grid when ``frequencies_ip`` is ``None``.
+
+        Returns:
+            Complex microphone transfer function.
+        """
+
+        freqs = self._get_freq_grid(frequencies_ip, num_samples)
+        return self._interp_amp_phase(freqs, self.raw_amps, self.raw_phases)
+
+    def get_sensitivity(self, f: float) -> float:
+        """Return microphone sensitivity at a given frequency.
+
+        Args:
+            f: Frequency in Hz.
+
+        Returns:
+            Sensitivity in DFS/µPa.
+        """
+
+        amp = self.get_interp_transfer_function(np.asarray([f], np.float32))
+        return float(np.abs(amp[0]))
+
+
+class OutputCalibration(BaseTransferFunction):
+    """Interpolated loudspeaker/output transfer function."""
 
     output_channels: list[int]
-    """Output channels used for calibration"""
+    """Output Channels the output calibration was performed on"""
 
     input_channels: list[int]
-    """Input channels used for calibration"""
+    """Input Channels the output calibration was performed on"""
 
     date: str
     """Time stamp of output calibration."""
@@ -194,172 +333,82 @@ class OutputCalibration:
         calib_data: SpeakerCalibData,
         log: Logger | None = None
     ) -> None:
-        """Initializes an scaled input-channel transfer function."""
-
-        self.logger = log or get_logger()
+        super().__init__(log)
 
         self.date = calib_data['date']
-        self.raw_freqs = np.array(
-            calib_data['frequencies'], dtype=np.float32
-        )
-        self.raw_amps = np.array(calib_data['max_out'])
-        self.raw_phases = np.array(calib_data['phase'], dtype=np.float32)
+
+        self.raw_freqs = np.array(calib_data['frequencies'], np.float32)
+        self.raw_amps = np.array(calib_data['max_out'], np.float32)
+        self.raw_phases = np.array(calib_data['phase'], np.float32)
 
         self.output_channels = calib_data['output_channels']
         self.input_channels = calib_data['input_channels']
-
-    def get_sensitivity(self, ch: int, f: float) -> float:
-        """Returns the output sensitivity in DFS/muPa.
-
-        Args:
-            ch: index of the output channel starting at 0
-            f: frequency of the output stimulus
-        """
-
-        if ch not in self.output_channels:
-            self.logger.error('Output channel was not calibrated.')
-            return 0.0
-
-        ch_idx = self.output_channels.index(ch)
-
-        if f < np.min(self.raw_freqs) or f > np.max(self.raw_freqs):
-            self.logger.warning(
-                'Stimulus frequency %s Hz outside calibrated boundaries.',
-                f
-            )
-
-        # find frequency-bin index
-        # (alternatively, we could store the frequency resolution
-        # in order to calculate the frequency-bin index)
-        idx = np.argmin(np.abs(self.raw_freqs - f))
-        return self.raw_amps[ch_idx, idx]
-
-    def pressure_to_full_scale(self, ch: int, p: float, f: float) -> float:
-        """Calculates digital full-scale amplitude from peak pressure."""
-        s = abs(self.get_sensitivity(ch, f))
-        return p / s
 
     def get_interp_transfer_function(
         self,
         channel: int,
         frequencies_ip: npt.NDArray[np.float32] | None = None,
-        num_samples: int | None = None
+        num_samples: int | None = None,
     ) -> npt.NDArray[np.complex64]:
-        """Return interpolated transfer function"""
-
-        index = self.output_channels.index(channel)
-
-        if frequencies_ip is None:
-            if num_samples is None:
-                self.logger.error(
-                    'Neither frequencies nor number of samples given.'
-                )
-                return np.ndarray(0, np.complex64)
-            frequencies_ip = np.fft.rfftfreq(
-                num_samples, 1/DeviceConfig.sample_rate
-            )
-
-        amplitudes_ip = interpolate_tf(
-            frequencies_ip, self.raw_freqs, self.raw_amps[index]
-        )
-        phases_ip = interpolate_tf(
-            frequencies_ip, self.raw_freqs, self.raw_phases[index]
-        )
-
-        interpolated_tf = (
-            np.array(amplitudes_ip, dtype=np.complex64)
-            *np.exp(1j * phases_ip, dtype=np.complex64)
-        )
-        return interpolated_tf
-
-
-class MicroTransferFunction:
-    """Interpolated transfer function of the microphone."""
-
-    logger: Logger
-    """Class logger for debug, info, warning and error messages"""
-
-    frequencies: npt.NDArray[np.float32]
-    """Frequencies of the transfer function in Hz."""
-
-    amplitudes: npt.NDArray[np.complex64]
-    """Amplitudes of the transfer function in full-scale/muPa"""
-
-    phases: npt.NDArray[np.float32]
-    """Phases of the transfer function in radiant."""
-
-    def __init__(
-        self,
-        abs_calib: AbsCalibData,
-        trans_fun: MicroTransferFunData,
-        log: Logger | None = None
-    ) -> None:
-        """Initializes an scaled input-channel transfer function."""
-
-        self.logger = log or get_logger()
-
-        self.raw_freqs = np.array(trans_fun['frequencies'], dtype=np.float32)
-        self.raw_amps = np.array(trans_fun['amplitudes'], dtype=np.float32)
-        self.raw_phases = np.array(trans_fun['phases'], dtype=np.float32)
-
-        if np.max(np.abs(np.diff(self.raw_phases))) > np.pi:
-            self.logger.error(
-                'Phase difference between two points larger than pi. '
-                'This may result in unintended wrapping.'
-            )
-
-        # scale amplitudes to DFS/muPa
-        self.raw_amps /= abs_calib['sensitivity']
-
-
-    def get_sensitivity(self, f: float) -> float:
-        """Returns the output sensitivity in DFS/muPa.
+        """Return interpolated transfer function for an output channel.
 
         Args:
-            f: frequency at which transfer function should be sampled
+            channel: Output channel index.
+            frequencies_ip: Frequencies in Hz where the transfer function
+                should be evaluated.
+            num_samples: Number of samples used to generate an FFT frequency
+                grid when ``frequencies_ip`` is ``None``.
 
         Returns:
-            Sensitivity of the microphone at the given frequency in DFS/muPa.
+            Complex transfer function of the selected channel.
         """
+        idx = self.output_channels.index(channel)
+        freqs = self._get_freq_grid(frequencies_ip, num_samples)
+
+        return self._interp_amp_phase(
+            freqs,
+            self.raw_amps[idx],
+            self.raw_phases[idx],
+        )
+
+    def get_sensitivity(self, ch: int, f: float) -> float:
+        """Return the calibrated output sensitivity for a channel at a frequency.
+
+        Args:
+            ch: Output channel index (starting at 0).
+            f: Frequency of the output stimulus in Hz.
+
+        Returns:
+            Sensitivity in DFS/µPa for the requested channel and frequency.
+            Returns 0.0 if the channel is not calibrated.
+        """
+        if ch not in self.output_channels:
+            self.logger.error("Output channel %s was not calibrated.", ch)
+            return 0.0
 
         if f < np.min(self.raw_freqs) or f > np.max(self.raw_freqs):
             self.logger.warning(
-                '%s Hz outside microphone calibrated boundaries.',
+                'Stimulus frequency %.2f Hz outside calibrated boundaries.',
                 f
             )
 
-        amp = self.get_interp_transfer_function(np.asarray([f]))
+        amp = self.get_interp_transfer_function(
+            ch,
+            np.asarray([f], np.float32)
+        )
         return float(np.abs(amp[0]))
 
-    def get_interp_transfer_function(
-        self,
-        frequencies_ip: npt.NDArray[np.float32] | None = None,
-        num_samples: int | None = None
-    ) -> npt.NDArray[np.complex64]:
-        """Return interpolated transfer function"""
-        if frequencies_ip is None:
-            if num_samples is None:
-                self.logger.error(
-                    'Neither frequencies nor number of samples given.'
-                )
-                return np.ndarray(0, np.complex64)
-            frequencies_ip = np.fft.rfftfreq(
-                num_samples, 1/DeviceConfig.sample_rate
-            )
+    def pressure_to_full_scale(self, ch: int, p: float, f: float) -> float:
+        """Convert peak acoustic pressure to digital full-scale amplitude (FS).
 
-        amplitudes_ip = interpolate_tf(
-            frequencies_ip, self.raw_freqs, self.raw_amps
-        )
+        Args:
+            ch: Output channel index (starting at 0).
+            p: Peak acoustic pressure in µPa.
+            f: Frequency of the stimulus in Hz.
 
-        phases_ip = interpolate_tf(
-            frequencies_ip, self.raw_freqs, self.raw_phases
-        )
-
-        amplitudes_ip = np.interp(frequencies_ip, self.raw_freqs, self.raw_amps)
-        phases_ip = np.interp(frequencies_ip, self.raw_freqs, self.raw_phases)
-
-        interpolated_tf = (
-            np.array(amplitudes_ip, dtype=np.complex64)
-            *np.exp(1j * phases_ip, dtype=np.complex64)
-        )
-        return interpolated_tf
+        Returns:
+            Digital full-scale amplitude required to produce the given
+            pressure on the selected output channel.
+        """
+        s = abs(self.get_sensitivity(ch, f))
+        return p / s

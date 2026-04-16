@@ -267,7 +267,7 @@ class MultiToneAnalyzer:
         )
 
         freqs = get_spec_frequenies(len(segment), self.sample_rate)
-        spectrum = cplx_spectrum(segment, ramp_samples)
+        spectrum = np.abs(cplx_spectrum(segment, ramp_samples))
         # Convert to RMS values
         np.divide(spectrum, np.sqrt(2), spectrum)
 

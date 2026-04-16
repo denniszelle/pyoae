@@ -17,6 +17,10 @@ import types
 import numpy as np
 
 from pyoae import calib_storage
+from pyoae.calib_storage import(
+    MicroCalibData,
+    SpeakerCalibData
+)
 from pyoae import get_logger
 from pyoae import protocols
 from pyoae.device.device_config import DeviceConfig
@@ -103,7 +107,7 @@ def load_device_config(file_path: str) -> None:
 
 def load_micro_calib(
     file_path: str | Path
-) -> calib_storage.MicroCalibData | None:
+) -> MicroCalibData | None:
     """Load microphone calibration data from a JSON file.
 
     Reads a JSON file containing microphone calibration information and
@@ -250,7 +254,7 @@ def load_output_calib_protocol(
         return None
 
 
-def load_output_calib(file_path: str) -> calib_storage.SpeakerCalibData:
+def load_output_calib(file_path: str) -> SpeakerCalibData:
     """Load speaker/output calibration data from a JSON file.
 
     The function attempts to read the JSON file at the given path and populate
@@ -509,7 +513,7 @@ def load_pdpoae_recording(file_path: str | Path) -> PulseDpoaeRecording | None:
     return {'recording': recording, 'average': raw_avg, 'signal': avg}
 
 
-def save_output_calibration(out_calib: calib_storage.SpeakerCalibData) -> None:
+def save_output_calibration(out_calib: SpeakerCalibData) -> None:
     """Save output calibration data to a JSON file.
 
     The calibration is saved under the `measurements` folder in the current

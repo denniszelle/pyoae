@@ -14,7 +14,7 @@ import scipy.signal as sig
 from pyoae import files
 from pyoae import generator
 from pyoae import get_logger
-from pyoae.calib_storage import MicroTransferFunction
+from pyoae.calib_transfer import MicroTransferFunction
 from pyoae.dsp import averaging
 from pyoae.dsp import filters
 from pyoae.dsp import noise

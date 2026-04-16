@@ -21,7 +21,7 @@ import matplotlib
 from pyoae import output_calib
 from pyoae import files
 from pyoae import pyoae_logger
-from pyoae.calib_storage import OutputCalibration
+from pyoae.calib_transfer import OutputCalibration
 
 try:
     matplotlib.use('qtagg')

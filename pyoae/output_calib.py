@@ -15,15 +15,20 @@ import numpy.typing as npt
 
 from pyoae import files
 from pyoae import get_logger
-from pyoae.calib_storage import (
+from pyoae.calib_storage import SpeakerCalibData
+
+from pyoae.calib_transfer import (
     MicroTransferFunction,
-    OutputCalibration,
-    SpeakerCalibData
+    OutputCalibration
 )
 from pyoae import converter
 from pyoae.device.device_config import DeviceConfig
 from pyoae.msrmt_context import MsrmtContext
-from pyoae import mt_generator
+from mt_generator import (
+    MultiToneAnalyzer,
+    MultiToneDefinition,
+    MultiToneResult
+)
 from pyoae.protocols import (
     CalibMsrmtParams,
     CalibMsrmtDef
@@ -168,8 +173,8 @@ def setup_offline_plot(
 def get_mt_results(
     sync_msrmt: SyncMsrmt,
     msrmt_ctx: MsrmtContext,
-    mt_definition: mt_generator.MultiToneDefinition
-) -> list[mt_generator.MultiToneResult]:
+    mt_definition: MultiToneDefinition
+) -> list[MultiToneResult]:
     """Processes data and returns spectra per output channels.
 
     Args:
@@ -216,7 +221,7 @@ def get_mt_results(
         else:
             input_tf = msrmt_ctx.input_trans_fun[input_channel_idx]
 
-        analyzer = mt_generator.MultiToneAnalyzer(
+        analyzer = MultiToneAnalyzer(
             mt_definition,
             block_avg[i * channel_segment_size:(i + 1) * channel_segment_size],
             DeviceConfig.sample_rate,
@@ -255,7 +260,7 @@ def get_log_frequency_ticks(f_min, f_max, bases=(1, 3, 5)):
 def _prepare_plot_config(
     sync_msrmt: SyncMsrmt,
     msrmt_ctx: MsrmtContext,
-    mt_results: list[mt_generator.MultiToneResult]
+    mt_results: list[MultiToneResult]
 ) -> PlotConfig:
     """Create plot config containing meta information of the recorded data."""
 
@@ -289,7 +294,7 @@ def _prepare_plot_config(
 
 
 def _compute_bounds(
-    mt_results: list[mt_generator.MultiToneResult],
+    mt_results: list[MultiToneResult],
     config: PlotConfig
 ) -> PlotBounds:
     """Compute x- and y-value boundaries for plots"""
@@ -377,7 +382,7 @@ def _plot_single_channel(
     axes: list[list[Axes]],
     i: int,
     j: int,
-    result: mt_generator.MultiToneResult,
+    result: MultiToneResult,
     config: PlotConfig,
     bounds: PlotBounds
 ):
@@ -425,7 +430,7 @@ def _plot_single_channel(
 def plot_offline(
     sync_msrmt: SyncMsrmt,
     msrmt_ctx: MsrmtContext,
-    mt_results: list[mt_generator.MultiToneResult]
+    mt_results: list[MultiToneResult]
 ) -> None:
     """Create offline plot after a output calibration measurement.
 
@@ -570,10 +575,10 @@ def plot_result_file(results: OutputCalibration) -> None:
 class OutputCalibRecorder:
     """Class to manage a DPOAE recording."""
 
-    mt_definition: mt_generator.MultiToneDefinition
+    mt_definition: MultiToneDefinition
     """Definition of multitone signals"""
 
-    mt_results: list[mt_generator.MultiToneResult]
+    mt_results: list[MultiToneResult]
     """Results of multitone measurements"""
 
     signals: list[PeriodicSignal]
@@ -785,22 +790,8 @@ class OutputCalibRecorder:
             np.round(num_block_samples / len(hw_data.output_channels))
         )
 
-        # For CalibMsrmtParams
-        if 'num_clusters' in msrmt_params:
-            calib_def = mt_generator.generate_mt_def(msrmt_params)
-
-        elif 'frequencies' in msrmt_params:
-            calib_def = msrmt_params
-
-        else:
-            self.logger.error('Invalid protocol type.')
-            return False
-
-        self.mt_definition = mt_generator.MultiToneDefinition(
-            calib_def['frequencies'],
-            calib_def['phases'],
-            calib_def['amplitudes'],
-            calib_def['cluster_idc']
+        self.mt_definition = MultiToneDefinition(
+            msrmt_params
         )
 
         mt_signal = self.mt_definition.generate_mt_signal(

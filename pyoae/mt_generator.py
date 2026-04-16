@@ -9,8 +9,12 @@ import numpy.typing as npt
 from pyoae import get_logger
 from pyoae import generator
 from pyoae.device.device_config import DeviceConfig
-from pyoae.calib_storage import MicroTransferFunction
+from pyoae.calib_transfer import MicroTransferFunction
 from pyoae import protocols
+from pyoae.protocols import (
+    CalibMsrmtDef,
+    CalibMsrmtParams
+)
 
 
 def ramp_envelope(n_samples: int, ramp_samples: int) -> np.ndarray:
@@ -87,17 +91,24 @@ class MultiToneDefinition:
 
     def __init__(
         self,
-        frequencies: npt.NDArray[np.float32],
-        phases: npt.NDArray[np.float32],
-        amplitudes: npt.NDArray[np.float32],
-        cluster_idc: npt.NDArray[np.int32],
+        msrmt_params: CalibMsrmtDef | CalibMsrmtParams,
         log: Logger | None = None
     ) -> None:
+
         self.logger = log or get_logger()
-        self.frequencies = frequencies
-        self.phases = phases
-        self.amplitudes = amplitudes
-        self.cluster_idc = cluster_idc
+
+        if 'num_clusters' in msrmt_params:
+            calib_def = generate_mt_def(msrmt_params)
+        elif 'frequencies' in msrmt_params:
+            calib_def = msrmt_params
+        else:
+            self.logger.error('Invalid protocol type.')
+            return False
+
+        self.frequencies = calib_def['frequencies']
+        self.phases = calib_def['phases']
+        self.amplitudes = calib_def['amplitudes']
+        self.cluster_idc = calib_def['cluster_idc']
 
     def get_unique_cluster_indices(self) -> npt.NDArray[np.int32]:
         """Return the unique cluster indices"""
@@ -189,9 +200,7 @@ class MultiToneDefinition:
 
             env = ramp_envelope(len(segment), ramp_samples)
             segment *= env
-
             signal[start:end] += segment
-
             self.ramp_correction = 1 / np.mean(env**2)
 
         return signal

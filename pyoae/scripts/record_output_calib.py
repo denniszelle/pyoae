@@ -23,7 +23,7 @@ import argparse
 from pyoae import files
 from pyoae import input_validation
 from pyoae import protocols
-from pyoae.calib_storage import MicroTransferFunction
+from pyoae.calib_transfer import MicroTransferFunction
 from pyoae.device.device_config import DeviceConfig
 from pyoae.output_calib import OutputCalibRecorder
 import pyoae.pyoae_logger as pyoae_logger

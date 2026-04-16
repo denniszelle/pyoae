@@ -10,7 +10,7 @@ import numpy.typing as npt
 
 from pyoae import files
 from pyoae import get_logger
-from pyoae.calib_storage import MicroTransferFunction
+from pyoae.calib_transfer import MicroTransferFunction
 from pyoae.dsp import filters
 from pyoae.dsp import noise
 from pyoae.dsp.containers import (

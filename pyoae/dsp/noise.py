@@ -7,6 +7,7 @@ import numpy.typing as npt
 
 from pyoae import generator
 from pyoae.dsp import math
+from pyoae.dsp import spectral
 
 
 NUM_NOISE_BINS_PER_SIDE = 5
@@ -140,19 +141,7 @@ def estimate_cdpoae_spectral_noise(
     y = y - y.mean()
 
     # TODO: add ramp?
-
-    # FFT (one-sided), explicit size
-    Y = np.fft.rfft(y, n=num_samples)
-
-    # Convert to one-sided **peak** amplitude per bin
-    # A_peak = 2*|Y|/N for 0<k<N/2; DC and Nyquist are not doubled
-    mag = np.abs(Y) / num_samples
-    if num_samples % 2 == 0:
-        # even N: rfft has N/2+1 bins, last is Nyquist
-        mag[1:-1] *= 2.0
-    else:
-        # odd N: last bin is not Nyquist; all bins except DC are doubled
-        mag[1:] *= 2.0
+    mag = np.abs(spectral.cplx_spectrum(y))
 
     # Convert to **RMS** per bin (sine RMS = peak / sqrt(2))
     mag_rms = mag / np.sqrt(2.0)

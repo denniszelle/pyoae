@@ -36,6 +36,7 @@ from pyoae import get_logger
 from pyoae import helpers
 from pyoae.calib_transfer import MicroTransferFunction
 from pyoae.dsp import averaging
+from pyoae.dsp import spectral
 from pyoae.device.device_config import DeviceConfig
 from pyoae.msrmt_context import MsrmtContext
 from pyoae.protocols import MsrmtParams
@@ -94,7 +95,7 @@ def setup_plot(
     ax_time.set_ylabel("Amplitude (re full scale)")
 
     # Set up frequency plot
-    fft_frequencies = np.fft.rfftfreq(window_size, 1 / fs)
+    fft_frequencies = spectral.get_spec_frequenies(window_size, fs)
     fft_values = np.zeros(len(fft_frequencies))
     line_spec, = ax_spec.plot(fft_frequencies, fft_values)
     ax_spec.set_xlim(500, 20*1E3)
@@ -400,8 +401,7 @@ class SoaeRecorder:
                 spectrum = 20 * np.log10(spectrum/20)
 
         else:
-            spectrum = np.abs(np.fft.rfft(np.zeros(
-                self.msrmt_ctx.block_size, np.float32
-            )))
+            bins = self.msrmt_ctx.block_size // 2 + 1
+            spectrum = np.zeros(bins, np.float32)
 
         return spectrum

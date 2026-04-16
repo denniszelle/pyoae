@@ -1,5 +1,7 @@
 """Module with functions for spectral signal analysis."""
 
+from typing import overload
+
 import numpy as np
 import numpy.typing as npt
 
@@ -103,6 +105,80 @@ def block_cplx_spectrum(
 
     cplx_spectra = np.fft.rfft(blocks, axis=1)
     return cplx_spectra
+
+def get_spec_frequenies(
+    n: int, fs: float
+) -> npt.NDArray[np.float32]:
+    """
+    Frequency axis for a 1D rfft signal (Hz).
+    """
+    return np.fft.rfftfreq(n, d=1.0 / fs).astype(np.float32)
+
+def cplx_spectrum(
+    data: npt.NDArray[np.floating],
+    ramp_size: int = 0,
+    scale_one_sided: bool = True
+) -> npt.NDArray[np.complexfloating]:
+    """
+    Compute 1D complex spectrum using rfft.
+
+    Parameters
+    ----------
+    data : 1D input signal
+    ramp_size : cosine fade-in/out (0 disables)
+    scale_one_sided : normalize by signal length and double all but Nyquist
+        and DC.
+
+    Returns
+    -------
+    complex rfft spectrum
+    """
+
+    # x = np.asarray(data, dtype=np.float32)
+    if data.ndim != 1:
+        raise ValueError("cplx_spectrum only supports 1D arrays")
+    n = data.shape[0]
+
+    # -----------------------------
+    # Optional cosine ramp
+    # -----------------------------
+    if ramp_size > 0:
+        ramp_size = min(ramp_size, n // 2)
+
+        ramp = np.ones(n, dtype=data.dtype)
+        edge = (
+            0.5
+            - 0.5
+            * np.cos(np.linspace(0, np.pi, ramp_size, dtype=data.dtype))
+        )
+
+        ramp[:ramp_size] = edge
+        ramp[-ramp_size:] = edge[::-1]
+
+        data = data * ramp
+
+    # -----------------------------
+    # FFT
+    # -----------------------------
+    spectrum = np.fft.rfft(data)
+
+    # -----------------------------
+    # Optional normalization
+    # -----------------------------
+    if scale_one_sided:
+        spectrum = spectrum / n
+        # All bins except DC and Nyquist need to be doubled
+        if n % 2 == 0:
+            # even N: rfft has N/2+1 bins, last is Nyquist
+            spectrum[1:-1] *= 2.0
+        else:
+            # odd N: last bin is not Nyquist; all bins except DC are doubled
+            spectrum[1:] *= 2.0
+
+    if data.dtype == np.float32:
+        return spectrum.astype(np.complex64)
+    else:
+        return spectrum.astype(np.complex128)
 
 
 def block_abs_spectrum(

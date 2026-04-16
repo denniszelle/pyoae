@@ -13,6 +13,7 @@ from pyoae import get_logger
 from pyoae.calib_transfer import MicroTransferFunction
 from pyoae.dsp import filters
 from pyoae.dsp import noise
+from pyoae.dsp import spectral
 from pyoae.dsp.containers import (
     DpoaeMsrmtData,
     ContDpoaeRecording,
@@ -70,8 +71,8 @@ class ContDpoaeResult:
         t_rec = np.arange(num_recording_samples) / samplerate
         axes[0].plot(t_rec, self.recording['recorded_signal'], linewidth=0.5)
 
-        frequencies = (
-            np.fft.rfftfreq(num_block_samples, 1 / samplerate)
+        frequencies = spectral.get_spec_frequenies(
+            num_block_samples, samplerate
         ).astype(np.float64)
         t_avg = np.arange(num_block_samples) / samplerate * 1E3
         if self.raw_averaged.size:
@@ -256,21 +257,14 @@ class ContDpoaeProcessor(ContDpoaeResult):
         )
 
         # compute spectrum
-        if self.mic_trans_fun is None:
-            spectrum = 2*np.abs(np.fft.rfft(self.raw_averaged)) / num_block_samples
-            # dBFS and dB SPL represent RMS values
-            # assume FFT bins represent sine waves and estimate
-            # RMS by dividing by sqrt(2)
-            spectrum /= np.sqrt(2)
-            spectrum = 20 * np.log10(spectrum)
-        else:
-            raw_spec = np.fft.rfft(self.raw_averaged)
+        spectrum = np.abs(spectral.cplx_spectrum(self.raw_averaged))
+        spectrum /= np.sqrt(2)
+        if self.mic_trans_fun is not None:
             mic_tf = self.mic_trans_fun.get_interp_transfer_function(
                 num_samples=len(self.raw_averaged)
             )
-            raw_spec /= mic_tf
-            spectrum = 2 * np.abs(raw_spec) / (num_block_samples * np.sqrt(2))
-            spectrum = 20 * np.log10(spectrum/20)  # dB SPL
+            spectrum /= mic_tf
+        spectrum = 20 * np.log10(spectrum/20)  # dB SPL
         self.dpoae_spectrum = spectrum
 
     def process_raw_data(
@@ -332,7 +326,9 @@ class ContDpoaeProcessor(ContDpoaeResult):
         samplerate = self.recording['samplerate']
         num_block_samples = self.recording['num_block_samples']
         t = np.arange(num_block_samples) / samplerate * 1E3
-        frequencies = np.fft.rfftfreq(num_block_samples, 1 / samplerate)
+        frequencies = spectral.get_spec_frequenies(
+            num_block_samples, samplerate
+        )
         d = {
             'f1': self.recording['f1'],
             'f2': self.recording['f2'],

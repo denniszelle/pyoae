@@ -9,6 +9,10 @@ import numpy.typing as npt
 from pyoae import get_logger
 from pyoae import generator
 from pyoae.device.device_config import DeviceConfig
+from pyoae.dsp.spectral import (
+    cplx_spectrum,
+    get_spec_frequenies
+)
 from pyoae.calib_transfer import MicroTransferFunction
 from pyoae import protocols
 from pyoae.protocols import (
@@ -257,18 +261,15 @@ class MultiToneAnalyzer:
         micro_tf: MicroTransferFunction | None
     ) -> tuple[npt.NDArray[np.float32], npt.NDArray[np.complex64]]:
         """Compute spectrum of a signal and apply a transfer function"""
-        n = len(segment)
 
         ramp_samples = int(
             DeviceConfig.ramp_duration * 1E-3 * DeviceConfig.sample_rate
         )
-        ramp = ramp_envelope(n, ramp_samples)
-        windowed = segment * ramp
 
-        freqs = np.fft.rfftfreq(n, 1 / self.sample_rate)
-        spectrum = 2 * np.fft.rfft(windowed) / len(segment)
+        freqs = get_spec_frequenies(len(segment), self.sample_rate)
+        spectrum = cplx_spectrum(segment, ramp_samples)
+        # Convert to RMS values
         np.divide(spectrum, np.sqrt(2), spectrum)
-        spectrum = spectrum.astype(np.complex64)
 
         if micro_tf is not None:
             spectrum /= micro_tf.get_interp_transfer_function(freqs)

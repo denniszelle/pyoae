@@ -267,7 +267,7 @@ class MultiToneAnalyzer:
         )
 
         freqs = get_spec_frequenies(len(segment), self.sample_rate)
-        spectrum = np.abs(cplx_spectrum(segment, ramp_samples))
+        spectrum = cplx_spectrum(segment, ramp_samples)
         # Convert to RMS values
         np.divide(spectrum, np.sqrt(2), spectrum)
 
@@ -304,7 +304,7 @@ class MultiToneAnalyzer:
         for cluster_idx in cluster_indices:
             segment = self._get_cluster_segment(cluster_idx)
             freqs, spectrum = self._compute_spectrum(segment, micro_tf)
-            spectra.append(np.abs(spectrum).astype(np.float32))
+            spectra.append(spectrum.astype(np.complex64))
             segments.append(segment)
 
             cluster_freqs, cluster_amps, cluster_phases = (

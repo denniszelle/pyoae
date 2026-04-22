@@ -24,7 +24,7 @@ from pyoae.calib_transfer import (
 from pyoae import converter
 from pyoae.device.device_config import DeviceConfig
 from pyoae.msrmt_context import MsrmtContext
-from mt_generator import (
+from pyoae.mt_generator import (
     MultiToneAnalyzer,
     MultiToneDefinition,
     MultiToneResult

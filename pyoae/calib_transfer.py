@@ -35,26 +35,8 @@ class BaseTransferFunction(ABC):
     logger: Logger
     """Logger used for debug, warning and error messages."""
 
-    raw_freqs: npt.NDArray[np.float32]
-    """Frequencies of the measured transfer function in Hz."""
-
-    raw_amps: npt.NDArray[np.float32]
-    """Measured amplitudes of the transfer function."""
-
-    raw_phases: npt.NDArray[np.float32]
-    """Measured phase of the transfer function in radians."""
-
-    def __init__(
-        self,
-        raw_freqs: npt.NDArray[np.float32],
-        raw_amps: npt.NDArray[np.float32],
-        raw_phases: npt.NDArray[np.float32],
-        log: Logger | None = None
-    ) -> None:
+    def __init__(self, log: Logger | None = None) -> None:
         self.logger = log or get_logger()
-        self.raw_freqs = raw_freqs
-        self.raw_amps = raw_amps
-        self.raw_phases = raw_phases
 
     # ------------------------------------------------------------------
     # Helper methods used by subclasses
@@ -92,22 +74,24 @@ class BaseTransferFunction(ABC):
 
     def _interp_amp_phase(
         self,
-        freqs: npt.NDArray[np.float32],
-        amps: npt.NDArray[np.float32],
-        phases: npt.NDArray[np.float32],
+        intep_freqs: npt.NDArray[np.float32],
+        raw_freqs: npt.NDArray[np.float32],
+        raw_amps: npt.NDArray[np.float32],
+        raw_phases: npt.NDArray[np.float32],
     ) -> npt.NDArray[np.complex64]:
         """Interpolate amplitude and phase and build a complex TF.
 
         Args:
-            freqs: Frequencies where the transfer function should be evaluated.
-            amps: Amplitude response corresponding to ``self.raw_freqs``.
-            phases: Phase response corresponding to ``self.raw_freqs``.
+            intep_freqs: Frequencies where the transfer function should be evaluated.
+            raw_freqs: Frequencies of the given data
+            raw_amps: Amplitudes of the given data corresponding to raw_freqs.
+            raw_phases: Phases of the given data corresponding to raw_freqs.
 
         Returns:
             Complex transfer function evaluated at ``freqs``.
         """
-        amp_ip = self.interpolate_tf(freqs, self.raw_freqs, amps)
-        phase_ip = self.interpolate_tf(freqs, self.raw_freqs, phases)
+        amp_ip = self.interpolate_tf(intep_freqs, raw_freqs, raw_amps)
+        phase_ip = self.interpolate_tf(intep_freqs, raw_freqs, raw_phases)
 
         return (
             np.array(amp_ip, dtype=np.complex64)
@@ -153,6 +137,15 @@ class BaseTransferFunction(ABC):
 class MicroTransferFunction(BaseTransferFunction):
     """Interpolated microphone transfer function."""
 
+    raw_freqs: npt.NDArray[np.float32]
+    """1D array with frequencies of the measured transfer function in Hz."""
+
+    raw_amps: npt.NDArray[np.float32]
+    """1D array with amplitudes of the mic transfer function in DFS/µPa."""
+
+    raw_phases: npt.NDArray[np.float32]
+    """1D array with phases of the mic transfer function in radians."""
+
     def __init__(
         self,
         abs_calib: AbsCalibData,
@@ -160,13 +153,13 @@ class MicroTransferFunction(BaseTransferFunction):
         log: Logger | None = None
     ) -> None:
 
-        raw_freqs = np.array(trans_fun['frequencies'], np.float32)
-        raw_amps = np.array(trans_fun['amplitudes'], np.float32)
+        self.raw_freqs = np.array(trans_fun['frequencies'], np.float32)
+        self.raw_amps = np.array(trans_fun['amplitudes'], np.float32)
         # Convert to DFS / µPa
-        raw_amps /= abs_calib['sensitivity']
-        raw_phases = np.array(trans_fun['phases'], np.float32)
+        self.raw_amps /= abs_calib['sensitivity']
+        self.raw_phases = np.array(trans_fun['phases'], np.float32)
 
-        super().__init__(raw_freqs, raw_amps, raw_phases, log)
+        super().__init__(log)
 
     def get_interp_transfer_function(
         self,
@@ -186,7 +179,9 @@ class MicroTransferFunction(BaseTransferFunction):
         """
 
         freqs = self._get_freq_grid(frequencies_ip, num_samples)
-        return self._interp_amp_phase(freqs, self.raw_amps, self.raw_phases)
+        return self._interp_amp_phase(
+            freqs, self.raw_freqs, self.raw_amps, self.raw_phases
+        )
 
     def get_sensitivity(self, f: float) -> float:
         """Return microphone sensitivity at a given frequency.
@@ -205,11 +200,32 @@ class MicroTransferFunction(BaseTransferFunction):
 class OutputCalibration(BaseTransferFunction):
     """Interpolated loudspeaker/output transfer function."""
 
-    output_channels: list[int]
-    """Output Channels the output calibration was performed on"""
+    raw_freqs: npt.NDArray[np.float32]
+    """1D array with frequencies of the output transfer function in Hz."""
+
+    raw_amps: npt.NDArray[np.float32]
+    """2D array with amplitudes of the output transfer function in muPa/FS
+
+    Each row contains the amplitudes for a single output channel, where the row
+    index corresponds to the same index used in output_channels. The columns
+    contain amplitudes corresponding to the frequencies specified in raw_freqs.
+
+    """
+
+    raw_phases: npt.NDArray[np.float32]
+    """2D array with phases of the output transfer function in radians.
+
+    Each row contains the phases for a single output channel, where the row
+    index corresponds to the same index used in output_channels. The columns
+    contain phase values corresponding to the frequencies specified in
+    raw_freqs.
+    """
 
     input_channels: list[int]
     """Input Channels the output calibration was performed on"""
+
+    output_channels: list[int]
+    """Output channel of the calibration"""
 
     date: str
     """Time stamp of output calibration."""
@@ -219,11 +235,11 @@ class OutputCalibration(BaseTransferFunction):
         calib_data: SpeakerCalibData,
         log: Logger | None = None
     ) -> None:
-        raw_freqs = np.array(calib_data['frequencies'], np.float32)
-        raw_amps = np.array(calib_data['max_out'], np.float32)
-        raw_phases = np.array(calib_data['phase'], np.float32)
+        self.raw_freqs = np.array(calib_data['frequencies'], np.float32)
+        self.raw_amps = np.array(calib_data['max_out'], np.float32)
+        self.raw_phases = np.array(calib_data['phase'], np.float32)
 
-        super().__init__(raw_freqs, raw_amps, raw_phases, log)
+        super().__init__(log)
 
         self.date = calib_data['date']
         self.output_channels = calib_data['output_channels']
@@ -252,6 +268,7 @@ class OutputCalibration(BaseTransferFunction):
 
         return self._interp_amp_phase(
             freqs,
+            self.raw_freqs[idx],
             self.raw_amps[idx],
             self.raw_phases[idx],
         )

@@ -17,6 +17,11 @@ import types
 import numpy as np
 
 from pyoae import calib_storage
+from pyoae.calib_storage import(
+    EarSimCalibData,
+    MicroCalibData,
+    SpeakerCalibData
+)
 from pyoae.calib_storage import MicroCalibData, SpeakerCalibData
 from pyoae import get_logger
 from pyoae import protocols
@@ -100,6 +105,43 @@ def load_device_config(file_path: str) -> None:
             DeviceConfig.set(key, entry)
     else:
         log.error('Failed to load device configuration from %s', file_path)
+
+
+def load_ear_sim_calib(
+    file_path: str | Path
+) -> EarSimCalibData | None:
+    """Load ear simulator calibration data from JSON file.
+
+    Reads a JSON file containing ear simulator calibration information and
+    returns a `EarSimCalibData` dictionary with all expected fields. Missing
+    fields are filled with default values.
+
+    Args:
+        file_path: Path to the JSON file containing the ear simulator
+        calibration data.
+
+    Returns:
+        A `EarSimCalibData` dictionary with calibration data if the file was
+        successfully loaded; `None` if the file does not exist or cannot be
+        loaded.
+
+    Raises:
+        None. File-not-found errors are logged internally and result is `None`.
+    """
+    d = {}
+    if file_path:
+        d = load_json_file(file_path)
+    if not d:
+        log.error('Ear sim calibration %s not found.', file_path)
+        return None
+    ear_sim_data = calib_storage.get_empty_ear_sim_calib()
+
+    if d:
+        for key in ear_sim_data:
+            if key in d:
+                ear_sim_data[key] = d[key]
+
+    return ear_sim_data
 
 
 def load_micro_calib(file_path: str | Path) -> MicroCalibData | None:

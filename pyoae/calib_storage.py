@@ -19,6 +19,37 @@ class AbsCalibData(TypedDict):
     """Identifier of the calibration type."""
 
 
+class EarSimTransferFunData(TypedDict):
+    """Container for ear simulator transfer-function data in file."""
+
+    date: str
+    """Date of the ear simulator transfer function calibration"""
+
+    frequencies: list[float]
+    """Frequencies of the transfer function"""
+
+    amplitudes: list[float]
+    """Amplitudes of the transfer function"""
+
+    phases: list[float]
+    """Phases of the transfer function"""
+
+
+class EarSimCalibData(TypedDict):
+
+    doc_type: str
+    """Document type of the loaded calibration"""
+
+    rev: int
+    """Revision number of the document"""
+
+    model: str
+    """Model identifier of the probe"""
+
+    transfer_function: EarSimTransferFunData
+    """Ear simulator transfer function calibration of the probe"""
+
+
 class MicroTransferFunData(TypedDict):
     """Container for transfer-function data in calibration file."""
 
@@ -107,6 +138,22 @@ def get_empty_micro_calib_data() -> MicroCalibData:
         'side': '',
         'abs_calibration': a,
         'transfer_function': t,
+    }
+    return d
+
+def get_empty_ear_sim_calib() -> EarSimCalibData:
+    """Returns an empty container for microphone-calibration data."""
+    t: EarSimTransferFunData = {
+        'date': '',
+        'frequencies': [1.0, 20000.0],
+        'amplitudes': [1.0, 1.0],
+        'phases': [0.0, 0.0]
+    }
+    d: EarSimCalibData = {
+        'doc_type': '',
+        'rev': 1,
+        'model': '',
+        'transfer_function': t
     }
     return d
 

@@ -15,6 +15,7 @@ from scipy import interpolate
 from pyoae import get_logger
 from pyoae.calib_storage import (
     AbsCalibData,
+    EarSimTransferFunData,
     MicroTransferFunData,
     SpeakerCalibData,
 )
@@ -128,6 +129,56 @@ class BaseTransferFunction(ABC):
         values_ip[interp_freqs > raw_freqs[-1]] = raw_values[-1]
 
         return values_ip
+
+
+class EarSimTransferFunction(BaseTransferFunction):
+    """Interpolated ear simulator transfer function."""
+
+    raw_freqs: npt.NDArray[np.float32]
+    """1D array with frequencies of ear simulator transfer function in Hz."""
+
+    raw_amps: npt.NDArray[np.float32]
+    """1D array with relative amplitudes of the ear simulator in dB."""
+
+    raw_phases: npt.NDArray[np.float32]
+    """1D array with phases of ear simulator transfer function in radians."""
+
+    def __init__(
+        self,
+        ear_sim_calib: EarSimTransferFunData
+    ) -> None:
+
+        self.raw_freqs = np.asarray(
+            ear_sim_calib['frequencies'], dtype=np.float32
+        )
+        self.raw_amps = np.asarray(
+            ear_sim_calib['amplitudes'], dtype=np.float32
+        )
+        self.raw_phases = np.asarray(
+            ear_sim_calib['phases'], dtype=np.float32
+        )
+
+    def get_interp_transfer_function(
+        self,
+        frequencies_ip: npt.NDArray[np.float32] | None = None,
+        num_samples: int | None = None
+    ) -> npt.NDArray[np.complex64]:
+        """Return the interpolated microphone transfer function.
+
+        Args:
+            frequencies_ip: Frequencies in Hz where the transfer function should
+                be evaluated.
+            num_samples: Number of samples used to generate an FFT frequency
+                grid when ``frequencies_ip`` is ``None``.
+
+        Returns:
+            Complex microphone transfer function.
+        """
+
+        freqs = self._get_freq_grid(frequencies_ip, num_samples)
+        return self._interp_amp_phase(
+            freqs, self.raw_freqs, self.raw_amps, self.raw_phases
+        )
 
 
 class MicroTransferFunction(BaseTransferFunction):

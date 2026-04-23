@@ -457,6 +457,11 @@ def load_cdpoae_recording(file_path: str | Path) -> ContDpoaeRecording | None:
         load_typed_dict(DpoaeMsrmtData, data),
     )
 
+    if 'raw_average' in data:
+        raw_average = data['raw_average']
+    else:
+        raw_average = None
+
     if 'average' in data:
         average = data['average']
     else:
@@ -467,7 +472,12 @@ def load_cdpoae_recording(file_path: str | Path) -> ContDpoaeRecording | None:
     else:
         spectrum = None
 
-    return {'recording': recording, 'average': average, 'spectrum': spectrum}
+    return {
+        'recording': recording,
+        'raw_average': raw_average,
+        'average': average,
+        'spectrum': spectrum
+    }
 
 
 def load_pdpoae_recording(file_path: str | Path) -> PulseDpoaeRecording | None:

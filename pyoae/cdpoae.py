@@ -327,13 +327,16 @@ class DpoaeRecorder:
             recorded_signal = self.msrmt.get_recorded_signal(input_channel)
             processor = self.msrmt_info[i].dpoae_processor
             if processor is not None:
-                averaged = processor.raw_averaged
+                raw_averaged = processor.raw_averaged
+                averaged = processor.averaged
                 spectrum = processor.dpoae_spectrum
             else:
+                raw_averaged = np.array(0, np.float64)
                 averaged = np.array(0, np.float64)
                 spectrum = np.array(0, np.float64)
             np.savez(
                 file_save_path,
+                raw_average=raw_averaged,
                 average=averaged,
                 spectrum=spectrum,
                 recorded_signal=recorded_signal,

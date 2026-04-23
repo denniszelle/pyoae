@@ -49,8 +49,11 @@ class ContDpoaeRecording(TypedDict):
     recording: DpoaeMsrmtData
     """Data of continuos DPOAE recording"""
 
+    raw_average: npt.NDArray[np.float64] | None
+    """Averaged raw signal in full scale"""
+
     average: npt.NDArray[np.float64] | None
-    """Averaged time signal"""
+    """Averaged time signal in muPa"""
 
     spectrum: npt.NDArray[np.float64] | None
     """Averaged spectral signal"""

@@ -27,6 +27,7 @@ def _msrmt_to_cont_recording(
     """Creates a continuous DPOAE recording from measurement data."""
     return {
         'recording': msrmt_data,
+        'raw_average': None,
         'average': None,
         'spectrum': None
     }
@@ -41,15 +42,21 @@ class ContDpoaeResult:
 
     raw_averaged: npt.NDArray[np.float64]
 
+    averaged: npt.NDArray[np.float64]
+
     dpoae_spectrum: npt.NDArray[np.float64]
 
     def __init__(self, cont_recording: ContDpoaeRecording) -> None:
         self.log = get_logger(__class__.__name__)
         self.recording = cont_recording['recording']
-        if cont_recording['average'] is None:
+        if cont_recording['raw_average'] is None:
             self.raw_averaged = np.empty(0, dtype=np.float64)
         else:
-            self.raw_averaged = cont_recording['average']
+            self.raw_averaged = cont_recording['raw_average']
+        if cont_recording['average'] is None:
+            self.averaged = np.empty(0, dtype=np.float64)
+        else:
+            self.averaged = cont_recording['average']
         if cont_recording['spectrum'] is None:
             self.dpoae_spectrum = np.empty(0, dtype=np.float64)
         else:
@@ -75,8 +82,12 @@ class ContDpoaeResult:
             num_block_samples, samplerate
         ).astype(np.float64)
         t_avg = np.arange(num_block_samples) / samplerate * 1E3
-        if self.raw_averaged.size:
+        if self.averaged.shape:
+            axes[1].plot(t_avg, self.averaged, linewidth=0.5)
+            axes[1].set_ylabel('Amp. (muPa)')
+        elif self.raw_averaged.shape:
             axes[1].plot(t_avg, self.raw_averaged, linewidth=0.5)
+            axes[1].set_ylabel('Amp. (full scale)')
         if self.dpoae_spectrum.size:
             axes[2].plot(frequencies, self.dpoae_spectrum, linewidth=0.5)
             self.plot_markers(axes[2], frequencies)
@@ -90,7 +101,6 @@ class ContDpoaeResult:
         axes[1].set_xlim(0, t_avg[-1])
         axes[2].set_xlim(max(200, f_min), min(f_max, frequencies[-1]))
         axes[0].set_xlabel("Recording Time (s)")
-        axes[1].set_ylabel('Amp. (full scale)')
         axes[2].set_ylabel('L (dB SPL)')
         axes[2].set_xlabel('f (Hz)')
 
@@ -99,7 +109,7 @@ class ContDpoaeResult:
             f'L2: {self.recording["level2"]} dB SPL, '
             f'f2: {self.recording["f2"]} Hz'
         )
-        axes[1].set_title('DPOAE Spectrum')
+        axes[2].set_title('DPOAE Spectrum')
         fig.tight_layout()
         plt.show(block=block_loop)
 
@@ -255,6 +265,14 @@ class ContDpoaeProcessor(ContDpoaeResult):
             fdp,
             samplerate
         )
+
+        # With given micro transfer function, correct averaged signal
+        if self.mic_trans_fun is not None:
+            spec = np.fft.rfft(self.raw_averaged)
+            mic_tf = self.mic_trans_fun.get_interp_transfer_function(
+                num_samples=len(self.raw_averaged)
+            )
+            self.averaged = np.fft.irfft(spec / mic_tf)
 
         # compute spectrum
         spectrum = np.abs(spectral.cplx_spectrum(self.raw_averaged))

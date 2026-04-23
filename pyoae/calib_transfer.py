@@ -268,7 +268,7 @@ class OutputCalibration(BaseTransferFunction):
 
         return self._interp_amp_phase(
             freqs,
-            self.raw_freqs[idx],
+            self.raw_freqs,
             self.raw_amps[idx],
             self.raw_phases[idx],
         )

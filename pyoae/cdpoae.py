@@ -325,6 +325,9 @@ class DpoaeRecorder:
                 self.msrmt.hardware_data.get_unique_input_channels()[i]
             )
             recorded_signal = self.msrmt.get_recorded_signal(input_channel)
+            # When recording was cancelled, skip saving.
+            if not recorded_signal.size:
+                continue
             processor = self.msrmt_info[i].dpoae_processor
             if processor is not None:
                 raw_averaged = processor.raw_averaged

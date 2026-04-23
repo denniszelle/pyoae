@@ -249,8 +249,6 @@ class PulseDpoaeRecorder:
             block_duration
         )
 
-        self.dpoae_processor = None
-
     def record(self) -> None:
         """Starts the recording."""
         self.logger.info("Starting recording...")
@@ -338,6 +336,9 @@ class PulseDpoaeRecorder:
                 self.msrmt.hardware_data.get_unique_input_channels()[i]
             )
             recorded_signal = self.msrmt.get_recorded_signal(input_channel)
+            # When recording was cancelled, skip saving.
+            if not recorded_signal.size:
+                continue
             if msrmt_info_i.dpoae_processor is not None:
                 raw_avg = msrmt_info_i.dpoae_processor.raw_averaged
                 avg = msrmt_info_i.dpoae_processor.dpoae_signal

@@ -263,7 +263,7 @@ class ContDpoaeProcessor(ContDpoaeResult):
             mic_tf = self.mic_trans_fun.get_interp_transfer_function(
                 num_samples=len(self.raw_averaged)
             )
-            spectrum /= mic_tf
+            spectrum /= np.abs(mic_tf)
         spectrum = 20 * np.log10(spectrum/20)  # dB SPL
         self.dpoae_spectrum = spectrum
 

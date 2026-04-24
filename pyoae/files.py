@@ -17,17 +17,14 @@ import types
 import numpy as np
 
 from pyoae import calib_storage
-from pyoae.calib_storage import(
-    MicroCalibData,
-    SpeakerCalibData
-)
+from pyoae.calib_storage import MicroCalibData, SpeakerCalibData
 from pyoae import get_logger
 from pyoae import protocols
 from pyoae.device.device_config import DeviceConfig
 from pyoae.dsp.containers import (
     ContDpoaeRecording,
     DpoaeMsrmtData,
-    PulseDpoaeRecording
+    PulseDpoaeRecording,
 )
 
 log = get_logger(__name__)
@@ -105,9 +102,7 @@ def load_device_config(file_path: str) -> None:
         log.error('Failed to load device configuration from %s', file_path)
 
 
-def load_micro_calib(
-    file_path: str | Path
-) -> MicroCalibData | None:
+def load_micro_calib(file_path: str | Path) -> MicroCalibData | None:
     """Load microphone calibration data from a JSON file.
 
     Reads a JSON file containing microphone calibration information and
@@ -203,14 +198,14 @@ def load_csv_output_calib(file_path: str) -> protocols.CalibMsrmtDef | None:
         'frequencies': data[:, 0].astype(float),
         'phases': data[:, 1].astype(float),
         'amplitudes': data[:, 2].astype(float),
-        'cluster_idc': data[:, 3].astype(int)
+        'cluster_idc': data[:, 3].astype(int),
     }
     return msrmt_params
 
 
 def load_output_calib_protocol(
-    file_path: str
-) -> (protocols.CalibMsrmtParams | protocols.CalibMsrmtDef | None):
+    file_path: str,
+) -> protocols.CalibMsrmtParams | protocols.CalibMsrmtDef | None:
     """Load an output calibration protocol from a CSV or JSON file.
 
     This function determines the file type based on the extension:
@@ -313,7 +308,7 @@ def load_soae_protocol(file_path: str | None = None) -> protocols.MsrmtParams:
 
 
 def load_dpoae_protocol(
-    file_path: str
+    file_path: str,
 ) -> list[protocols.DpoaeMsrmtParams] | list[list[protocols.DpoaeMsrmtParams]]:
     """Load a DPOAE measurement protocol from a JSON file.
 
@@ -337,7 +332,7 @@ def load_dpoae_protocol(
 
 
 def load_pulsed_dpoae_protocol(
-    file_path: str
+    file_path: str,
 ) -> list[protocols.PulseDpoaeMsrmtParams]:
     """Load a pulsed DPOAE measurement protocol from a JSON file.
 

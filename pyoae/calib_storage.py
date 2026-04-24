@@ -65,6 +65,7 @@ class SpeakerCalibData(TypedDict):
 
     Container is compatible with JSON export.
     """
+
     date: str
     """Date the output calibration was performed"""
 
@@ -90,13 +91,13 @@ def get_empty_micro_calib_data() -> MicroCalibData:
         'date': '',
         'ref_frequency': 1000.0,
         'sensitivity': 1,
-        'calib_type': 2
+        'calib_type': 2,
     }
     t: MicroTransferFunData = {
         'date': '',
         'frequencies': [1.0, 20000.0],
         'amplitudes': [1.0, 1.0],
-        'phases': [0.0, 0.0]
+        'phases': [0.0, 0.0],
     }
     d: MicroCalibData = {
         'doc_type': '',
@@ -105,7 +106,7 @@ def get_empty_micro_calib_data() -> MicroCalibData:
         'model': '',
         'side': '',
         'abs_calibration': a,
-        'transfer_function': t
+        'transfer_function': t,
     }
     return d
 
@@ -118,6 +119,6 @@ def get_empty_speaker_calib_data() -> SpeakerCalibData:
         'input_channels': [],
         'frequencies': [],
         'max_out': [],
-        'phase': []
+        'phase': [],
     }
     return d

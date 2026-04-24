@@ -13,10 +13,10 @@ import numpy.typing as npt
 from scipy import interpolate
 
 from pyoae import get_logger
-from pyoae.calib_storage import(
+from pyoae.calib_storage import (
     AbsCalibData,
     MicroTransferFunData,
-    SpeakerCalibData
+    SpeakerCalibData,
 )
 from pyoae.device.device_config import DeviceConfig
 
@@ -45,7 +45,7 @@ class BaseTransferFunction(ABC):
     def _get_freq_grid(
         self,
         frequencies_ip: npt.NDArray[np.float32] | None,
-        num_samples: int | None
+        num_samples: int | None,
     ) -> npt.NDArray[np.float32]:
         """Return a frequency grid for interpolation.
 
@@ -93,16 +93,15 @@ class BaseTransferFunction(ABC):
         amp_ip = self.interpolate_tf(intep_freqs, raw_freqs, raw_amps)
         phase_ip = self.interpolate_tf(intep_freqs, raw_freqs, raw_phases)
 
-        return (
-            np.array(amp_ip, dtype=np.complex64)
-            * np.exp(1j * phase_ip, dtype=np.complex64)
+        return np.array(amp_ip, dtype=np.complex64) * np.exp(
+            1j * phase_ip, dtype=np.complex64
         )
 
     def interpolate_tf(
         self,
         interp_freqs: npt.NDArray[np.float32],
         raw_freqs: npt.NDArray[np.float32],
-        raw_values: npt.NDArray[np.float32]
+        raw_values: npt.NDArray[np.float32],
     ) -> npt.NDArray[np.float32]:
         """Interpolate a transfer function onto new frequency values
 
@@ -122,10 +121,7 @@ class BaseTransferFunction(ABC):
 
         """
         amp_spline = interpolate.CubicSpline(
-            raw_freqs,
-            raw_values,
-            bc_type='natural',
-            extrapolate=False
+            raw_freqs, raw_values, bc_type='natural', extrapolate=False
         )
         values_ip = amp_spline(interp_freqs)
         values_ip[interp_freqs < raw_freqs[0]] = raw_values[0]
@@ -150,7 +146,7 @@ class MicroTransferFunction(BaseTransferFunction):
         self,
         abs_calib: AbsCalibData,
         trans_fun: MicroTransferFunData,
-        log: Logger | None = None
+        log: Logger | None = None,
     ) -> None:
 
         self.raw_freqs = np.array(trans_fun['frequencies'], np.float32)
@@ -164,7 +160,7 @@ class MicroTransferFunction(BaseTransferFunction):
     def get_interp_transfer_function(
         self,
         frequencies_ip: npt.NDArray[np.float32] | None = None,
-        num_samples: int | None = None
+        num_samples: int | None = None,
     ) -> npt.NDArray[np.complex64]:
         """Return the interpolated microphone transfer function.
 
@@ -231,9 +227,7 @@ class OutputCalibration(BaseTransferFunction):
     """Time stamp of output calibration."""
 
     def __init__(
-        self,
-        calib_data: SpeakerCalibData,
-        log: Logger | None = None
+        self, calib_data: SpeakerCalibData, log: Logger | None = None
     ) -> None:
         self.raw_freqs = np.array(calib_data['frequencies'], np.float32)
         self.raw_amps = np.array(calib_data['max_out'], np.float32)
@@ -290,13 +284,11 @@ class OutputCalibration(BaseTransferFunction):
 
         if f < np.min(self.raw_freqs) or f > np.max(self.raw_freqs):
             self.logger.warning(
-                'Stimulus frequency %.2f Hz outside calibrated boundaries.',
-                f
+                'Stimulus frequency %.2f Hz outside calibrated boundaries.', f
             )
 
         amp = self.get_interp_transfer_function(
-            ch,
-            np.asarray([f], np.float32)
+            ch, np.asarray([f], np.float32)
         )
         return float(np.abs(amp[0]))
 

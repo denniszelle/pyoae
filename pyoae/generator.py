@@ -13,7 +13,11 @@ from pyoae import get_logger
 from pyoae.calib_transfer import OutputCalibration
 from pyoae.device.device_config import DeviceConfig
 from pyoae.dsp import math
-from pyoae.protocols import DpoaeMsrmtParams, PulseDpoaeMsrmtParams, PulseStimulus
+from pyoae.protocols import (
+    DpoaeMsrmtParams,
+    PulseDpoaeMsrmtParams,
+    PulseStimulus,
+)
 
 SYNC_CROSS: Final[int] = 10
 """Number of minimum zero crossings in sync signal."""
@@ -54,9 +58,7 @@ def short_pulse_half_width(f2: float) -> float:
 
 
 def create_pulse_mask(
-    block_duration: float,
-    pulse: PulseStimulus,
-    t_hw_sp: float
+    block_duration: float, pulse: PulseStimulus, t_hw_sp: float
 ) -> PulseStimulus:
     """Create a mask for a pulsed primary tone.
 
@@ -78,8 +80,8 @@ def create_pulse_mask(
     t_on = pulse['t_on'] * 1E-3
     if pulse['is_short_pulse']:
         # scale duration and ramps as short pulse
-        pulse_hw = (
-            pulse['duration'] - 0.5 * (pulse['t_fall'] + pulse['t_rise'])
+        pulse_hw = pulse['duration'] - 0.5 * (
+            pulse['t_fall'] + pulse['t_rise']
         )
         pulse_scale = t_hw_sp / pulse_hw
         t_rise = pulse['t_rise'] * 1E-3 * pulse_scale
@@ -101,14 +103,12 @@ def create_pulse_mask(
         't_fall': t_fall,
         't_on': t_on,
         'duration': duration,
-        'is_short_pulse': pulse['is_short_pulse']
+        'is_short_pulse': pulse['is_short_pulse'],
     }
 
 
 def create_pulse_pattern(
-    pulse: PulseStimulus,
-    f: float,
-    phi: float
+    pulse: PulseStimulus, f: float, phi: float
 ) -> npt.NDArray[np.float32]:
     """Generate a pulsed sinusoidal waveform with unity amplitude.
 
@@ -155,7 +155,7 @@ def create_ptpv_signals(
     num_segments: int = NUM_PTPV_SEGMENTS,
     output_calibration: OutputCalibration | None = None,
     output_channel: int | None = None,
-    phase_offset: float = 0.0
+    phase_offset: float = 0.0,
 ) -> list[npt.NDArray[np.float32]]:
     """Generate a list of PTPV signals.
 
@@ -189,14 +189,12 @@ def create_ptpv_signals(
     # create stimuli with phase shift
     for i in range(num_segments):
         pulse_pattern = create_pulse_pattern(
-            pulse_mask,
-            frequency,
-            i * phase_shift + phase_offset
+            pulse_mask, frequency, i * phase_shift + phase_offset
         )
 
         # move to appropriate position in signal template
         signal_template = np.zeros(num_block_samples, dtype=np.float32)
-        signal_template[idx_on:idx_on + num_pulse_samples] = pulse_pattern
+        signal_template[idx_on : idx_on + num_pulse_samples] = pulse_pattern
 
         if (
             DeviceConfig.enable_output_phase_calib
@@ -206,16 +204,13 @@ def create_ptpv_signals(
             # logger.info('Applying output calibration to pulsed signal.')
             signal_spec = np.fft.rfft(signal_template)
             freqs = np.fft.rfftfreq(
-                len(signal_template),
-                1 / DeviceConfig.sample_rate
+                len(signal_template), 1 / DeviceConfig.sample_rate
             )
             corr_spec = output_calibration.get_interp_transfer_function(
-                output_channel,
-                freqs,
-                num_block_samples
+                output_channel, freqs, num_block_samples
             )
             signal_template = np.real(
-                np.fft.irfft(signal_spec/corr_spec)
+                np.fft.irfft(signal_spec / corr_spec)
             ).astype(np.float32)
             maximum = max(maximum, max(signal_template))
         else:
@@ -236,7 +231,7 @@ def compute_pulse_amplitude(
     signals: list[npt.NDArray[np.float32]],
     pulse_mask: PulseStimulus,
     output_calibration: OutputCalibration,
-    output_channel: int
+    output_channel: int,
 ) -> float:
     """Compute the pulse energy in muPa RMS.
 
@@ -253,14 +248,16 @@ def compute_pulse_amplitude(
 
     bounds_ss = (
         int(
-            (pulse_mask['t_on'] + pulse_mask['t_rise']) *
-            DeviceConfig.sample_rate
+            (pulse_mask['t_on'] + pulse_mask['t_rise'])
+            * DeviceConfig.sample_rate
         ),
         int(
             (
-                pulse_mask['t_on'] + pulse_mask['duration'] -
-                pulse_mask['t_fall']
-            ) * DeviceConfig.sample_rate
+                pulse_mask['t_on']
+                + pulse_mask['duration']
+                - pulse_mask['t_fall']
+            )
+            * DeviceConfig.sample_rate
         ),
     )
     signal_amplitudes = []
@@ -269,7 +266,7 @@ def compute_pulse_amplitude(
             signal_i,
             output_calibration,
             output_channel,
-            DeviceConfig.sample_rate
+            DeviceConfig.sample_rate,
         )
         # For extremely short steady states, use maximum
         if bounds_ss[1] - bounds_ss[0] < 50:
@@ -277,7 +274,7 @@ def compute_pulse_amplitude(
         # Add RMS of steady state to signal amplitudes
         else:
             signal_amplitudes.append(
-                math.rms(speaker_sig_i[bounds_ss[0]:bounds_ss[1]])
+                math.rms(speaker_sig_i[bounds_ss[0] : bounds_ss[1]])
             )
 
     return np.mean(signal_amplitudes) * np.sqrt(2)
@@ -287,7 +284,7 @@ def compute_speaker_signal(
     raw_signal: npt.NDArray[np.float32],
     output_calibration: OutputCalibration,
     output_channel: int,
-    sample_rate: float
+    sample_rate: float,
 ) -> npt.NDArray[np.float32]:
     """Apply output calibration to a raw signal to compute the speaker output.
 
@@ -308,8 +305,7 @@ def compute_speaker_signal(
     raw_spec = np.fft.rfft(raw_signal)
     freqs = np.fft.rfftfreq(len(raw_signal), 1 / sample_rate)
     calib_spec = output_calibration.get_interp_transfer_function(
-        output_channel,
-        freqs
+        output_channel, freqs
     )
     speaker_spec = raw_spec * calib_spec
     return np.real(np.fft.irfft(speaker_spec)).astype(np.float32)
@@ -336,9 +332,7 @@ class ContDpoaeStimulus(DpoaeStimulus):
     """Container for continuous DPOAE primary tones."""
 
     def calculate_frequencies(
-        self,
-        msrmt_params: DpoaeMsrmtParams,
-        block_duration: float
+        self, msrmt_params: DpoaeMsrmtParams, block_duration: float
     ) -> None:
         """Compute primary-tone frequencies f1 and f2 for cDPOAE measurements.
 
@@ -375,7 +369,7 @@ class ContDpoaeStimulus(DpoaeStimulus):
         self,
         num_block_samples: int,
         output_channels: list[int],
-        output_calibration: OutputCalibration | None = None
+        output_calibration: OutputCalibration | None = None,
     ) -> tuple[npt.NDArray[np.float32], npt.NDArray[np.float32]]:
         """Generate primary-tone signals for continuous DPOAE acquisition.
 
@@ -401,23 +395,17 @@ class ContDpoaeStimulus(DpoaeStimulus):
         if output_calibration is None:
             # No calibration for output channels available.
             amplitude1, amplitude2 = calculate_full_scale_amplitudes(
-                self.level2,
-                self.level1
+                self.level2, self.level1
             )
         else:
             pressure1, pressure2 = calculate_pressure_amplitudes(
-                self.level2,
-                self.level1
+                self.level2, self.level1
             )
             amplitude1 = output_calibration.pressure_to_full_scale(
-                output_channels[0],
-                pressure1,
-                self.f1
+                output_channels[0], pressure1, self.f1
             )
             amplitude2 = output_calibration.pressure_to_full_scale(
-                output_channels[1],
-                pressure2,
-                self.f2
+                output_channels[1], pressure2, self.f2
             )
             logger.info('Setting output amplitudes for DPOAE acquisition:')
             logger.info('p1: %.1f muPa (%.6f re FS).', pressure1, amplitude1)
@@ -439,26 +427,26 @@ class ContDpoaeStimulus(DpoaeStimulus):
                 output_calibration.get_interp_transfer_function(
                     output_channels[0],
                     np.asarray([self.f1]),
-                    num_block_samples
+                    num_block_samples,
                 )
             )[0]
             phase_shift2 = np.angle(
                 output_calibration.get_interp_transfer_function(
                     output_channels[1],
                     np.asarray([self.f2]),
-                    num_block_samples
+                    num_block_samples,
                 )
             )[0]
         else:
             phase_shift1 = 0.0
             phase_shift2 = 0.0
 
-        stimulus1 = (
-            amplitude1 * np.sin(2 * np.pi * self.f1 * t - phase_shift1).astype(np.float32)
-        )
-        stimulus2 = (
-            amplitude2 * np.sin(2 * np.pi * self.f2 * t - phase_shift2).astype(np.float32)
-        )
+        stimulus1 = amplitude1 * np.sin(
+            2 * np.pi * self.f1 * t - phase_shift1
+        ).astype(np.float32)
+        stimulus2 = amplitude2 * np.sin(
+            2 * np.pi * self.f2 * t - phase_shift2
+        ).astype(np.float32)
         return (stimulus1, stimulus2)
 
 
@@ -474,8 +462,7 @@ class PulseDpoaeStimulus(DpoaeStimulus):
     logger: Logger
 
     def calculate_frequencies(
-        self,
-        msrmt_params: PulseDpoaeMsrmtParams
+        self, msrmt_params: PulseDpoaeMsrmtParams
     ) -> None:
         """Calculate primary-tone frequencies for a pulsed DPOAE stimulus.
 
@@ -508,9 +495,7 @@ class PulseDpoaeStimulus(DpoaeStimulus):
         self.logger.info('  f2/f1 = %.3f', self.f2 / self.f1)
 
     def create_stimulus_mask(
-        self,
-        block_duration: float,
-        msrmt_params: PulseDpoaeMsrmtParams
+        self, block_duration: float, msrmt_params: PulseDpoaeMsrmtParams
     ) -> None:
         """Create stimulus masks for pulsed primary-tone pulse DPOAE signals.
 
@@ -528,14 +513,10 @@ class PulseDpoaeStimulus(DpoaeStimulus):
         f1_pulse = msrmt_params['f1_pulse']
         f2_pulse = msrmt_params['f2_pulse']
         self.f1_pulse_mask = create_pulse_mask(
-            block_duration,
-            f1_pulse,
-            t_hw_sp
+            block_duration, f1_pulse, t_hw_sp
         )
         self.f2_pulse_mask = create_pulse_mask(
-            block_duration,
-            f2_pulse,
-            t_hw_sp
+            block_duration, f2_pulse, t_hw_sp
         )
         self.logger.debug('f1 pulse mask: %s.', self.f1_pulse_mask)
         self.logger.debug('f2 pulse mask: %s.', self.f2_pulse_mask)
@@ -571,7 +552,7 @@ class PulseDpoaeStimulus(DpoaeStimulus):
             num_block_samples,
             num_segments=NUM_PTPV_SEGMENTS,
             output_calibration=output_calibration,
-            output_channel=output_channels[0]
+            output_channel=output_channels[0],
         )
         f2_stimuli = create_ptpv_signals(
             self.f2_pulse_mask,
@@ -580,14 +561,13 @@ class PulseDpoaeStimulus(DpoaeStimulus):
             num_block_samples,
             num_segments=NUM_PTPV_SEGMENTS,
             output_calibration=output_calibration,
-            output_channel=output_channels[1]
+            output_channel=output_channels[1],
         )
 
         if output_calibration is None:
             # No calibration for output channels available.
             amplitude1, amplitude2 = calculate_full_scale_amplitudes(
-                self.level2,
-                self.level1
+                self.level2, self.level1
             )
 
             # Verify output amplitudes
@@ -597,8 +577,7 @@ class PulseDpoaeStimulus(DpoaeStimulus):
         else:
 
             pressure1, pressure2 = calculate_pressure_amplitudes(
-                self.level2,
-                self.level1
+                self.level2, self.level1
             )
 
             # New version with tf calibration
@@ -606,14 +585,14 @@ class PulseDpoaeStimulus(DpoaeStimulus):
                 f1_stimuli,
                 self.f1_pulse_mask,
                 output_calibration,
-                output_channels[0]
+                output_channels[0],
             )
 
             max_amplitude2 = compute_pulse_amplitude(
                 f2_stimuli,
                 self.f2_pulse_mask,
                 output_calibration,
-                output_channels[1]
+                output_channels[1],
             )
 
             amplitude1 = check_output_limit(pressure1 / max_amplitude1)
@@ -674,7 +653,7 @@ def calculate_pt1_level(msrmt_params: DpoaeMsrmtParams) -> float:
     if msrmt_params['level1'] is None:
         # as first approximation, use Kummer et al. 1998
         # TODO: add other rules
-        #level1 = 0.4 * msrmt_params['level2'] + 39
+        # level1 = 0.4 * msrmt_params['level2'] + 39
         # Kempa et al. 2025
         level1 = 0.5 * msrmt_params['level2'] + 35
     else:
@@ -705,26 +684,24 @@ def calculate_full_scale_amplitudes(
     if level1 > 0:
         logger.warning(
             'Value %.2f dBFS for output level 1 exceeds maximum of 0 dBFS.',
-            level1
+            level1,
         )
         # use an arbitrary save fallback value
         level1 = -20.0
         logger.warning(
-            'Using fallback output level %.2f dBFS instead.',
-            level1
+            'Using fallback output level %.2f dBFS instead.', level1
         )
         logger.warning('Please check protocol and calibration files.')
 
     if level2 > 0:
         logger.warning(
             'Value %.2f dBFS for output level 2 exceeds maximum of 0 dBFS.',
-            level2
+            level2,
         )
         # use an arbitrary save fallback value
         level2 = -20.0
         logger.warning(
-            'Using fallback output level %.2f dBFS instead.',
-            level2
+            'Using fallback output level %.2f dBFS instead.', level2
         )
         logger.warning('Please check protocol and calibration files.')
 
@@ -741,8 +718,7 @@ def calculate_full_scale_amplitudes(
 
 def calculate_pressure_amplitudes(
     level2: float, level1: float
-) -> tuple[float,
-                                                          float]:
+) -> tuple[float, float]:
     """Calculates peak pressure amplitudes from dB SPL levels.
 
     Args:
@@ -775,11 +751,11 @@ def check_output_limit(peak_amplitude: float) -> float:
         logger.warning(
             'Output amplitude %.5f exceeds maximum of %.2f re FS.',
             peak_amplitude,
-            DeviceConfig.max_digital_output
+            DeviceConfig.max_digital_output,
         )
         logger.warning(
             'Output amplitude set to %.2f re FS.',
-            DeviceConfig.max_digital_output
+            DeviceConfig.max_digital_output,
         )
         return DeviceConfig.max_digital_output
     return peak_amplitude

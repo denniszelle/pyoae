@@ -98,7 +98,7 @@ class DpoaeRecorder:
         subject: str = '',
         ear: list[str] | None = None,
         non_interactive: bool = False,
-        log: Logger | None = None
+        log: Logger | None = None,
     ) -> None:
         """Creates a DPOAE recorder for given measurement parameters."""
 
@@ -120,7 +120,7 @@ class DpoaeRecorder:
                 'Invalid number of output channels %s '
                 'for number of measurements %s.',
                 len(output_channels),
-                len(msrmt_params)
+                len(msrmt_params),
             )
             self.msrmt = None
             return
@@ -133,10 +133,9 @@ class DpoaeRecorder:
             }
         )
 
-        n_in_channels = max(
-            *active_in_channels,
-            DeviceConfig.sync_channels[1]
-        ) + 1
+        n_in_channels = (
+            max(*active_in_channels, DeviceConfig.sync_channels[1]) + 1
+        )
         n_out_channels = max(output_channels) + 1
         hw_data = HardwareData(
             n_in_channels,
@@ -144,7 +143,7 @@ class DpoaeRecorder:
             DeviceConfig.input_device,
             DeviceConfig.output_device,
             output_channels,
-            get_input_channels(output_channels)
+            get_input_channels(output_channels),
         )
 
         # Initialize signals
@@ -175,15 +174,11 @@ class DpoaeRecorder:
 
             if block_duration != msrmt_params_i['block_duration']:
                 self.logger.warning(
-                    'Block duration adjusted to %.2f ms',
-                    block_duration * 1E3
+                    'Block duration adjusted to %.2f ms', block_duration * 1E3
                 )
 
             stimulus = ContDpoaeStimulus(
-                f1=0.0,
-                f2=0.0,
-                level1=0.0,
-                level2=0.0
+                f1=0.0, f2=0.0, level1=0.0, level2=0.0
             )
             self.generate_output_signals(
                 stimulus,
@@ -201,7 +196,7 @@ class DpoaeRecorder:
                 input_trans_fun=mic_trans_fun_i,
                 f1=stimulus.f1,
                 f2=stimulus.f2,
-                num_recorded_blocks=0
+                num_recorded_blocks=0,
             )
             self.msrmt_info.append(
                 ContDpoaeMsrmtInfo(
@@ -210,18 +205,24 @@ class DpoaeRecorder:
                     None,
                     ear[i],
                     num_total_recording_samples,
-                    num_block_samples
+                    num_block_samples,
                 )
             )
 
         # Check for unequal sample sizes:
-        if not (all(
-            (obj.num_total_recording_samples ==
-             self.msrmt_info[0].num_total_recording_samples)
+        if not (
+            all(
+                (
+                    obj.num_total_recording_samples
+                    == self.msrmt_info[0].num_total_recording_samples
+                )
                 for obj in self.msrmt_info
-        ) and all(
-            (obj.num_block_samples == self.msrmt_info[0].num_block_samples)
-                for obj in self.msrmt_info)):
+            )
+            and all(
+                (obj.num_block_samples == self.msrmt_info[0].num_block_samples)
+                for obj in self.msrmt_info
+            )
+        ):
             self.logger.error(
                 'Recording duration does not match. Skipping measurement.'
             )
@@ -233,7 +234,7 @@ class DpoaeRecorder:
             recording_duration,
             num_total_recording_samples,
             num_block_samples,
-            DeviceConfig.device_buffer_size
+            DeviceConfig.device_buffer_size,
         )
         self.msrmt = SyncMsrmt(rec_data, hw_data, self.signals, block_duration)
 
@@ -275,12 +276,11 @@ class DpoaeRecorder:
                 'recorded_sync': self.msrmt.live_msrmt_data.sync_recorded,
                 'out_ch': output_channels_i,
                 'in_ch': input_channel,
-                'msrmt_idx': i
+                'msrmt_idx': i,
             }
 
             self.msrmt_info[i].dpoae_processor = ContDpoaeProcessor(
-                recording,
-                mic=msrmt_info_i.msrmt_ctx.input_trans_fun
+                recording, mic=msrmt_info_i.msrmt_ctx.input_trans_fun
             )
 
             processor = self.msrmt_info[i].dpoae_processor
@@ -352,7 +352,7 @@ class DpoaeRecorder:
                 recorded_sync=self.msrmt.live_msrmt_data.sync_recorded,
                 out_ch=output_channels_i,
                 in_ch=input_channel,
-                msrmt_idx=i
+                msrmt_idx=i,
             )
             self.logger.info('Saved measurement to %s.npz', file_save_path)
 
@@ -406,18 +406,10 @@ class DpoaeRecorder:
         )
         ramp = ramp.astype(np.float32)
 
-        self.signals[
-            output_channels[0]
-        ] = PeriodicRampSignal(
-            stimulus1,
-            num_total_recording_samples,
-            ramp
+        self.signals[output_channels[0]] = PeriodicRampSignal(
+            stimulus1, num_total_recording_samples, ramp
         )
 
-        self.signals[
-            output_channels[1]
-        ] = PeriodicRampSignal(
-            stimulus2,
-            num_total_recording_samples,
-            ramp
+        self.signals[output_channels[1]] = PeriodicRampSignal(
+            stimulus2, num_total_recording_samples, ramp
         )

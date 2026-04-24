@@ -74,7 +74,7 @@ class ProcessPlotter:
         num_samples: int,
         samplerate: float,
         msrmt_events: MsrmtEvents,
-        interval_length: float=0.08,
+        interval_length: float = 0.08,
     ) -> None:
         self.record_idx_share = record_idx_share
         self.num_samples = num_samples
@@ -107,20 +107,22 @@ class ProcessPlotter:
         with self.record_idx_share.get_lock():
             record_idx = self.record_idx_share.value
 
-        last_full_block_idx = (record_idx // self.display_samples) * self.display_samples
+        last_full_block_idx = (
+            record_idx // self.display_samples
+        ) * self.display_samples
         if record_idx > self.display_samples:
             interval = [
-                last_full_block_idx-self.display_samples,
-                last_full_block_idx
+                last_full_block_idx - self.display_samples,
+                last_full_block_idx,
             ]
             time_vec = None
         else:
             interval = [0, record_idx]
-            time_vec = np.arange(record_idx)/self.samplerate*1E3
+            time_vec = np.arange(record_idx) / self.samplerate * 1e3
 
         for i in range(len(self.shm)):
             try:
-                y = self.data[i][interval[0]:interval[1]]
+                y = self.data[i][interval[0] : interval[1]]
                 if time_vec is None:
                     self.lines[i].set_data(self.time_vec, y)
                 else:
@@ -145,7 +147,9 @@ class ProcessPlotter:
                 objects containing signal buffers to plot in real time.
         """
 
-        self.fig, _axes = plt.subplots(len(shared_memories), 1, figsize=(10, 6))
+        self.fig, _axes = plt.subplots(
+            len(shared_memories), 1, figsize=(10, 6)
+        )
 
         # Convert to 1D list
         if len(shared_memories) == 1:
@@ -160,20 +164,22 @@ class ProcessPlotter:
         for i, shared_memory_i in enumerate(shared_memories):
             self.shm.append(SharedMemory(name=shared_memory_i.name))
             self.data.append(
-                np.ndarray((self.num_samples,), dtype=np.float32, buffer=self.shm[-1].buf)
+                np.ndarray(
+                    (self.num_samples,),
+                    dtype=np.float32,
+                    buffer=self.shm[-1].buf,
+                )
             )
 
             self.lines.append(axes[i].plot([], [])[0])
-            axes[i].set_xlim(0, self.display_samples/self.samplerate*1E3)
+            axes[i].set_xlim(0, self.display_samples / self.samplerate * 1E3)
             axes[i].set_ylim(-1.0, 1.0)
             axes[i].set_ylabel('Amplitude (full scale)')
 
         axes[0].set_title('Recorded Waveform')
         axes[-1].set_xlabel('Time (ms)')
 
-        self.fig.canvas.mpl_connect(
-            'close_event', self._on_close
-        )
+        self.fig.canvas.mpl_connect('close_event', self._on_close)
 
         time = self.fig.canvas.new_timer(
             interval=int(DeviceConfig.update_interval)
@@ -205,20 +211,14 @@ class LivePlotProcess:
         num_samples: int,
         fs: float,
         msrmt_events: MsrmtEvents,
-        interval: float=0.08
+        interval: float = 0.08,
     ) -> None:
 
         self.plotter = ProcessPlotter(
-            record_idx_share,
-            num_samples,
-            fs,
-            msrmt_events,
-            interval
+            record_idx_share, num_samples, fs, msrmt_events, interval
         )
         self.plot_process = mp.Process(
-            target=self.plotter.run,
-            args=(shm,),
-            daemon=True
+            target=self.plotter.run, args=(shm,), daemon=True
         )
         self.plot_process.start()
 

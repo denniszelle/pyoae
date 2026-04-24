@@ -38,9 +38,9 @@ def max_ref_pressure(ref_in: float, ref_db_spl: float = 94.0) -> float:
     Notes:
         Both input values are treated as RMS values.
     """
-    y = 10**(ref_in/20)  # this is RMS
-    x = 20 * 10**(ref_db_spl/20)  # this is muPa RMS
-    return x/y
+    y = 10 ** (ref_in / 20)  # this is RMS
+    x = 20 * 10 ** (ref_db_spl / 20)  # this is muPa RMS
+    return x / y
 
 
 class AbsCalibRecorder(SoaeRecorder):
@@ -90,14 +90,11 @@ class AbsCalibRecorder(SoaeRecorder):
     def save_recording(self) -> None:
         """Stores the measurement data in binary file."""
         # Save measurement to file.
-        save_path = os.path.join(
-            os.getcwd(),
-            'measurements'
-        )
+        save_path = os.path.join(os.getcwd(), 'measurements')
         os.makedirs(save_path, exist_ok=True)
         cur_time = datetime.now()
         time_stamp = cur_time.strftime("%y%m%d-%H%M%S")
-        file_name = 'abs_calib_msrmt_'+ time_stamp
+        file_name = 'abs_calib_msrmt_' + time_stamp
         save_path = os.path.join(save_path, file_name)
         recorded_signal, spectrum = self.get_results(0)
         input_channel = self.msrmt.hardware_data.get_unique_input_channels()[0]
@@ -106,6 +103,6 @@ class AbsCalibRecorder(SoaeRecorder):
             spectrum=spectrum,
             recorded_signal=recorded_signal,
             samplerate=DeviceConfig.sample_rate,
-            in_ch = input_channel
+            in_ch=input_channel,
         )
         self.logger.info("Calibration saved to %s.", save_path)

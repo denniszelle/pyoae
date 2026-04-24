@@ -9,7 +9,6 @@ from typing import (
 import numpy as np
 import numpy.typing as npt
 
-
 OUTPUT_CALIB_KEYS: Final[list[str]] = [
     'block_duration',
     'num_averaging_blocks',
@@ -17,7 +16,7 @@ OUTPUT_CALIB_KEYS: Final[list[str]] = [
     'f_start',
     'f_stop',
     'lines_per_octave',
-    'amplitude_per_line'
+    'amplitude_per_line',
 ]
 """Necessary keys for output calibration"""
 
@@ -120,10 +119,7 @@ class CalibMsrmtDef(MsrmtParams):
 
 def get_default_soae_msrmt_params() -> MsrmtParams:
     """Returns default SOAE measurement parameters."""
-    d: MsrmtParams = {
-        'block_duration': 1.0,
-        'num_averaging_blocks': 15
-    }
+    d: MsrmtParams = {'block_duration': 1.0, 'num_averaging_blocks': 15}
     return d
 
 
@@ -136,13 +132,13 @@ def get_default_calib_msrmt_params() -> CalibMsrmtParams:
         'f_start': 200.0,
         'f_stop': 14000.0,
         'lines_per_octave': 18.1,
-        'amplitude_per_line': 0.004
+        'amplitude_per_line': 0.004,
     }
     return d
 
 
 def get_custom_calib_msrmt_params(
-    calib_params: dict[str, Any]
+    calib_params: dict[str, Any],
 ) -> CalibMsrmtParams | None:
     """Returns file-loaded parameters for output calibration."""
 
@@ -157,6 +153,6 @@ def get_custom_calib_msrmt_params(
         'f_start': calib_params['f_start'],
         'f_stop': calib_params['f_stop'],
         'lines_per_octave': calib_params['lines_per_octave'],
-        'amplitude_per_line': calib_params['amplitude_per_line']
+        'amplitude_per_line': calib_params['amplitude_per_line'],
     }
     return d

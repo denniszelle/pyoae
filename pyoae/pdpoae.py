@@ -45,7 +45,6 @@ from pyoae.sync import (
     SyncMsrmt,
 )
 
-
 logger = get_logger()
 
 
@@ -99,7 +98,7 @@ class PulseDpoaeRecorder:
         subject: str = '',
         ear: list[str] | None = None,
         non_interactive: bool = False,
-        log: Logger | None = None
+        log: Logger | None = None,
     ) -> None:
         """Creates a DPOAE recorder for given measurement parameters."""
         self.logger = log or get_logger()
@@ -115,25 +114,27 @@ class PulseDpoaeRecorder:
         block_duration = 0
         recording_duration = 0.0
 
-        if len(output_channels) < 2*len(msrmt_params):
+        if len(output_channels) < 2 * len(msrmt_params):
             self.logger.error(
                 'Invalid number of output channels %s '
                 'for number of measurements %s.',
                 len(output_channels),
-                len(msrmt_params)
+                len(msrmt_params),
             )
             self.msrmt = None
             return
 
-        active_in_channels = list({
-            b for a, b in DeviceConfig.output_input_mapping
-            if a in output_channels
-        })
+        active_in_channels = list(
+            {
+                b
+                for a, b in DeviceConfig.output_input_mapping
+                if a in output_channels
+            }
+        )
 
-        n_in_channels = max(
-            *active_in_channels,
-            DeviceConfig.sync_channels[1]
-        ) + 1
+        n_in_channels = (
+            max(*active_in_channels, DeviceConfig.sync_channels[1]) + 1
+        )
         n_out_channels = max(output_channels) + 1
         hw_data = HardwareData(
             n_in_channels,
@@ -141,11 +142,12 @@ class PulseDpoaeRecorder:
             DeviceConfig.input_device,
             DeviceConfig.output_device,
             output_channels,
-            get_input_channels(output_channels)
+            get_input_channels(output_channels),
         )
 
         self.signals = [
-            PeriodicSignal() for _ in range(hw_data.get_stream_output_channels())
+            PeriodicSignal()
+            for _ in range(hw_data.get_stream_output_channels())
         ]
 
         for i, msrmt_params_i in enumerate(msrmt_params):
@@ -172,16 +174,12 @@ class PulseDpoaeRecorder:
 
             if block_duration != msrmt_params_i["block_duration"]:
                 self.logger.warning(
-                    'Block duration adjusted to %.2f ms.',
-                    block_duration * 1E3
+                    'Block duration adjusted to %.2f ms.', block_duration * 1E3
                 )
 
             # stimulus will be set during `generate_output_signals``
             stimulus = PulseDpoaeStimulus(
-                f1=0.0,
-                f2=0.0,
-                level1=0.0,
-                level2=0.0
+                f1=0.0, f2=0.0, level1=0.0, level2=0.0
             )
             self.generate_output_signals(
                 stimulus,
@@ -190,7 +188,7 @@ class PulseDpoaeRecorder:
                 num_block_samples,
                 num_total_recording_samples,
                 output_channels_i,
-                out_calib=out_trans_fun
+                out_calib=out_trans_fun,
             )
             msrmt_ctx = DpoaeMsrmtContext(
                 fs=DeviceConfig.sample_rate,
@@ -199,7 +197,7 @@ class PulseDpoaeRecorder:
                 input_trans_fun=mic_trans_fun_i,
                 f1=stimulus.f1,
                 f2=stimulus.f2,
-                num_recorded_blocks=0
+                num_recorded_blocks=0,
             )
 
             self.msrmt_infos.append(
@@ -209,21 +207,24 @@ class PulseDpoaeRecorder:
                     None,
                     ear[i],
                     num_total_recording_samples,
-                    num_block_samples
+                    num_block_samples,
                 )
             )
 
         if not (
             all(
-            (
-                obj.num_total_recording_samples
-                == self.msrmt_infos[0].num_total_recording_samples
-            ) for obj in self.msrmt_infos
+                (
+                    obj.num_total_recording_samples
+                    == self.msrmt_infos[0].num_total_recording_samples
+                )
+                for obj in self.msrmt_infos
             )
-            and all((
-                obj.num_block_samples
-                == self.msrmt_infos[0].num_block_samples
-            ) for obj in self.msrmt_infos
+            and all(
+                (
+                    obj.num_block_samples
+                    == self.msrmt_infos[0].num_block_samples
+                )
+                for obj in self.msrmt_infos
             )
         ):
             self.logger.error(
@@ -232,22 +233,15 @@ class PulseDpoaeRecorder:
             self.msrmt = None
             return
 
-
-
         rec_data = RecordingData(
             DeviceConfig.sample_rate,
             recording_duration,
             num_total_recording_samples,
             num_block_samples,
-            DeviceConfig.device_buffer_size
+            DeviceConfig.device_buffer_size,
         )
 
-        self.msrmt = SyncMsrmt(
-            rec_data,
-            hw_data,
-            self.signals,
-            block_duration
-        )
+        self.msrmt = SyncMsrmt(rec_data, hw_data, self.signals, block_duration)
 
     def record(self) -> None:
         """Starts the recording."""
@@ -286,11 +280,10 @@ class PulseDpoaeRecorder:
                 'recorded_sync': self.msrmt.live_msrmt_data.sync_recorded,
                 'out_ch': output_channels_i,
                 'in_ch': input_channel,
-                'msrmt_idx': i
+                'msrmt_idx': i,
             }
             msrmt_info_i.dpoae_processor = PulseDpoaeProcessor(
-                recording,
-                msrmt_info_i.msrmt_ctx.input_trans_fun
+                recording, msrmt_info_i.msrmt_ctx.input_trans_fun
             )
             msrmt_info_i.dpoae_processor.process_msrmt()
             if not msrmt_info_i.msrmt_ctx.non_interactive:
@@ -306,10 +299,7 @@ class PulseDpoaeRecorder:
             self.logger.info('Skipping recording save.')
             return
 
-        save_path = os.path.join(
-            os.getcwd(),
-            'measurements'
-        )
+        save_path = os.path.join(os.getcwd(), 'measurements')
         os.makedirs(save_path, exist_ok=True)
         cur_time = datetime.now()
         time_stamp = cur_time.strftime("%y%m%d-%H%M%S")
@@ -343,23 +333,23 @@ class PulseDpoaeRecorder:
                 raw_avg = msrmt_info_i.dpoae_processor.raw_averaged
                 avg = msrmt_info_i.dpoae_processor.dpoae_signal
             else:
-                raw_avg = np.array(0,np.float64)
-                avg = np.array(0,np.float64)
+                raw_avg = np.array(0, np.float64)
+                avg = np.array(0, np.float64)
             np.savez(
                 file_save_path,
-                recorded_signal = recorded_signal,
-                samplerate = DeviceConfig.sample_rate,
-                f1 = msrmt_info_i.stimulus.f1,
-                f2 = msrmt_info_i.stimulus.f2,
-                level1 = msrmt_info_i.stimulus.level1,
-                level2 = msrmt_info_i.stimulus.level2,
-                num_block_samples = msrmt_info_i.msrmt_ctx.block_size,
-                recorded_sync = self.msrmt.live_msrmt_data.sync_recorded,
-                average = avg,
-                raw_average = raw_avg,
-                out_ch = output_channels_i,
-                in_ch = input_channel,
-                msrmt_idx = i,
+                recorded_signal=recorded_signal,
+                samplerate=DeviceConfig.sample_rate,
+                f1=msrmt_info_i.stimulus.f1,
+                f2=msrmt_info_i.stimulus.f2,
+                level1=msrmt_info_i.stimulus.level1,
+                level2=msrmt_info_i.stimulus.level2,
+                num_block_samples=msrmt_info_i.msrmt_ctx.block_size,
+                recorded_sync=self.msrmt.live_msrmt_data.sync_recorded,
+                average=avg,
+                raw_average=raw_avg,
+                out_ch=output_channels_i,
+                in_ch=input_channel,
+                msrmt_idx=i,
             )
             self.logger.info("Measurement saved to %s.npz", file_save_path)
 
@@ -371,7 +361,7 @@ class PulseDpoaeRecorder:
         num_block_samples: int,
         num_total_recording_samples: int,
         output_channels: list[int],
-        out_calib: OutputCalibration | None = None
+        out_calib: OutputCalibration | None = None,
     ) -> None:
         """Generate output signals for pulsed DPOAE playback.
 

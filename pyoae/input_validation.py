@@ -27,7 +27,7 @@ def validate_output_channels(output_channels: list[int]) -> bool:
     for output_channel_i in output_channels:
         if not (
             output_channel_i
-            in np.asarray(DeviceConfig.output_input_mapping)[:,0]
+            in np.asarray(DeviceConfig.output_input_mapping)[:, 0]
         ):
 
             logger.error(
@@ -62,8 +62,7 @@ def validate_msrmt_params(msrmt_params: list[T] | T) -> list[T]:
 
 
 def validate_mic_tfs(
-    micro_tfs: list[Any] | None,
-    msrmt_params: list[Any]
+    micro_tfs: list[Any] | None, msrmt_params: list[Any]
 ) -> bool:
     """Validate that number of microphone TFs matches measurement parameters.
 

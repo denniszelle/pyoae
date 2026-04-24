@@ -27,15 +27,12 @@ class Signal:
 
     def __init__(
         self,
-        signal_data: npt.NDArray[np.float32] = np.empty(0, dtype=np.float32)
+        signal_data: npt.NDArray[np.float32] = np.empty(0, dtype=np.float32),
     ) -> None:
         self.signal_data = signal_data
         self.num_signal_samples = len(signal_data)
 
-    def _get_zeros(
-        self,
-        signal_buffer: npt.NDArray[np.float32]
-    ) -> None:
+    def _get_zeros(self, signal_buffer: npt.NDArray[np.float32]) -> None:
         """Fills signal buffer with zeros."""
         signal_buffer[:] = 0
 
@@ -43,18 +40,18 @@ class Signal:
         self,
         start_idx: int,
         end_idx: int,
-        signal_buffer: npt.NDArray[np.float32]
+        signal_buffer: npt.NDArray[np.float32],
     ) -> tuple[int, bool]:
         """Writes data into the signal buffer and returns output finish flag."""
         if self.num_signal_samples == 0:
             self._get_zeros(signal_buffer)
-            return end_idx-start_idx, False
+            return end_idx - start_idx, False
 
         if end_idx < self.num_signal_samples:
             signal_buffer[:] = self.signal_data[start_idx:end_idx]
-            return end_idx-start_idx, False
+            return end_idx - start_idx, False
 
-        end_len = self.num_signal_samples-start_idx
+        end_len = self.num_signal_samples - start_idx
         signal_buffer[:end_len] = self.signal_data[start_idx:]
         return end_len, True
 
@@ -80,7 +77,7 @@ class PeriodicSignal(Signal):
     def __init__(
         self,
         signal_data: npt.NDArray[np.float32] = np.empty(0, dtype=np.float32),
-        num_total_samples: int = 0
+        num_total_samples: int = 0,
     ) -> None:
         super().__init__(signal_data)
         self.num_total_samples = num_total_samples
@@ -89,7 +86,7 @@ class PeriodicSignal(Signal):
         self,
         start_idx: int,
         end_idx: int,
-        signal_buffer: npt.NDArray[np.float32]
+        signal_buffer: npt.NDArray[np.float32],
     ) -> tuple[int, bool]:
         """Writes data into the data buffer and returns output finish flag
 
@@ -100,7 +97,7 @@ class PeriodicSignal(Signal):
         """
         if self.num_signal_samples == 0:
             self._get_zeros(signal_buffer)
-            return end_idx-start_idx, False
+            return end_idx - start_idx, False
 
         length = end_idx - start_idx
         start_mod = start_idx % self.num_signal_samples
@@ -108,17 +105,17 @@ class PeriodicSignal(Signal):
 
         if start_mod + length < self.num_signal_samples:
             # Single slice, no wraparound
-            signal_buffer[:] = self.signal_data[start_mod:start_mod + length]
-            return end_idx-start_idx, False
+            signal_buffer[:] = self.signal_data[start_mod : start_mod + length]
+            return end_idx - start_idx, False
         # Wraps around: concatenate tail and head
         tail = self.signal_data[start_mod:]
         if end_idx >= (self.num_total_samples - 1):
             # end of requested playback reached
-            signal_buffer[:len(tail)] = tail
+            signal_buffer[: len(tail)] = tail
             return len(tail), True
         head = self.signal_data[:end_mod]
         signal_buffer[:] = np.concatenate((tail, head))
-        return end_idx-start_idx, False
+        return end_idx - start_idx, False
 
     def set_total_samples(self, num_total_samples: int) -> None:
         """Sets the number of total samples of the periodic signal."""
@@ -138,7 +135,7 @@ class PeriodicRampSignal(PeriodicSignal):
         self,
         signal_data: npt.NDArray[np.float32] = np.empty(0, dtype=np.float32),
         num_total_samples: int = 0,
-        ramp: npt.NDArray[np.float32] = np.empty(0, dtype=np.float32)
+        ramp: npt.NDArray[np.float32] = np.empty(0, dtype=np.float32),
     ) -> None:
         super().__init__(signal_data, num_total_samples)
         self.ramp = ramp
@@ -148,20 +145,22 @@ class PeriodicRampSignal(PeriodicSignal):
         self,
         start_idx: int,
         end_idx: int,
-        signal_buffer: npt.NDArray[np.float32]
+        signal_buffer: npt.NDArray[np.float32],
     ) -> tuple[int, bool]:
         """Applies fade-in or fade-out and writes data into signal buffer"""
         if self.num_signal_samples == 0:
             self._get_zeros(signal_buffer)
-            return end_idx-start_idx, False
+            return end_idx - start_idx, False
 
-        samples_set, is_finished = super().get_data(start_idx, end_idx, signal_buffer)
+        samples_set, is_finished = super().get_data(
+            start_idx, end_idx, signal_buffer
+        )
 
         # Apply fade-in
         if start_idx < len(self.ramp):
             fade_len = min(end_idx, len(self.ramp)) - start_idx
             signal_buffer[:fade_len] *= self.ramp[
-                start_idx:start_idx + fade_len
+                start_idx : start_idx + fade_len
             ]
 
         # Apply fade-out
@@ -174,7 +173,7 @@ class PeriodicRampSignal(PeriodicSignal):
             # of output data was reached; i.e., the data
             # was trimmed in super().get_data(...)
             effective_len = min(ramp_len, available_len)
-            offset = end_idx-self.num_total_samples
+            offset = end_idx - self.num_total_samples
 
             if offset == 0:
                 buffer_slice = signal_buffer[-offset - effective_len :]

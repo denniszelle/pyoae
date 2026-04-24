@@ -17,29 +17,23 @@ from pyoae import files
 from pyoae import get_logger
 from pyoae.calib_storage import SpeakerCalibData
 
-from pyoae.calib_transfer import (
-    MicroTransferFunction,
-    OutputCalibration
-)
+from pyoae.calib_transfer import MicroTransferFunction, OutputCalibration
 from pyoae import converter
 from pyoae.device.device_config import DeviceConfig
 from pyoae.msrmt_context import MsrmtContext
 from pyoae.mt_generator import (
     MultiToneAnalyzer,
     MultiToneDefinition,
-    MultiToneResult
+    MultiToneResult,
 )
-from pyoae.protocols import (
-    CalibMsrmtParams,
-    CalibMsrmtDef
-)
+from pyoae.protocols import CalibMsrmtParams, CalibMsrmtDef
 from pyoae.signals import PeriodicSignal
 from pyoae.sync import (
     get_input_channels,
     HardwareData,
     RecordingData,
     SyncMsrmt,
-    MsrmtState
+    MsrmtState,
 )
 
 logger = get_logger(__name__)
@@ -128,12 +122,8 @@ def setup_offline_plot(
 
     # Type ignore to set known dimensions of 2
     _, axes = plt.subplots(
-        rows,
-        cols,
-        figsize=(10, 8),
-        sharex='col',
-        squeeze=False
-    ) # type: ignore
+        rows, cols, figsize=(10, 8), sharex='col', squeeze=False
+    )  # type: ignore
     axes: list[list[Axes]]
 
     sorted_input_channels = list(counter.keys())
@@ -173,7 +163,7 @@ def setup_offline_plot(
 def get_mt_results(
     sync_msrmt: SyncMsrmt,
     msrmt_ctx: MsrmtContext,
-    mt_definition: MultiToneDefinition
+    mt_definition: MultiToneDefinition,
 ) -> list[MultiToneResult]:
     """Processes data and returns spectra per output channels.
 
@@ -200,7 +190,7 @@ def get_mt_results(
 
         # Obtain an integer number of recorded blocks
         total_blocks = int(len(recorded_signal) / block_size)
-        block_data = recorded_signal[:total_blocks * block_size]
+        block_data = recorded_signal[: total_blocks * block_size]
         blocks = block_data.reshape(-1, block_size)
 
         if input_channel not in sync_msrmt.hardware_data.input_channels:
@@ -223,7 +213,9 @@ def get_mt_results(
 
         analyzer = MultiToneAnalyzer(
             mt_definition,
-            block_avg[i * channel_segment_size:(i + 1) * channel_segment_size],
+            block_avg[
+                i * channel_segment_size : (i + 1) * channel_segment_size
+            ],
             DeviceConfig.sample_rate,
         )
 
@@ -251,7 +243,7 @@ def get_log_frequency_ticks(f_min, f_max, bases=(1, 3, 5)):
     decade_min = int(np.floor(np.log10(f_min)))
     decade_max = int(np.ceil(np.log10(f_max)))
 
-    decades = 10**np.arange(decade_min, decade_max + 1)
+    decades = 10 ** np.arange(decade_min, decade_max + 1)
     ticks = np.array([b * d for d in decades for b in bases])
 
     return ticks[(ticks >= f_min) & (ticks <= f_max)]
@@ -260,7 +252,7 @@ def get_log_frequency_ticks(f_min, f_max, bases=(1, 3, 5)):
 def _prepare_plot_config(
     sync_msrmt: SyncMsrmt,
     msrmt_ctx: MsrmtContext,
-    mt_results: list[MultiToneResult]
+    mt_results: list[MultiToneResult],
 ) -> PlotConfig:
     """Create plot config containing meta information of the recorded data."""
 
@@ -274,7 +266,7 @@ def _prepare_plot_config(
         (f_min, f_max),
         sync_msrmt.hardware_data.output_channels,
         sync_msrmt.hardware_data.input_channels,
-        has_input_calib
+        has_input_calib,
     )
 
     input_channels = sync_msrmt.hardware_data.input_channels
@@ -294,8 +286,7 @@ def _prepare_plot_config(
 
 
 def _compute_bounds(
-    mt_results: list[MultiToneResult],
-    config: PlotConfig
+    mt_results: list[MultiToneResult], config: PlotConfig
 ) -> PlotBounds:
     """Compute x- and y-value boundaries for plots"""
 
@@ -317,12 +308,10 @@ def _compute_bounds(
     amp_max = converter.rms_mupa_to_db_spl(amp_max) + padding
 
     raw_y_min = min(
-        converter.rms_mupa_to_db_spl(raw_y_min),
-        config['ax_cmp_min']
+        converter.rms_mupa_to_db_spl(raw_y_min), config['ax_cmp_min']
     )
     raw_y_max = max(
-        converter.rms_mupa_to_db_spl(raw_y_max),
-        config['ax_cmp_max']
+        converter.rms_mupa_to_db_spl(raw_y_max), config['ax_cmp_max']
     )
 
     phase_min -= config['phase_padding']
@@ -357,7 +346,7 @@ def _apply_axis_formatting(
     axes: list[list[Axes]],
     j: int,
     config: PlotConfig,
-    bounds: PlotBounds
+    bounds: PlotBounds,
 ):
     """Apply axis formatting for plots."""
     ax.set_ylim(bounds['raw_y_min'], bounds['raw_y_max'] + config['padding'])
@@ -366,8 +355,7 @@ def _apply_axis_formatting(
     axes[-1][j].grid(True, which='both')
 
     ticks = get_log_frequency_ticks(
-        min(config['frequencies']),
-        max(config['frequencies'])
+        min(config['frequencies']), max(config['frequencies'])
     )
 
     axes[-1][j].set_xticks(ticks)
@@ -384,7 +372,7 @@ def _plot_single_channel(
     j: int,
     result: MultiToneResult,
     config: PlotConfig,
-    bounds: PlotBounds
+    bounds: PlotBounds,
 ):
     """Add plots for a single channel of an output calibration."""
 
@@ -430,7 +418,7 @@ def _plot_single_channel(
 def plot_offline(
     sync_msrmt: SyncMsrmt,
     msrmt_ctx: MsrmtContext,
-    mt_results: list[MultiToneResult]
+    mt_results: list[MultiToneResult],
 ) -> None:
     """Create offline plot after a output calibration measurement.
 
@@ -458,13 +446,7 @@ def plot_offline(
                 continue
 
             _plot_single_channel(
-                ax,
-                axes,
-                i,
-                j,
-                mt_results[output_idx],
-                config,
-                bounds
+                ax, axes, i, j, mt_results[output_idx], config, bounds
             )
 
     plt.tight_layout()
@@ -479,12 +461,8 @@ def plot_result_file(results: OutputCalibration) -> None:
 
     # Type ignore to set known dimensions of 2
     fig, axes = plt.subplots(
-        2,
-        cols,
-        figsize=(12, 6),
-        sharex='all',
-        squeeze=False
-    ) # type: ignore
+        2, cols, figsize=(12, 6), sharex='all', squeeze=False
+    )  # type: ignore
     axes: list[list[Axes]]
 
     sorted_input_channels = list(counter.keys())
@@ -495,9 +473,9 @@ def plot_result_file(results: OutputCalibration) -> None:
     f_max = np.ceil((results.raw_freqs.max() + 500) / 1000) * 1000
     f_min = max(20, f_min)
 
-    y_max = np.ceil(
-        np.max(converter.peak_mupa_to_db_spl(results.raw_amps))
-    ) + 10
+    y_max = (
+        np.ceil(np.max(converter.peak_mupa_to_db_spl(results.raw_amps))) + 10
+    )
     if y_max <= 0:
         y_min = y_max - 100
     else:
@@ -534,24 +512,24 @@ def plot_result_file(results: OutputCalibration) -> None:
                     results.raw_freqs,
                     out_max_db_spl,
                     line_styles[j],
-                    label=f'Channel {output_channel_j} Maximum Output Level'
+                    label=f'Channel {output_channel_j} Maximum Output Level',
                 )
                 ax_i_phase.plot(
                     results.raw_freqs,
                     results.raw_phases[output_idx_j],
                     line_styles[j],
-                    label=f'Channel {output_channel_j} Speaker Phase'
+                    label=f'Channel {output_channel_j} Speaker Phase',
                 )
             else:
                 ax_i_amp.plot(
                     results.raw_freqs,
                     out_max_db_spl,
-                    label=f'Channel {output_channel_j}'
+                    label=f'Channel {output_channel_j}',
                 )
                 ax_i_phase.plot(
                     results.raw_freqs,
                     results.raw_phases[output_idx_j],
-                    label=f'Channel {output_channel_j} Speaker Phase'
+                    label=f'Channel {output_channel_j} Speaker Phase',
                 )
 
         ax_i_amp.set_ylim(y_min, y_max)
@@ -601,7 +579,7 @@ class OutputCalibRecorder:
         msrmt_params: CalibMsrmtParams | CalibMsrmtDef,
         output_channels: list[int],
         mic_trans_fun: list[MicroTransferFunction] | None = None,
-        log: Logger | None = None
+        log: Logger | None = None,
     ) -> None:
         """Creates a simple multi-tone output calibrator."""
 
@@ -622,32 +600,29 @@ class OutputCalibRecorder:
         # Set to false if major problem occured during calibration
         self.results = None
 
-        if (
-            block_duration
-            == msrmt_params['block_duration'] * len(output_channels)
+        if block_duration == msrmt_params['block_duration'] * len(
+            output_channels
         ):
             self.logger.info(
-                'Block duration adjusted to %.2f ms.',
-                block_duration * 1E3
+                'Block duration adjusted to %.2f ms.', block_duration * 1E3
             )
         else:
             self.logger.warning(
-                'Block duration set to %.2f ms.',
-                block_duration * 1E3
+                'Block duration set to %.2f ms.', block_duration * 1E3
             )
 
         # Setup hardware data
         active_in_channels = list(
             {
-                b for a, b in DeviceConfig.output_input_mapping
+                b
+                for a, b in DeviceConfig.output_input_mapping
                 if a in output_channels
             }
         )
 
-        n_in_channels = max(
-            *active_in_channels,
-            DeviceConfig.sync_channels[1]
-        ) + 1
+        n_in_channels = (
+            max(*active_in_channels, DeviceConfig.sync_channels[1]) + 1
+        )
         n_out_channels = max(output_channels) + 1
         hw_data = HardwareData(
             n_in_channels,
@@ -655,7 +630,7 @@ class OutputCalibRecorder:
             DeviceConfig.input_device,
             DeviceConfig.output_device,
             output_channels,
-            get_input_channels(output_channels)
+            get_input_channels(output_channels),
         )
 
         if mic_trans_fun:
@@ -683,7 +658,7 @@ class OutputCalibRecorder:
             recording_duration,
             num_total_recording_samples,
             num_block_samples,
-            DeviceConfig.device_buffer_size
+            DeviceConfig.device_buffer_size,
         )
 
         self.results = None
@@ -691,9 +666,7 @@ class OutputCalibRecorder:
         self.signals = []
 
         is_generated = self.generate_output_signals(
-            msrmt_params,
-            num_block_samples,
-            hw_data
+            msrmt_params, num_block_samples, hw_data
         )
         if not is_generated:
             self.msrmt = None
@@ -769,7 +742,7 @@ class OutputCalibRecorder:
         self,
         msrmt_params: CalibMsrmtParams | CalibMsrmtDef,
         num_block_samples: int,
-        hw_data: HardwareData
+        hw_data: HardwareData,
     ) -> bool:
         """Generate multi-tone output signals for playback.
 
@@ -790,14 +763,10 @@ class OutputCalibRecorder:
             np.round(num_block_samples / len(hw_data.output_channels))
         )
 
-        self.mt_definition = MultiToneDefinition(
-            msrmt_params
-        )
+        self.mt_definition = MultiToneDefinition(msrmt_params)
 
         mt_signal = self.mt_definition.generate_mt_signal(
-            mt_samples,
-            DeviceConfig.sample_rate,
-            DeviceConfig.ramp_duration
+            mt_samples, DeviceConfig.sample_rate, DeviceConfig.ramp_duration
         )
 
         max_amplitude = np.max(mt_signal)
@@ -805,7 +774,7 @@ class OutputCalibRecorder:
             self.logger.warning(
                 'Maximum output %.2f limited to maximum %.2f re FS.',
                 max_amplitude,
-                DeviceConfig.max_digital_output
+                DeviceConfig.max_digital_output,
             )
             self.logger.warning('Output calibration results might be invalid.')
 
@@ -818,7 +787,7 @@ class OutputCalibRecorder:
             if i in hw_data.output_channels:
                 stimulus = np.zeros(num_block_samples, dtype=np.float32)
                 stimulus[
-                    counter * len(mt_signal):(counter + 1) *len(mt_signal)
+                    counter * len(mt_signal) : (counter + 1) * len(mt_signal)
                 ] = mt_signal
                 signal = PeriodicSignal(stimulus, n_total_samples)
                 self.signals.append(signal)

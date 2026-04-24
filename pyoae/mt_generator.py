@@ -9,16 +9,10 @@ import numpy.typing as npt
 from pyoae import get_logger
 from pyoae import generator
 from pyoae.device.device_config import DeviceConfig
-from pyoae.dsp.spectral import (
-    cplx_spectrum,
-    get_spec_frequenies
-)
+from pyoae.dsp.spectral import cplx_spectrum, get_spec_frequenies
 from pyoae.calib_transfer import MicroTransferFunction
 from pyoae import protocols
-from pyoae.protocols import (
-    CalibMsrmtDef,
-    CalibMsrmtParams
-)
+from pyoae.protocols import CalibMsrmtDef, CalibMsrmtParams
 
 
 def ramp_envelope(n_samples: int, ramp_samples: int) -> np.ndarray:
@@ -96,7 +90,7 @@ class MultiToneDefinition:
     def __init__(
         self,
         msrmt_params: CalibMsrmtDef | CalibMsrmtParams,
-        log: Logger | None = None
+        log: Logger | None = None,
     ) -> None:
 
         self.logger = log or get_logger()
@@ -134,13 +128,10 @@ class MultiToneDefinition:
         """Return the phases of the spectral tones."""
         return self.phases
 
-    def get_cluster_signals(
-        self,
-        cluster_idx: int
-    ) -> tuple[
+    def get_cluster_signals(self, cluster_idx: int) -> tuple[
         npt.NDArray[np.float32],
         npt.NDArray[np.float32],
-        npt.NDArray[np.float32]
+        npt.NDArray[np.float32],
     ]:
         """Return frequencies, amplitudes and phases for one cluster."""
         mask = self.cluster_idc == cluster_idx
@@ -152,10 +143,7 @@ class MultiToneDefinition:
         return frequencies, amplitudes, phases
 
     def generate_mt_signal(
-        self,
-        num_samples: int,
-        sample_rate: float,
-        ramp_duration: float
+        self, num_samples: int, sample_rate: float, ramp_duration: float
     ) -> npt.NDArray[np.float32]:
         """Generate a multi-tone signal for output calibration.
 
@@ -189,7 +177,7 @@ class MultiToneDefinition:
             else:
                 end = num_samples
 
-            t_segment = time_vec[:end - start]
+            t_segment = time_vec[: end - start]
             segment = np.zeros_like(t_segment)
 
             cluster_freqs, cluster_amps, cluster_phases = (
@@ -231,7 +219,7 @@ class MultiToneAnalyzer:
         self,
         mt_definition: MultiToneDefinition,
         recorded_signal: npt.NDArray[np.float32],
-        sample_rate: float
+        sample_rate: float,
     ) -> None:
         self.mt = mt_definition
         self.recorded_signal = recorded_signal
@@ -243,8 +231,7 @@ class MultiToneAnalyzer:
         return len(self.recorded_signal) // n_clusters
 
     def _get_cluster_segment(
-        self,
-        cluster_idx: int
+        self, cluster_idx: int
     ) -> npt.NDArray[np.float32]:
         """Get signal segment assigned to a cluster"""
         clusters = sorted(self.mt.get_unique_cluster_indices())
@@ -258,7 +245,7 @@ class MultiToneAnalyzer:
     def _compute_spectrum(
         self,
         segment: npt.NDArray[np.float32],
-        micro_tf: MicroTransferFunction | None
+        micro_tf: MicroTransferFunction | None,
     ) -> tuple[npt.NDArray[np.float32], npt.NDArray[np.complex64]]:
         """Compute spectrum of a signal and apply a transfer function"""
 
@@ -277,8 +264,7 @@ class MultiToneAnalyzer:
         return freqs, spectrum
 
     def compute_result(
-        self,
-        micro_tf: MicroTransferFunction | None
+        self, micro_tf: MicroTransferFunction | None
     ) -> MultiToneResult:
         """Compute the measurement result relative to the generated signal.
 
@@ -337,7 +323,7 @@ class MultiToneAnalyzer:
             freq_idc=all_freq_idc[arg_sort],
             amplitude=all_amplitudes[arg_sort],
             raw_amplitude=all_raw_amplitudes[arg_sort],
-            phase=np.unwrap(all_phases[arg_sort])
+            phase=np.unwrap(all_phases[arg_sort]),
         )
 
 
@@ -376,7 +362,7 @@ def compute_mt_frequencies(
         t = (f - f_start) / (f_stop - f_start)
         current_lpo = lines_per_octave + extra_density * t
 
-        b = 2**(1 / current_lpo)
+        b = 2 ** (1 / current_lpo)
         f_next = f * b
         f_next = np.round(f_next / df) * df
 
@@ -406,7 +392,7 @@ def compute_mt_phases(num_frequencies: int) -> npt.NDArray[np.floating]:
 
 
 def generate_mt_def(
-    msrmt_params: protocols.CalibMsrmtParams
+    msrmt_params: protocols.CalibMsrmtParams,
 ) -> protocols.CalibMsrmtDef:
     """Generate a multi-tone signal definition for calibration measurements.
 
@@ -427,7 +413,7 @@ def generate_mt_def(
         msrmt_params['f_stop'],
         msrmt_params['lines_per_octave'],
         df,
-        extra_density=20.0
+        extra_density=20.0,
     )
     # Remove redundant frequencies
     mt_frequencies = np.unique(mt_frequencies)
@@ -445,6 +431,6 @@ def generate_mt_def(
         'frequencies': mt_frequencies,
         'phases': mt_phases,
         'amplitudes': mt_amplitudes,
-        'cluster_idc': cluster_idc
+        'cluster_idc': cluster_idc,
     }
     return calib_def

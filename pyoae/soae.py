@@ -46,9 +46,8 @@ from pyoae.sync import (
     HardwareData,
     RecordingData,
     SyncMsrmt,
-    MsrmtState
+    MsrmtState,
 )
-
 
 SPECTRAL_PLOT_PADDING: float = 15.0
 """Padding for y-limits of spectral plot in dB."""
@@ -61,7 +60,7 @@ def setup_plot(
     recording_duration: float,
     fs: float,
     window_size: int,
-    is_calib_available:bool=False
+    is_calib_available: bool = False,
 ) -> tuple[Axes, Line2D, Axes, Line2D]:
     """Sets up the plots.
 
@@ -80,15 +79,12 @@ def setup_plot(
     """
     _, axes = plt.subplots(2, 1, figsize=(10, 6))
     axes: list[Axes]
-    (ax_time, ax_spec) = axes
+    ax_time, ax_spec = axes
 
     # Set up time plot
-    x_wave = np.arange(round(recording_duration*fs), dtype=np.float32) / fs
+    x_wave = np.arange(round(recording_duration * fs), dtype=np.float32) / fs
     y_wave = np.zeros_like(x_wave)
-    line_time, = ax_time.plot(
-        x_wave,
-        y_wave
-    )
+    (line_time,) = ax_time.plot(x_wave, y_wave)
     ax_time.set_ylim(-1, 1)
     ax_time.set_title("Recorded Waveform")
     ax_time.set_xlabel("Time (ms)")
@@ -97,17 +93,17 @@ def setup_plot(
     # Set up frequency plot
     fft_frequencies = spectral.get_spec_frequenies(window_size, fs)
     fft_values = np.zeros(len(fft_frequencies))
-    line_spec, = ax_spec.plot(fft_frequencies, fft_values)
-    ax_spec.set_xlim(500, 20*1E3)
+    (line_spec,) = ax_spec.plot(fft_frequencies, fft_values)
+    ax_spec.set_xlim(500, 20 * 1E3)
     ax_spec.set_xscale('log')
-    ax_spec.set_title("Spectrum")
-    ax_spec.set_xlabel("Frequency (Hz)")
+    ax_spec.set_title('Spectrum')
+    ax_spec.set_xlabel('Frequency (Hz)')
     if is_calib_available:
         ax_spec.set_ylabel('Level (dB SPL)')
         ax_spec.set_ylim(-50, 50)
     else:
         ax_spec.set_ylim(-150, 0)
-        ax_spec.set_ylabel("Level (dBFS)")
+        ax_spec.set_ylabel('Level (dBFS)')
 
     return ax_time, line_time, ax_spec, line_spec
 
@@ -121,6 +117,7 @@ class SoaeMsrmtInfo:
 
     ear: str
     """Recording ear (left/right) to be used for the measurement file name."""
+
 
 class SoaeRecorder:
     """Class to manage an SOAE recording."""
@@ -151,7 +148,7 @@ class SoaeRecorder:
         mic_trans_functions: list[MicroTransferFunction] | None = None,
         subject: str = '',
         ear: list[str] | None = None,
-        log: Logger | None = None
+        log: Logger | None = None,
     ) -> None:
         """Creates an SOAE recorder from measurement parameters."""
         self.logger = log or get_logger()
@@ -174,7 +171,7 @@ class SoaeRecorder:
             fs=DeviceConfig.sample_rate,
             block_size=num_block_samples,
             non_interactive=False,
-            input_trans_fun=mic_trans_functions
+            input_trans_fun=mic_trans_functions,
         )
         # Prepare measurement
         rec_data = RecordingData(
@@ -182,19 +179,19 @@ class SoaeRecorder:
             recording_duration,
             num_total_recording_samples,
             num_block_samples,
-            DeviceConfig.device_buffer_size
+            DeviceConfig.device_buffer_size,
         )
 
         # Setup hardware data
-        active_out_channels = list({
-            a for a, b in DeviceConfig.output_input_mapping
-            if b in input_channels
-        })
+        active_out_channels = list(
+            {
+                a
+                for a, b in DeviceConfig.output_input_mapping
+                if b in input_channels
+            }
+        )
 
-        n_in_channels = max(
-            *input_channels,
-            DeviceConfig.sync_channels[1]
-        ) + 1
+        n_in_channels = max(*input_channels, DeviceConfig.sync_channels[1]) + 1
         n_out_channels = max(active_out_channels) + 1
 
         hw_data = HardwareData(
@@ -203,7 +200,7 @@ class SoaeRecorder:
             DeviceConfig.input_device,
             DeviceConfig.output_device,
             active_out_channels,
-            get_input_channels(active_out_channels)
+            get_input_channels(active_out_channels),
         )
 
         self.signals = [
@@ -211,10 +208,7 @@ class SoaeRecorder:
         ]
 
         self.msrmt = SyncMsrmt(
-            rec_data,
-            hw_data,
-            self.signals,
-            msrmt_params['block_duration']
+            rec_data, hw_data, self.signals, msrmt_params['block_duration']
         )
 
     def record(self) -> None:
@@ -237,10 +231,7 @@ class SoaeRecorder:
     def save_recording(self) -> None:
         """Stores the measurement data in binary file."""
         # Save measurement to file.
-        save_path = os.path.join(
-            os.getcwd(),
-            'measurements'
-        )
+        save_path = os.path.join(os.getcwd(), 'measurements')
         os.makedirs(save_path, exist_ok=True)
         cur_time = datetime.now()
         time_stamp = cur_time.strftime("%y%m%d-%H%M%S")
@@ -256,24 +247,24 @@ class SoaeRecorder:
                 'soae_msrmt',
                 time_stamp,
                 helpers.sanitize_filename_part(self.subject),
-                side_name
+                side_name,
             ]
             file_name = "_".join(filter(None, parts))
             file_save_path = os.path.join(save_path, file_name)
             recorded_signal, spectrum = self.get_results(i)
             np.savez(
                 file_save_path,
-                spectrum = spectrum,
-                recorded_signal = recorded_signal,
-                samplerate = DeviceConfig.sample_rate,
-                in_ch = input_channel_i
+                spectrum=spectrum,
+                recorded_signal=recorded_signal,
+                samplerate=DeviceConfig.sample_rate,
+                in_ch=input_channel_i,
             )
             self.logger.info("Measurement saved to %s.", file_save_path)
 
     def _plot_offline(
         self,
         recorded_signal: npt.NDArray[np.float32],
-        spectrum: npt.NDArray[np.float32]
+        spectrum: npt.NDArray[np.float32],
     ) -> None:
         """Helper to plot the final results in a non-updating plot.
 
@@ -289,19 +280,21 @@ class SoaeRecorder:
             self.msrmt.recording_data.msrmt_duration,
             self.msrmt.recording_data.fs,
             self.msrmt_ctx.block_size,
-            self.msrmt_ctx.input_trans_fun is not None
+            self.msrmt_ctx.input_trans_fun is not None,
         )
-        line_time.set_xdata(np.arange(len(recorded_signal))/self.msrmt_ctx.fs)
+        line_time.set_xdata(
+            np.arange(len(recorded_signal)) / self.msrmt_ctx.fs
+        )
         line_time.set_ydata(recorded_signal)
         ax_time.set_xlim(0, self.msrmt.recording_data.msrmt_duration)
-        ax_time.set_xlabel("Recording Time (s)")
+        ax_time.set_xlabel('Recording Time (s)')
 
         spec_min = np.floor((min(spectrum[1:]) / 10)) * 10
         spec_max = np.ceil(max(spectrum) / 10) * 10
         # set y limits with padding
         ax_spec.set_ylim(
             spec_min,  # - SPECTRAL_PLOT_PADDING,
-            spec_max  # + SPECTRAL_PLOT_PADDING
+            spec_max,  # + SPECTRAL_PLOT_PADDING
         )
         line_spec.set_ydata(spectrum)
 
@@ -313,7 +306,6 @@ class SoaeRecorder:
         self._plot_offline(recorded_signal, spectrum)
         plt.tight_layout()
         plt.show()
-
 
     def get_results(
         self,
@@ -341,7 +333,7 @@ class SoaeRecorder:
             MsrmtState.RECORDING,
             MsrmtState.END_RECORDING,
             MsrmtState.FINISHING,
-            MsrmtState.FINISHED
+            MsrmtState.FINISHED,
         ]:
 
             spectrum = None
@@ -354,15 +346,11 @@ class SoaeRecorder:
             else:
                 mic_trans_fun = self.msrmt_ctx.input_trans_fun[index]
 
-            spectrum = self.process_spectrum(
-                recorded_signal,
-                mic_trans_fun
-            )
+            spectrum = self.process_spectrum(recorded_signal, mic_trans_fun)
 
             return recorded_signal, spectrum
 
-        return np.zeros(0,np.float32), np.zeros(0,np.float32)
-
+        return np.zeros(0, np.float32), np.zeros(0, np.float32)
 
     def process_spectrum(
         self,
@@ -395,10 +383,10 @@ class SoaeRecorder:
             if micro_tf is None:
                 spectrum = 20 * np.log10(spectrum)
             else:
-                spectrum /= np.abs(micro_tf.get_interp_transfer_function(
-                    frequencies
-                ))
-                spectrum = 20 * np.log10(spectrum/20)
+                spectrum /= np.abs(
+                    micro_tf.get_interp_transfer_function(frequencies)
+                )
+                spectrum = 20 * np.log10(spectrum / 20)
 
         else:
             bins = self.msrmt_ctx.block_size // 2 + 1

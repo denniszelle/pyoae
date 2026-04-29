@@ -17,7 +17,11 @@ from pyoae import files
 from pyoae import get_logger
 from pyoae.calib_storage import SpeakerCalibData
 
-from pyoae.calib_transfer import MicroTransferFunction, OutputCalibration
+from pyoae.calib_transfer import (
+    EarSimTransferFunction,
+    MicroTransferFunction,
+    OutputCalibration
+)
 from pyoae import converter
 from pyoae.device.device_config import DeviceConfig
 from pyoae.msrmt_context import MsrmtContext
@@ -122,8 +126,12 @@ def setup_offline_plot(
 
     # Type ignore to set known dimensions of 2
     _, axes = plt.subplots(
-        rows, cols, figsize=(10, 8), sharex='col', squeeze=False
-    )  # type: ignore
+        rows,
+        cols,
+        figsize=(10, 8),
+        sharex='col',
+        squeeze=False
+    ) # type: ignore
     axes: list[list[Axes]]
 
     sorted_input_channels = list(counter.keys())
@@ -209,7 +217,11 @@ def get_mt_results(
         if msrmt_ctx.input_trans_fun is None:
             input_tf = None
         else:
-            input_tf = msrmt_ctx.input_trans_fun[input_channel_idx]
+            mic_tf = msrmt_ctx.mic_trans_fun[input_channel_idx]
+        if msrmt_ctx.ear_sim_trans_fun is None:
+            ear_sim_tf = None
+        else:
+            ear_sim_tf = msrmt_ctx.ear_sim_trans_fun[input_channel_idx]
 
         analyzer = MultiToneAnalyzer(
             mt_definition,
@@ -373,6 +385,7 @@ def _plot_single_channel(
     result: MultiToneResult,
     config: PlotConfig,
     bounds: PlotBounds,
+    ear_sim_tf: EarSimTransferFunction | None,
 ):
     """Add plots for a single channel of an output calibration."""
 
@@ -384,6 +397,18 @@ def _plot_single_channel(
 
     p_out_max = result.amplitude * np.sqrt(2)
     out_max_db_spl = converter.peak_mupa_to_db_spl(p_out_max)
+
+    if ear_sim_tf is not None:
+        cplx_ear_sim_vals = ear_sim_tf.get_interp_transfer_function(freqs)
+        out_max_db_spl_uncorrected = (
+            out_max_db_spl - converter.lin_to_db(np.abs(cplx_ear_sim_vals))
+        )
+        phases_uncorreceted = (
+            phases - np.angle(cplx_ear_sim_vals)
+        )
+    else:
+        out_max_db_spl_uncorrected = None
+        phases_uncorreceted = None
 
     # Add raw data to own raw-data plot
     for spec in result.spectra:
@@ -404,11 +429,23 @@ def _plot_single_channel(
     # Add results to amplitude comparison(-2) and phase comparison(-1) plots
     if style:
         axes[-2][j].plot(freqs, out_max_db_spl, style)
+        if out_max_db_spl_uncorrected is not None:
+            axes[-2][j].plot(
+                freqs, out_max_db_spl_uncorrected, style, alpha=0.6
+            )
+
         axes[-1][j].plot(freqs, phases, style)
+        if phases_uncorreceted is not None:
+            axes[-1][j].plot(freqs, phases_uncorreceted, style, alpha=0.5)
+
         ax.plot(freqs, out_max_db_spl, style)
     else:
         axes[-2][j].plot(freqs, out_max_db_spl)
+        if out_max_db_spl_uncorrected is not None:
+            axes[-2][j].plot(freqs, out_max_db_spl_uncorrected, alpha=0.5)
         axes[-1][j].plot(freqs, phases)
+        if phases_uncorreceted is not None:
+            axes[-1][j].plot(freqs, phases_uncorreceted, alpha=0.5)
         ax.plot(freqs, out_max_db_spl)
 
     # Format axes
@@ -445,8 +482,20 @@ def plot_offline(
             if output_idx is None:
                 continue
 
+            if msrmt_ctx.ear_sim_trans_fun is None:
+                ear_sim_tf = None
+            else:
+                ear_sim_tf = msrmt_ctx.ear_sim_trans_fun[j]
+
             _plot_single_channel(
-                ax, axes, i, j, mt_results[output_idx], config, bounds
+                ax,
+                axes,
+                i,
+                j,
+                mt_results[output_idx],
+                config,
+                bounds,
+                ear_sim_tf
             )
 
     plt.tight_layout()
@@ -579,6 +628,7 @@ class OutputCalibRecorder:
         msrmt_params: CalibMsrmtParams | CalibMsrmtDef,
         output_channels: list[int],
         mic_trans_fun: list[MicroTransferFunction] | None = None,
+        ear_sim_trans_fun: list[EarSimTransferFunction] | None = None,
         log: Logger | None = None,
     ) -> None:
         """Creates a simple multi-tone output calibrator."""
@@ -614,8 +664,7 @@ class OutputCalibRecorder:
         # Setup hardware data
         active_in_channels = list(
             {
-                b
-                for a, b in DeviceConfig.output_input_mapping
+                b for a, b in DeviceConfig.output_input_mapping
                 if a in output_channels
             }
         )
@@ -724,13 +773,39 @@ class OutputCalibRecorder:
         cur_time = datetime.now()
         time_stamp = cur_time.strftime('%y%m%d-%H%M%S')
 
+        if self.msrmt_ctx.ear_sim_trans_fun is None:
+            has_ear_sim_tf_included = False
+            ear_sim_frequencies = None
+            ear_sim_amplitudes = None
+            ear_sim_phases = None
+        else:
+            has_ear_sim_tf_included = True
+            ear_sim_frequencies = []
+            ear_sim_amplitudes = []
+            ear_sim_phases = []
+            for ear_sim_trans_fun_i in self.msrmt_ctx.ear_sim_trans_fun:
+                ear_sim_frequencies.append(
+                    ear_sim_trans_fun_i.raw_freqs.tolist()
+                )
+                ear_sim_amplitudes.append(
+                    ear_sim_trans_fun_i.raw_amps.tolist()
+                )
+                ear_sim_phases.append(
+                    ear_sim_trans_fun_i.raw_phases.tolist()
+                )
+
+
         self.results = {
             'date': time_stamp,
             'output_channels': self.msrmt.hardware_data.output_channels,
             'input_channels': self.msrmt.hardware_data.input_channels,
             'frequencies': frequencies,
             'max_out': max_out,
-            'phase': phase
+            'phase': phase,
+            'has_ear_sim_tf_included': has_ear_sim_tf_included,
+            'ear_sim_frequencies': ear_sim_frequencies,
+            'ear_sim_amplitudes': ear_sim_amplitudes,
+            'ear_sim_phases': ear_sim_phases,
         }
 
     def save_recording(self) -> None:

@@ -115,6 +115,18 @@ class SpeakerCalibData(TypedDict):
     phase: list[list[float]]
     """Phase shift of the first given channel"""
 
+    has_ear_sim_tf_included: bool
+    """Flag whether ear simulator transfer functions were applied"""
+
+    ear_sim_frequencies: list[list[float]] | None
+    """Frequency data of ear simulator transfer functions"""
+
+    ear_sim_amplitudes: list[list[float]] | None
+    """Amplitude data of ear simulator transfer functions"""
+
+    ear_sim_phases: list[list[float]] | None
+    """Phase data of ear simulator transfer functions"""
+
 
 def get_empty_micro_calib_data() -> MicroCalibData:
     """Returns an empty container for microphone-calibration data."""
@@ -167,5 +179,9 @@ def get_empty_speaker_calib_data() -> SpeakerCalibData:
         'frequencies': [],
         'max_out': [],
         'phase': [],
+        'has_ear_sim_tf_included': False,
+        'ear_sim_frequencies': None,
+        'ear_sim_amplitudes': None,
+        'ear_sim_phases': None,
     }
     return d

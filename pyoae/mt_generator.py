@@ -263,6 +263,15 @@ class MultiToneAnalyzer:
 
         return freqs, spectrum
 
+    def get_ear_sim_corrections(
+        self,
+        frequencies: npt.NDArray[np.float32],
+        ear_sim_tf: EarSimTransferFunction,
+    ) -> tuple[npt.NDArray[np.float32], npt.NDArray[np.float32]]:
+        """Return corrections of ear simulator transfer function"""
+        cplx_tf = ear_sim_tf.get_interp_transfer_function(frequencies)
+        return np.abs(cplx_tf), np.angle(cplx_tf)
+
     def compute_result(
         self, micro_tf: MicroTransferFunction | None
     ) -> MultiToneResult:
@@ -297,16 +306,31 @@ class MultiToneAnalyzer:
                 self.mt.get_cluster_signals(cluster_idx)
             )
 
+            if ear_sim_tf is not None:
+                ear_sim_amps, ear_sim_phases = self.get_ear_sim_corrections(
+                    cluster_freqs, ear_sim_tf
+                )
+            else:
+                ear_sim_amps = np.ones_like(cluster_amps)
+                ear_sim_phases = np.zeros_like(cluster_phases)
+
             freq_idc = np.argmin(
                 np.abs(freqs[:, None] - cluster_freqs[None, :]), axis=0
             )
 
             raw_amps = np.abs(spectrum[freq_idc])
             if self.mt.ramp_correction is None:
-                amps = raw_amps / cluster_amps
+                amps = raw_amps / cluster_amps * ear_sim_amps
             else:
-                amps = raw_amps / cluster_amps * self.mt.ramp_correction
-            phases = np.angle(spectrum[freq_idc]) - cluster_phases
+                amps = (
+                    raw_amps
+                    / cluster_amps
+                    * ear_sim_amps
+                    * self.mt.ramp_correction
+                )
+            phases = (
+                np.angle(spectrum[freq_idc]) - cluster_phases + ear_sim_phases
+            )
 
             all_frequencies = np.r_[all_frequencies, cluster_freqs]
             all_amplitudes = np.r_[all_amplitudes, amps]

@@ -8,7 +8,7 @@ and update the associated plots.
 
 from dataclasses import dataclass
 
-from pyoae.calib_transfer import MicroTransferFunction
+from pyoae.calib_transfer import EarSimTransferFunction, MicroTransferFunction
 
 
 @dataclass
@@ -29,12 +29,21 @@ class BaseMsrmtContext:
 class MsrmtContext(BaseMsrmtContext):
     """Parameters and instances to control measurement updates."""
 
-    input_trans_fun: list[MicroTransferFunction] | None
+    mic_trans_fun: list[MicroTransferFunction] | None
     """Handle to list of microphone transfer functions.
 
     A microphone transfer function is used to correct the
     recorded signal from the microphone characteristics.
     """
+
+    ear_sim_trans_fun: list[EarSimTransferFunction] | None
+    """Handle to list of ear simulator transfer functions.
+
+    A ear simulator transfer function is used to correct the spectral
+    characteristics of a static ear simulator.
+    """
+
+
 
 
 @dataclass

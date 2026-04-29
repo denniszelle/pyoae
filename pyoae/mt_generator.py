@@ -10,7 +10,7 @@ from pyoae import get_logger
 from pyoae import generator
 from pyoae.device.device_config import DeviceConfig
 from pyoae.dsp.spectral import cplx_spectrum, get_spec_frequenies
-from pyoae.calib_transfer import MicroTransferFunction
+from pyoae.calib_transfer import EarSimTransferFunction, MicroTransferFunction
 from pyoae import protocols
 from pyoae.protocols import CalibMsrmtDef, CalibMsrmtParams
 
@@ -260,7 +260,6 @@ class MultiToneAnalyzer:
 
         if micro_tf is not None:
             spectrum /= micro_tf.get_interp_transfer_function(freqs)
-
         return freqs, spectrum
 
     def get_ear_sim_corrections(
@@ -273,7 +272,9 @@ class MultiToneAnalyzer:
         return np.abs(cplx_tf), np.angle(cplx_tf)
 
     def compute_result(
-        self, micro_tf: MicroTransferFunction | None
+        self,
+        micro_tf: MicroTransferFunction | None,
+        ear_sim_tf: EarSimTransferFunction | None,
     ) -> MultiToneResult:
         """Compute the measurement result relative to the generated signal.
 
@@ -298,7 +299,9 @@ class MultiToneAnalyzer:
 
         for cluster_idx in cluster_indices:
             segment = self._get_cluster_segment(cluster_idx)
-            freqs, spectrum = self._compute_spectrum(segment, micro_tf)
+            freqs, spectrum = self._compute_spectrum(
+                segment, micro_tf
+            )
             spectra.append(spectrum.astype(np.complex64))
             segments.append(segment)
 

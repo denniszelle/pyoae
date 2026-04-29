@@ -214,8 +214,8 @@ def get_mt_results(
 
         block_avg = np.mean(blocks, axis=0)
 
-        if msrmt_ctx.input_trans_fun is None:
-            input_tf = None
+        if msrmt_ctx.mic_trans_fun is None:
+            mic_tf = None
         else:
             mic_tf = msrmt_ctx.mic_trans_fun[input_channel_idx]
         if msrmt_ctx.ear_sim_trans_fun is None:
@@ -231,7 +231,7 @@ def get_mt_results(
             DeviceConfig.sample_rate,
         )
 
-        results.append(analyzer.compute_result(input_tf))
+        results.append(analyzer.compute_result(mic_tf, ear_sim_tf))
 
     return results
 
@@ -268,7 +268,7 @@ def _prepare_plot_config(
 ) -> PlotConfig:
     """Create plot config containing meta information of the recorded data."""
 
-    has_input_calib = msrmt_ctx.input_trans_fun is not None
+    has_input_calib = msrmt_ctx.mic_trans_fun is not None
 
     f_min = np.floor((mt_results[0].frequencies.min() - 20) / 20) * 20
     f_max = np.ceil((mt_results[0].frequencies.max() + 500) / 1000) * 1000
@@ -696,11 +696,26 @@ class OutputCalibRecorder:
         else:
             mic_transfer_functions = None
 
+        if ear_sim_trans_fun:
+            ear_sim_transfer_functions = []
+            if len(ear_sim_trans_fun) == len(active_in_channels):
+                for trans_fun_i in ear_sim_trans_fun:
+                    ear_sim_transfer_functions.append(trans_fun_i)
+            else:
+                self.msrmt = None
+                self.logger.error(
+                    'Invalid number of ear simulator transfer functions'
+                )
+                return
+        else:
+            ear_sim_transfer_functions = None
+
         self.msrmt_ctx = MsrmtContext(
             fs=DeviceConfig.sample_rate,
             block_size=num_block_samples,
             non_interactive=False,
-            input_trans_fun=mic_transfer_functions,
+            mic_trans_fun=mic_transfer_functions,
+            ear_sim_trans_fun=ear_sim_transfer_functions
         )
         rec_data = RecordingData(
             DeviceConfig.sample_rate,

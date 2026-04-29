@@ -23,7 +23,10 @@ import argparse
 from pyoae import files
 from pyoae import input_validation
 from pyoae import protocols
-from pyoae.calib_transfer import MicroTransferFunction
+from pyoae.calib_transfer import (
+    EarSimTransferFunction,
+    MicroTransferFunction
+)
 from pyoae.device.device_config import DeviceConfig
 from pyoae.output_calib import OutputCalibRecorder
 import pyoae.pyoae_logger as pyoae_logger
@@ -34,6 +37,7 @@ logger = pyoae_logger.get_pyoae_logger('PyOAE Output Calibrator')
 
 def main(
     mic: list[str] | None = None,
+    ear_sim: list[str] | None = None,
     save: bool = False,
     protocol: str = '',
     channels: list[int] | None = None,
@@ -72,6 +76,22 @@ def main(
     else:
         mic_trans_fun = None
 
+    if ear_sim:
+        logger.info('Loading ear simulator calibration from %s.', ear_sim)
+        ear_sim_trans_fun = []
+        for ear_sim_i in ear_sim:
+            ear_sim_calib_data = files.load_ear_sim_calib(ear_sim_i)
+            if ear_sim_calib_data is None:
+                logger.error(
+                    'Stopping: Failed to load ear simulator calibration.'
+                )
+                return
+            ear_sim_trans_fun.append(
+                EarSimTransferFunction(ear_sim_calib_data['transfer_function'])
+            )
+    else:
+        ear_sim_trans_fun = None
+
     if protocol:
         logger.info('Loading speaker calibration protocol from %s.', protocol)
         msrmt_params = files.load_output_calib_protocol(protocol)
@@ -84,7 +104,8 @@ def main(
     calib_recorder = OutputCalibRecorder(
         msrmt_params,
         output_channels=channels,
-        mic_trans_fun=mic_trans_fun
+        mic_trans_fun=mic_trans_fun,
+        ear_sim_trans_fun=ear_sim_trans_fun,
     )
     calib_recorder.record()
     if save:
@@ -100,6 +121,13 @@ parser.add_argument(
     nargs='+',
     default=argparse.SUPPRESS,
     type=int
+)
+parser.add_argument(
+    '--ear_sim',
+    nargs='+',
+    default=argparse.SUPPRESS,
+    type=str,
+    help='Specify path to ear simulator calibration JSON file.'
 )
 parser.add_argument(
     '--mic',

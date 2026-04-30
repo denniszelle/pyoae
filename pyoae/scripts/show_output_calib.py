@@ -21,7 +21,8 @@ import matplotlib
 from pyoae import output_calib
 from pyoae import files
 from pyoae import pyoae_logger
-from pyoae.calib_transfer import OutputCalibration
+from pyoae.calib_transfer import EarSimTransferFunction, OutputCalibration
+from pyoae.calib_storage import EarSimTransferFunData
 
 try:
     matplotlib.use('qtagg')
@@ -43,13 +44,31 @@ def main(file: str = '') -> None:
             output_calib_fun = OutputCalibration(speaker_calib_data)
         else:
             output_calib_fun = None
+        if (
+            speaker_calib_data['has_ear_sim_tf_included']
+            and speaker_calib_data['ear_sim_frequencies'] is not None
+            and speaker_calib_data['ear_sim_amplitudes'] is not None
+            and speaker_calib_data['ear_sim_phases'] is not None
+        ):
+            ear_sim_tfs = []
+            for i, _ in enumerate(speaker_calib_data['ear_sim_frequencies']):
+                ear_sim_data: EarSimTransferFunData = {
+                    'date':'',
+                    'frequencies': speaker_calib_data['ear_sim_frequencies'][i],
+                    'amplitudes': speaker_calib_data['ear_sim_amplitudes'][i],
+                    'phases': speaker_calib_data['ear_sim_phases'][i],
+                }
+                ear_sim_tfs.append(EarSimTransferFunction(ear_sim_data))
+        else:
+            ear_sim_tfs = None
     else:
         output_calib_fun = None
+        ear_sim_tfs = None
 
     if output_calib_fun is None:
         logger.error('Failed to load output calibration.')
         return
-    output_calib.plot_result_file(output_calib_fun)
+    output_calib.plot_result_file(output_calib_fun, ear_sim_tfs)
 
 
 parser = argparse.ArgumentParser(description='PyOAE Multi-Tone Calibration Results')

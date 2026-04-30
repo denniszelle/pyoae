@@ -431,12 +431,18 @@ def _plot_single_channel(
         axes[-2][j].plot(freqs, out_max_db_spl, style)
         if out_max_db_spl_uncorrected is not None:
             axes[-2][j].plot(
-                freqs, out_max_db_spl_uncorrected, style, alpha=0.6
+                freqs,
+                out_max_db_spl_uncorrected,
+                style,
+                alpha=0.4,
+                linewidth=0.9
             )
 
         axes[-1][j].plot(freqs, phases, style)
         if phases_uncorreceted is not None:
-            axes[-1][j].plot(freqs, phases_uncorreceted, style, alpha=0.5)
+            axes[-1][j].plot(
+                freqs, phases_uncorreceted, style, alpha=0.4, linewidth=0.9
+            )
 
         ax.plot(freqs, out_max_db_spl, style)
     else:
@@ -502,7 +508,10 @@ def plot_offline(
     plt.show()
 
 
-def plot_result_file(results: OutputCalibration) -> None:
+def plot_result_file(
+    results: OutputCalibration,
+    ear_sim_tfs: list[EarSimTransferFunction] | None
+) -> None:
     """Plots output calibration from result file."""
 
     counter = Counter(results.input_channels)
@@ -556,6 +565,21 @@ def plot_result_file(results: OutputCalibration) -> None:
 
             p_out_max = results.raw_amps[output_idx_j, :]
             out_max_db_spl = converter.peak_mupa_to_db_spl(p_out_max)
+
+            if ear_sim_tfs is not None:
+                cplx_ear_sim_vals = ear_sim_tfs[i].get_interp_transfer_function(
+                    results.raw_freqs
+                )
+                out_max_db_spl_uncorrected = (
+                    out_max_db_spl - converter.lin_to_db(np.abs(cplx_ear_sim_vals))
+                )
+                phases_uncorreceted = (
+                    results.raw_phases[output_idx_j] - np.angle(cplx_ear_sim_vals)
+                )
+            else:
+                out_max_db_spl_uncorrected = None
+                phases_uncorreceted = None
+
             if i < len(line_styles):
                 ax_i_amp.plot(
                     results.raw_freqs,
@@ -563,23 +587,50 @@ def plot_result_file(results: OutputCalibration) -> None:
                     line_styles[j],
                     label=f'Channel {output_channel_j} Maximum Output Level',
                 )
+                if out_max_db_spl_uncorrected is not None:
+                    ax_i_amp.plot(
+                        results.raw_freqs,
+                        out_max_db_spl_uncorrected,
+                        line_styles[j],
+                        alpha=0.4,
+                        linewidth=0.9
+                    )
                 ax_i_phase.plot(
                     results.raw_freqs,
                     results.raw_phases[output_idx_j],
                     line_styles[j],
                     label=f'Channel {output_channel_j} Speaker Phase',
                 )
+                if phases_uncorreceted is not None:
+                    ax_i_phase.plot(
+                        results.raw_freqs,
+                        phases_uncorreceted,
+                        line_styles[j]
+                    )
             else:
                 ax_i_amp.plot(
                     results.raw_freqs,
                     out_max_db_spl,
                     label=f'Channel {output_channel_j}',
                 )
+                if out_max_db_spl_uncorrected is not None:
+                    ax_i_amp.plot(
+                        results.raw_freqs,
+                        out_max_db_spl_uncorrected,
+                        alpha=0.4,
+                        linewidth=0.9
+                    )
                 ax_i_phase.plot(
                     results.raw_freqs,
                     results.raw_phases[output_idx_j],
                     label=f'Channel {output_channel_j} Speaker Phase',
                 )
+                if phases_uncorreceted is not None:
+                    ax_i_phase.plot(
+                        results.raw_freqs,
+                        phases_uncorreceted,
+                    )
+
 
         ax_i_amp.set_ylim(y_min, y_max)
         ax_i_phase.set_ylim(phase_min, phase_max)

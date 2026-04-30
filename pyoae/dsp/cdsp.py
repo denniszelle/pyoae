@@ -10,7 +10,12 @@ import numpy.typing as npt
 
 from pyoae import files
 from pyoae import get_logger
-from pyoae.calib_transfer import MicroTransferFunction
+from pyoae.calib_storage import EarSimTransferFunData
+
+from pyoae.calib_transfer import (
+    EarSimTransferFunction,
+    MicroTransferFunction
+)
 from pyoae.dsp import filters
 from pyoae.dsp import noise
 from pyoae.dsp import spectral
@@ -220,11 +225,15 @@ class ContDpoaeProcessor(ContDpoaeResult):
 
     mic_trans_fun: MicroTransferFunction | None
 
+    ear_sim_trans_fun: EarSimTransferFunction | None
+
     def __init__(
         self,
         msrmt_data: DpoaeMsrmtData,
         mic: MicroTransferFunction | None = None,
-        mic_path: str | Path | None = None
+        ear_sim_tf: EarSimTransferFunction | None = None,
+        mic_path: str | Path | None = None,
+        ear_sim_tf_path: str | Path | None = None,
     ) -> None:
         """Initialize processor and load recording."""
         cont_recording = _msrmt_to_cont_recording(msrmt_data)
@@ -241,6 +250,15 @@ class ContDpoaeProcessor(ContDpoaeResult):
                 )
         else:
             self.mic_trans_fun = mic
+
+        if ear_sim_tf_path:
+            ear_sim_data = files.load_ear_sim_calib(ear_sim_tf_path)
+            if ear_sim_data is not None:
+                self.ear_sim_trans_fun = EarSimTransferFunction(
+                    ear_sim_data['transfer_function']
+                )
+        else:
+            self.ear_sim_trans_fun = ear_sim_tf
 
     def process_msrmt(self) -> None:
         """Process measurement to extract DPOAE."""
@@ -267,13 +285,21 @@ class ContDpoaeProcessor(ContDpoaeResult):
         )
 
         # With given micro transfer function, correct averaged signal
+        spec = np.fft.rfft(self.raw_averaged)
         if self.mic_trans_fun is not None:
-            spec = np.fft.rfft(self.raw_averaged)
+
             mic_tf = self.mic_trans_fun.get_interp_transfer_function(
                 num_samples=len(self.raw_averaged)
             )
-            self.averaged = np.fft.irfft(spec / mic_tf)
+            spec = spec / mic_tf
 
+        if self.ear_sim_trans_fun is not None:
+            ear_sim_tf = self.ear_sim_trans_fun.get_interp_transfer_function(
+                num_samples=len(self.raw_averaged)
+            )
+            spec = spec * ear_sim_tf
+
+        self.averaged = np.fft.irfft(spec)
         # compute spectrum
         spectrum = np.abs(spectral.cplx_spectrum(self.raw_averaged))
         spectrum /= np.sqrt(2)
@@ -282,6 +308,12 @@ class ContDpoaeProcessor(ContDpoaeResult):
                 num_samples=len(self.raw_averaged)
             )
             spectrum /= np.abs(mic_tf)
+        if self.ear_sim_trans_fun is not None:
+            ear_sim_tf = self.ear_sim_trans_fun.get_interp_transfer_function(
+                num_samples=len(self.raw_averaged)
+            )
+            spectrum *= np.abs(ear_sim_tf)
+
         spectrum = 20 * np.log10(spectrum/20)  # dB SPL
         self.dpoae_spectrum = spectrum
 

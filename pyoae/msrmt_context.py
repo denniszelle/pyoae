@@ -44,17 +44,22 @@ class MsrmtContext(BaseMsrmtContext):
     """
 
 
-
-
 @dataclass
 class DpoaeMsrmtContext(BaseMsrmtContext):
     """Measurement context for continuous/pulsed DPOAE acquisition."""
 
-    input_trans_fun: MicroTransferFunction | None
+    mic_trans_fun: MicroTransferFunction | None
     """Handle to microphone transfer function.
 
     A microphone transfer function is used to correct the
     recorded signal from the microphone characteristics.
+    """
+
+    ear_sim_trans_fun: EarSimTransferFunction | None
+    """Handle to list of ear simulator transfer functions.
+
+    A ear simulator transfer function is used to correct the spectral
+    characteristics of a static ear simulator.
     """
 
     f1: float

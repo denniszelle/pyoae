@@ -32,6 +32,7 @@ Note:
 import argparse
 import os
 
+from pyoae import helpers
 from pyoae import files
 from pyoae import input_validation
 from pyoae import pyoae_logger
@@ -108,8 +109,15 @@ def main(
         else:
             logger.error('Stopping: Failed to load output calibration.')
             return
+        if speaker_calib_data['has_ear_sim_tf_included']:
+            ear_sim_tfs = helpers.extract_ear_sim_data(
+                speaker_calib_data, channels
+            )
+        else:
+            ear_sim_tfs = None
     else:
         output_calib_fun = None
+        ear_sim_tfs = None
 
     protocol_path = os.path.join(os.getcwd(), protocol)
     dpoae_protocol = files.load_pulsed_dpoae_protocol(protocol_path)
@@ -134,6 +142,7 @@ def main(
             msrmt_params_corr,
             channels,
             mic_trans_fun,
+            ear_sim_tfs=ear_sim_tfs,
             out_trans_fun=output_calib_fun,
             subject=subject,
             ear=ear,

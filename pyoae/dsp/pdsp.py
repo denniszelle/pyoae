@@ -14,7 +14,7 @@ import scipy.signal as sig
 from pyoae import files
 from pyoae import generator
 from pyoae import get_logger
-from pyoae.calib_transfer import MicroTransferFunction
+from pyoae.calib_transfer import EarSimTransferFunction, MicroTransferFunction
 from pyoae.dsp import averaging
 from pyoae.dsp import filters
 from pyoae.dsp import noise
@@ -278,13 +278,17 @@ class PulseDpoaeProcessor(PulseDpoaeResult):
 
     mic_trans_fun: MicroTransferFunction | None
 
+    ear_sim_trans_fun: EarSimTransferFunction | None
+
     options: PulseDpoaeProcessOptions
 
     def __init__(
         self,
         msrmt_data: DpoaeMsrmtData,
         mic: MicroTransferFunction | None = None,
-        mic_path: str | Path | None = None
+        ear_sim_tf: EarSimTransferFunction | None = None,
+        mic_path: str | Path | None = None,
+        ear_sim_path: str | Path | None = None,
     ) -> None:
         """Initialize processor and load recording."""
         pulsed_recording = _msrmt_to_pulse_recording(msrmt_data)
@@ -323,6 +327,15 @@ class PulseDpoaeProcessor(PulseDpoaeResult):
         else:
             self.mic_trans_fun = mic
 
+        if ear_sim_path:
+            ear_sim_data = files.load_ear_sim_calib(ear_sim_path)
+            if ear_sim_data is not None:
+                self.ear_sim_trans_fun = EarSimTransferFunction(
+                    ear_sim_data['transfer_function']
+                )
+        else:
+            self.ear_sim_trans_fun = ear_sim_tf
+
     def process_msrmt(self) -> None:
         """Process measurement to extract DPOAE."""
         if self.recording is None:
@@ -330,7 +343,7 @@ class PulseDpoaeProcessor(PulseDpoaeResult):
 
         self.prepare_recording()
         self.raw_averaged = self.average_raw_data()
-        self.apply_micro_calibration()
+        self.apply_input_calibration()
 
         bp_options = self.options.band_pass_options
         if bp_options['enable']:
@@ -422,7 +435,7 @@ class PulseDpoaeProcessor(PulseDpoaeResult):
 
         return avg
 
-    def apply_micro_calibration(self) -> None:
+    def apply_input_calibration(self) -> None:
         """Applies the microphone calibration."""
         if self.mic_trans_fun is None:
             self.log.warning(
@@ -440,6 +453,12 @@ class PulseDpoaeProcessor(PulseDpoaeResult):
             raw_spec_frequencies
         )
         raw_spec /= mic_tf
+        if self.ear_sim_trans_fun is not None:
+            ear_sim_tf = self.ear_sim_trans_fun.get_interp_transfer_function(
+                raw_spec_frequencies
+            )
+            raw_spec *= ear_sim_tf
+
         self.raw_averaged = np.real(np.fft.irfft(raw_spec))
 
     def save_data(self, file_name: str) -> None:

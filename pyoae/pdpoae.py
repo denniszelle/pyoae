@@ -30,7 +30,11 @@ import numpy as np
 from pyoae import generator
 from pyoae import get_logger
 from pyoae import helpers
-from pyoae.calib_transfer import MicroTransferFunction, OutputCalibration
+from pyoae.calib_transfer import (
+    EarSimTransferFunction,
+    MicroTransferFunction,
+    OutputCalibration
+)
 from pyoae.device.device_config import DeviceConfig
 from pyoae.dsp.containers import DpoaeMsrmtData
 from pyoae.dsp.pdsp import PulseDpoaeProcessor
@@ -94,6 +98,7 @@ class PulseDpoaeRecorder:
         msrmt_params: list[PulseDpoaeMsrmtParams],
         output_channels: list[int],
         mic_trans_fun: list[MicroTransferFunction] | None = None,
+        ear_sim_tfs: list[EarSimTransferFunction] | None = None,
         out_trans_fun: OutputCalibration | None = None,
         subject: str = '',
         ear: list[str] | None = None,
@@ -171,6 +176,10 @@ class PulseDpoaeRecorder:
                 mic_trans_fun_i = mic_trans_fun[i]
             else:
                 mic_trans_fun_i = None
+            if ear_sim_tfs:
+                ear_sim_tf_i = ear_sim_tfs[i]
+            else:
+                ear_sim_tf_i = None
 
             if block_duration != msrmt_params_i["block_duration"]:
                 self.logger.warning(
@@ -194,7 +203,8 @@ class PulseDpoaeRecorder:
                 fs=DeviceConfig.sample_rate,
                 block_size=num_block_samples,
                 non_interactive=non_interactive,
-                input_trans_fun=mic_trans_fun_i,
+                mic_trans_fun=mic_trans_fun_i,
+                ear_sim_trans_fun=ear_sim_tf_i,
                 f1=stimulus.f1,
                 f2=stimulus.f2,
                 num_recorded_blocks=0,
@@ -283,7 +293,9 @@ class PulseDpoaeRecorder:
                 'msrmt_idx': i,
             }
             msrmt_info_i.dpoae_processor = PulseDpoaeProcessor(
-                recording, msrmt_info_i.msrmt_ctx.input_trans_fun
+                recording,
+                msrmt_info_i.msrmt_ctx.mic_trans_fun,
+                msrmt_info_i.msrmt_ctx.ear_sim_trans_fun,
             )
             msrmt_info_i.dpoae_processor.process_msrmt()
             if not msrmt_info_i.msrmt_ctx.non_interactive:

@@ -171,7 +171,8 @@ class SoaeRecorder:
             fs=DeviceConfig.sample_rate,
             block_size=num_block_samples,
             non_interactive=False,
-            input_trans_fun=mic_trans_functions,
+            mic_trans_fun=mic_trans_functions,
+            ear_sim_trans_fun=None
         )
         # Prepare measurement
         rec_data = RecordingData(
@@ -280,7 +281,7 @@ class SoaeRecorder:
             self.msrmt.recording_data.msrmt_duration,
             self.msrmt.recording_data.fs,
             self.msrmt_ctx.block_size,
-            self.msrmt_ctx.input_trans_fun is not None,
+            self.msrmt_ctx.mic_trans_fun is not None,
         )
         line_time.set_xdata(
             np.arange(len(recorded_signal)) / self.msrmt_ctx.fs
@@ -341,10 +342,10 @@ class SoaeRecorder:
                 self.msrmt.hardware_data.get_unique_input_channels()[index]
             )
 
-            if self.msrmt_ctx.input_trans_fun is None:
+            if self.msrmt_ctx.mic_trans_fun is None:
                 mic_trans_fun = None
             else:
-                mic_trans_fun = self.msrmt_ctx.input_trans_fun[index]
+                mic_trans_fun = self.msrmt_ctx.mic_trans_fun[index]
 
             spectrum = self.process_spectrum(recorded_signal, mic_trans_fun)
 

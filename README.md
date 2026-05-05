@@ -279,6 +279,37 @@ record_pulse_dpoae --mic 'mic/mic.json' --protocol 'templates/tpl_pdpoae.json' -
 
 In order to obtain a time-domain signal of the DPOAE response, PyOAE utilized Primary-Tone Phase Variation ([Whitehead et al. (1996)](https://doi.org/10.1121/1.416065)). Suitable phase shifts of the primary tones enable their cancellation during the averaging process while maintaining the distortion-product at the cubic difference frequency fdp = 2f1-f2.
 
+#### Bilateral Recordings
+
+PyOAE supports **bilateral measurements**, allowing simultaneous recordings from the left and right ear using multi-channel audio interfaces.
+
+Bilateral acquisition is available for:
+
+- `record_soae`
+- `record_dpoae`
+- `record_pulse_dpoae`
+
+In bilateral mode, arguments that normally accept a single value must be provided **once per ear**, in the order of the corresponding audio channels.
+
+The channel mapping can be configured in the device configuration file. The `output_input_mapping` section defines which output channels correspond to which input channels.
+
+For `record_dpoae` and `record_pulse_dpoae`, the following arguments must be provided **per ear**:
+
+- `--ch` (audio interface output channels)
+- `--mic`
+- `--ear` (still optional)
+
+Example command:
+
+```bash
+record_dpoae \
+  --mic './mic/63ARASAC.json' './mic/63ARASAC.json' \
+  --protocol './templates/tpl_cdpoae_bilateral.json' \
+  --calib '260430-161848' \
+  --ch 0 1 2 3 \
+  --ear left right \
+  --save
+
 ## Processing and Visualization of Measurement Results
 
 ### Overview

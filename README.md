@@ -309,6 +309,7 @@ record_dpoae \
   --ch 0 1 2 3 \
   --ear left right \
   --save
+```
 
 ## Processing and Visualization of Measurement Results
 

@@ -190,6 +190,11 @@ class SoaeRecorder:
                 if b in input_channels
             }
         )
+        if not active_out_channels:
+            raise ValueError(
+                "Active input channels must be mapped to output "
+                "channels in device_config.json"
+            )
 
         n_in_channels = max(*input_channels, DeviceConfig.sync_channels[1]) + 1
         n_out_channels = max(active_out_channels) + 1

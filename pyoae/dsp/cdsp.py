@@ -82,10 +82,10 @@ class ContDpoaeResult:
             num_block_samples, samplerate
         ).astype(np.float64)
         t_avg = np.arange(num_block_samples) / samplerate * 1E3
-        if self.averaged.shape:
+        if len(self.averaged):
             axes[1].plot(t_avg, self.averaged, linewidth=0.5)
             axes[1].set_ylabel('Amp. (muPa)')
-        elif self.raw_averaged.shape:
+        elif len(self.raw_averaged):
             axes[1].plot(t_avg, self.raw_averaged, linewidth=0.5)
             axes[1].set_ylabel('Amp. (full scale)')
         if self.dpoae_spectrum.size:

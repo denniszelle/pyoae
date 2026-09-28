@@ -193,7 +193,7 @@ class MultiToneDefinition:
             env = ramp_envelope(len(segment), ramp_samples)
             segment *= env
             signal[start:end] += segment
-            self.ramp_correction = 1 / np.mean(env**2)
+            self.ramp_correction = np.float32(1 / np.mean(env**2))
 
         return signal
 
@@ -306,7 +306,9 @@ class MultiToneAnalyzer:
                 amps = raw_amps / cluster_amps
             else:
                 amps = raw_amps / cluster_amps * self.mt.ramp_correction
-            phases = np.angle(spectrum[freq_idc]) - cluster_phases
+            phases = np.angle(
+                spectrum[freq_idc] * np.exp(-1j * cluster_phases)
+            )
 
             all_frequencies = np.r_[all_frequencies, cluster_freqs]
             all_amplitudes = np.r_[all_amplitudes, amps]

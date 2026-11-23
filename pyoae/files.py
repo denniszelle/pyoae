@@ -1,6 +1,7 @@
 """Module providing functions for file handling."""
 
 import csv
+from datetime import datetime
 import json
 import os
 from pathlib import Path
@@ -277,6 +278,48 @@ def load_output_calib(file_path: str) -> SpeakerCalibData:
                 out_calib_data[key] = d[key]
 
     return out_calib_data
+
+
+def find_recent_output_calib_id(directory: str | Path) -> str | None:
+    """Return the time stamp of the most recent output calibration.
+
+    Searches `directory` for files named `<time stamp>_out_calib.json`
+    and returns the time stamp of the latest calibration. The time stamp
+    in the file name (`%y%m%d-%H%M%S`) is used for comparison, not the
+    file modification time. Files whose name does not contain a valid
+    time stamp are ignored.
+
+    Args:
+        directory: Path to the directory containing output calibration
+            files, typically the `measurements` folder.
+
+    Returns:
+        The time stamp of the most recent output calibration, e.g.,
+        '250919-100413', or `None` if no valid calibration file is found.
+    """
+    dir_path = Path(directory)
+    if not dir_path.is_dir():
+        log.error('Output calibration directory %s not found.', dir_path)
+        return None
+
+    suffix = '_out_calib.json'
+    recent_id = None
+    recent_time = None
+    for p in dir_path.iterdir():
+        if not (p.is_file() and p.name.endswith(suffix)):
+            continue
+        calib_id = p.name[:-len(suffix)]
+        try:
+            calib_time = datetime.strptime(calib_id, '%y%m%d-%H%M%S')
+        except ValueError:
+            continue
+        if recent_time is None or calib_time > recent_time:
+            recent_id = calib_id
+            recent_time = calib_time
+
+    if recent_id is None:
+        log.error('No output calibration found in %s.', dir_path)
+    return recent_id
 
 
 def load_soae_protocol(file_path: str | None = None) -> protocols.MsrmtParams:

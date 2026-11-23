@@ -14,7 +14,8 @@ arguments to start (see README.md):
 Command-line arguments:
     --mic: microphone/input calibration, e.g., '2ROTIU6H_3C9CESK1W6.json'
     --protocol: measurement protocol, e.g., 'protocols/pulse_dpoae_iofs.json'
-    --calib: time stamp of output calibration to be used, e.g., '250916-164234'
+    --calib: time stamp of output calibration to be used, e.g., '250916-164234',
+      or 'recent' to use the most recent output calibration
     --subject: subject identifier, e.g., 'S999'
     --ear: recording side, e.g., 'right'
     --save: save recording in measurement file
@@ -98,9 +99,16 @@ def main(
         mic_trans_fun = None
 
     if calib:
+        calib_dir = os.path.join(os.getcwd(), 'measurements')
+        if calib == 'recent':
+            calib = files.find_recent_output_calib_id(calib_dir)
+            if calib is None:
+                logger.error('Stopping: No recent output calibration found.')
+                return
+            logger.info('Using most recent output calibration.')
         logger.info('Loading output calibration with id %s.', calib)
         out_file_name = calib + '_out_calib.json'
-        out_file_path = os.path.join(os.getcwd(), 'measurements', out_file_name)
+        out_file_path = os.path.join(calib_dir, out_file_name)
         speaker_calib_data = files.load_output_calib(out_file_path)
         if speaker_calib_data['frequencies']:
             output_calib_fun = OutputCalibration(speaker_calib_data)
@@ -167,7 +175,10 @@ parser.add_argument(
     '--calib',
     default=argparse.SUPPRESS,
     type=str,
-    help='Specify output calibration time stamp.'
+    help=(
+        'Specify output calibration time stamp, or "recent" to use '
+        'the most recent output calibration.'
+    )
 )
 parser.add_argument(
     '--subject',

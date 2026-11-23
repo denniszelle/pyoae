@@ -261,6 +261,12 @@ To stimulate the ear using two continuous primary tones and record a DPOAE, run 
 record_dpoae --mic 'mic/mic.json' --protocol 'templates/tpl_cdpoae.json' --calib '250919-100413'
 ```
 
+Alternatively, use `--calib recent` to automatically load the most recent output calibration from the `measurements` folder. The time stamp of the selected calibration is shown in the terminal output:
+
+```bash
+record_dpoae --mic 'mic/mic.json' --protocol 'templates/tpl_cdpoae.json' --calib recent
+```
+
 Using the command line arguments `--save`, `--subject`, and `--ear`, you can save the measurement results using a subject identifier and a text describing the recording side. For example:
 
 ```bash
